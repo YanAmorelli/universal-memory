@@ -6,6 +6,7 @@ stepsCompleted:
   - step-02c-executive-summary
   - step-03-success
   - step-04-journeys
+  - step-05-domain
 inputDocuments: []
 documentCounts:
   briefCount: 0
@@ -104,7 +105,7 @@ O **universal-memory** é uma camada de persistência cognitiva agnóstica proje
 *   **Cenário:** Durante o dia, Yan menciona em diferentes chats que prefere usar `tomllib` em vez de `pyyaml` para arquivos de configuração.
 *   **A Jornada:**
     *   **Início:** O motor de memória universal registra essas menções como "fatos latentes".
-    *   **Ação:** No final do ciclo (ou após a 3ª menção), o Agente Adaptador analisa a recorrência: "O usuário expressou preferência por tomllib 3 vezes em 2 sessões diferentes. Relevância: Alta."
+    *   **Ação:** No final do ciclo (ou após a 3ª menção), o Agente Adaptador analisa a recorrência: "O usuário expressou preferência por tomllib 3 vezes em 2 sessões differentes. Relevância: Alta."
     *   **Clímax:** O agente propõe ou executa uma atualização no `AGENTS.md`: "Adicionada regra: Preferir sempre tomllib para parsing de arquivos TOML".
     *   **Resolução:** Yan não precisa mais lembrar de avisar aos agentes sobre sua biblioteca preferida; o ambiente "aprendeu" o comportamento.
 
@@ -124,3 +125,18 @@ Essas jornadas revelam a necessidade das seguintes capacidades:
 *   **Motor de Análise de Relevância:** Lógica de pontuação baseada em recorrência (2-3 vezes) para transformar fatos efêmeros em regras permanentes.
 *   **Repositório de Metadados por Repo:** Capacidade de separar o que é "Universal" do que é específico de um projeto/pasta.
 *   **Motor de Geração de Código (Skills):** Infraestrutura para que um agente possa escrever, testar e registrar novos scripts/ferramentas no ambiente do usuário.
+
+## Domain-Specific Requirements
+
+### Compliance & Safety (Local MVP)
+- **Secret & ENV Guardrails:** O sistema deve implementar um motor de detecção passiva para impedir que chaves de API, credenciais ou variáveis de ambiente sensíveis sejam persistidas na memória (curto ou longo prazo) inadvertidamente.
+- **Soberania de Dados:** Por operar localmente, o usuário detém controle total sobre os arquivos de persistência, mas deve haver uma interface clara para purga seletiva de fatos.
+
+### Technical Constraints & Memory Model
+- **Arquitetura Dual de Memória:** Separação rígida entre **Short Term Memory** (efêmera, específica por projeto/pasta, focada em tarefas e restrições imediatas) e **Universal Memory** (persistente, global, focada em comportamentos e preferências).
+- **Gestão de Contexto (Signal-to-Noise):** A memória de curto prazo deve ser sumarizada e priorizada dinamicamente para garantir que a injeção no buffer de contexto do agente não degrade a performance ou cause overflow de tokens.
+- **Cross-Vendor Behavior Sync:** O output final da "memória" não é apenas dado bruto, mas a adaptação ativa do arquivo `AGENTS.MD` (ou equivalente), garantindo que agentes de diferentes provedores (OpenAI, Anthropic, etc.) operem sob as mesmas diretrizes comportamentais do usuário.
+
+### Risk Mitigations
+- **Context Hygiene:** Rotinas automáticas para remoção de fatos obsoletos na short-term memory após a conclusão de tarefas, evitando "poluição cognitiva".
+- **Encapsulamento de Habilidades:** Transformação de instruções complexas recorrentes em "Skills" formais para reduzir o risco de alucinação ou má interpretação de fatos brutos pelo agente.
