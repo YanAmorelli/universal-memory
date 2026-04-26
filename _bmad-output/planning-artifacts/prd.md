@@ -5,6 +5,7 @@ stepsCompleted:
   - step-02b-vision
   - step-02c-executive-summary
   - step-03-success
+  - step-04-journeys
 inputDocuments: []
 documentCounts:
   briefCount: 0
@@ -86,3 +87,40 @@ O **universal-memory** é uma camada de persistência cognitiva agnóstica proje
 
 *   **Autonomous Optimization:** Um agente que atua como "Coach de Fluxo de Trabalho", sugerindo automações e melhorias proativas antes mesmo de o usuário sentir a necessidade.
 *   **Ecosystem Integration:** Integração nativa com IDEs e terminais para captura passiva de contexto (sem necessidade de input explícito).
+
+## User Journeys
+
+### Journey 1: O Engenheiro Multi-Agente (Acesso à Memória de Curto Prazo)
+*   **Persona:** Yan, trabalhando em um repositório complexo com múltiplos sub-agentes.
+*   **Cenário:** Yan invoca um novo agente especializado em QA para criar testes de integração.
+*   **A Jornada:**
+    *   **Início:** O agente lê o arquivo `AGENTS.md` global, que contém a diretriz: "Antes de iniciar, consulte a Short Term Memory deste repositório".
+    *   **Ação:** O agente executa a ferramenta de leitura de memória e obtém um resumo: "Yan está usando TDD, o módulo X foi refatorado há 10 minutos e a prioridade atual é a cobertura do endpoint /auth".
+    *   **Clímax:** Sem que Yan digite nada, o agente responde: "Entendido, Yan. Li a memória do projeto. Vou focar nos testes de integração para o novo endpoint /auth seguindo o padrão TDD que você estabeleceu".
+    *   **Resolução:** Yan economiza ~300 tokens de preâmbulo e 5 minutos de explicação. O trabalho flui imediatamente.
+
+### Journey 2: O Curador de Instruções (Adaptação por Recorrência)
+*   **Persona:** O "Agente Adaptador" (rotina de fundo).
+*   **Cenário:** Durante o dia, Yan menciona em diferentes chats que prefere usar `tomllib` em vez de `pyyaml` para arquivos de configuração.
+*   **A Jornada:**
+    *   **Início:** O motor de memória universal registra essas menções como "fatos latentes".
+    *   **Ação:** No final do ciclo (ou após a 3ª menção), o Agente Adaptador analisa a recorrência: "O usuário expressou preferência por tomllib 3 vezes em 2 sessões diferentes. Relevância: Alta."
+    *   **Clímax:** O agente propõe ou executa uma atualização no `AGENTS.md`: "Adicionada regra: Preferir sempre tomllib para parsing de arquivos TOML".
+    *   **Resolução:** Yan não precisa mais lembrar de avisar aos agentes sobre sua biblioteca preferida; o ambiente "aprendeu" o comportamento.
+
+### Journey 3: O Criador de Skills (Expansão de Capacidade)
+*   **Persona:** Yan, instruindo o sistema sobre uma nova metodologia (ex: SDD - Spec Driven Development).
+*   **Cenário:** Yan explica detalhadamente como quer que as especificações sejam geradas antes do código.
+*   **A Jornada:**
+    *   **Início:** O sistema detecta uma instrução metodológica complexa e repetitiva.
+    *   **Ação:** O Agente de Adaptação identifica que essa lógica pode ser encapsulada em uma ferramenta reutilizável para diminuir a carga cognitiva.
+    *   **Clímax:** O sistema gera o boilerplate e a lógica de uma nova skill `generate-sdd-spec` e a registra no sistema.
+    *   **Resolução:** Na próxima vez, Yan apenas diz "crie a spec SDD para o módulo Y", invocando a skill em vez de re-explicar a metodologia.
+
+### Journey Requirements Summary
+
+Essas jornadas revelam a necessidade das seguintes capacidades:
+*   **Protocolo de Inicialização:** Regra padronizada no `AGENTS.md` para forçar a leitura da memória de curto prazo (Short Term Memory).
+*   **Motor de Análise de Relevância:** Lógica de pontuação baseada em recorrência (2-3 vezes) para transformar fatos efêmeros em regras permanentes.
+*   **Repositório de Metadados por Repo:** Capacidade de separar o que é "Universal" do que é específico de um projeto/pasta.
+*   **Motor de Geração de Código (Skills):** Infraestrutura para que um agente possa escrever, testar e registrar novos scripts/ferramentas no ambiente do usuário.
