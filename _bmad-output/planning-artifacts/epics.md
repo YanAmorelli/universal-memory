@@ -275,6 +275,11 @@ So that o projeto tenha uma base reproduzível para desenvolvimento TDD e trabal
 **Then** `ruff`, `pyright` e `pytest` executam sem falhas sobre a base mínima
 **And** há pelo menos um teste inicial que falharia se o pacote não fosse importável
 
+**Given** o scaffold inicial versionado no repositório
+**When** uma alteração é enviada para push ou pull request
+**Then** um workflow de CI em `.github/workflows/ci.yml` executa `ruff`, `pyright` e `pytest`
+**And** o workflow falha quando lint, type check ou testes automatizados falham
+
 ### Story 1.2: Definir Modelos de Domínio para Memória
 
 As a agente ou adapter que usa a memória,
@@ -349,11 +354,13 @@ So that eu possa ativar a memória local em um repositório novo com feedback cl
 **When** o usuário executa `umem init` em um diretório sem `.umem/`
 **Then** o comando cria a estrutura local do projeto
 **And** retorna uma mensagem humana indicando os caminhos criados
+**And** com `--format json`, retorna JSON puro com as chaves `project_path`, `config_path`, `memory_path`, `audit_path`, `snapshots_path`, `created`, `already_initialized` e `audit_reference`
 
 **Given** um diretório que já contém `.umem/`
 **When** o usuário executa `umem init` novamente
 **Then** o comando é idempotente e não corrompe arquivos existentes
 **And** informa que a memória local já estava inicializada
+**And** com `--format json`, retorna `already_initialized: true`, `created: []` e os mesmos caminhos resolvidos da inicialização original
 
 **Given** o ambiente está offline
 **When** `umem init` é executado
@@ -452,16 +459,19 @@ So that eu entenda o que foi alterado, quando, por qual ação e como posso recu
 **When** o usuário consulta auditoria por use case ou CLI
 **Then** o sistema lista timestamp, ação, escopo, origem, resultado e referência do snapshot quando existir
 **And** a consulta pode ser feita em menos de 2 comandos a partir do diretório do projeto
+**And** com `--format json`, retorna JSON puro com `events[]` contendo `timestamp`, `action`, `scope`, `origin`, `result`, `snapshot_reference` e `audit_reference`
 
 **Given** snapshots existentes em `.umem/snapshots/`
 **When** o usuário lista snapshots
 **Then** o sistema mostra timestamp, escopo, origem, ação responsável, caminho relativo e hash
 **And** a saída humana é legível e a saída estruturada é adequada para automação futura
+**And** com `--format json`, retorna JSON puro com `snapshots[]` contendo `timestamp`, `scope`, `origin`, `action`, `relative_path`, `hash` e `manifest_path`
 
 **Given** não há eventos ou snapshots
 **When** o usuário executa as consultas
 **Then** o sistema retorna estado vazio de forma explícita
 **And** não trata ausência de dados como erro
+**And** com `--format json`, retorna listas vazias em `events` ou `snapshots`, sem texto Rich misturado
 
 ### Story 2.5: Reverter Última Mutação por Escopo
 
@@ -510,7 +520,8 @@ So that o contexto relevante fique disponível para sessões futuras sem reexpli
 **Given** os repositories e modelos de domínio do Epic 1
 **When** um fato válido é gravado por use case
 **Then** ele é persistido com `schema_version`, `id`, `created_at`, `updated_at`, `scope`, `status`, `source`, `tags` e `metadata`
-**And** a gravação respeita o pipeline seguro de mutação quando ele estiver disponível
+**And** a gravação passa pelo pipeline seguro de mutação do Epic 2 antes da escrita
+**And** se Story 3.1 for implementada antes do pipeline completo, deve usar uma porta/stub de mutation pipeline com o mesmo contrato e substituir o stub antes de marcar a história como concluída
 
 **Given** fatos de escopo `project` e `global`
 **When** o usuário lista fatos
@@ -611,11 +622,13 @@ So that eu saiba se o projeto está configurado e quais dados estão ativos.
 **When** o status é consultado por use case ou CLI
 **Then** o sistema mostra contagem de fatos por escopo e status, regras ativas, skills registradas, tamanho aproximado da base e último health check conhecido
 **And** a saída humana é clara para leitura no terminal
+**And** com `--format json`, retorna JSON puro com `initialized`, `project_path`, `fact_counts`, `active_rules_count`, `registered_skills_count`, `approximate_size_bytes`, `last_health_check` e `host_validation`
 
 **Given** o diretório atual não possui `.umem/`
 **When** o status é consultado
 **Then** o sistema retorna uma mensagem acionável indicando que o projeto não foi inicializado
 **And** não cria arquivos automaticamente durante uma consulta read-only
+**And** com `--format json`, retorna `initialized: false`, `project_path` e `recommended_action`
 
 **Given** o ambiente está offline
 **When** o status é consultado
@@ -1033,16 +1046,19 @@ So that eu saiba quais metodologias foram formalizadas e estão disponíveis.
 **When** o usuário lista skills via use case ou CLI
 **Then** o sistema mostra nome, escopo, status, caminho relativo, data de criação, última atualização e origem
 **And** diferencia skills ativas, desativadas e candidatas
+**And** com `--format json`, retorna JSON puro com `skills[]` contendo `name`, `scope`, `status`, `relative_path`, `created_at`, `updated_at`, `origin` e `audit_reference`
 
 **Given** nenhuma skill registrada
 **When** a listagem é executada
 **Then** o sistema retorna estado vazio explícito
 **And** sugere comando ou fluxo de proposta sem criar artefatos automaticamente
+**And** com `--format json`, retorna `skills: []` e `recommended_action`
 
 **Given** uma skill específica
 **When** o usuário solicita detalhes
 **Then** o sistema mostra metadados, caminho relativo, gatilhos de uso e referência de auditoria
 **And** não carrega arquivos grandes de `references/` sem pedido explícito
+**And** com `--format json`, retorna `name`, `scope`, `status`, `relative_path`, `triggers`, `audit_reference` e `references_loaded: false` por padrão
 
 ### Story 6.5: Ativar, Desativar e Editar Skills com Segurança
 
