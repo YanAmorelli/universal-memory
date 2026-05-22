@@ -1,0 +1,89 @@
+# generated: 2026-05-22T21:17:01.194515Z
+# last_updated: 2026-05-22T21:17:01.194515Z
+# project: universal-memory
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: /Users/amorelliaoyan/projects/personal/lab/universal-memory/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: "2026-05-22T21:17:01.194515Z"
+last_updated: "2026-05-22T21:17:01.194515Z"
+project: universal-memory
+project_key: NOKEY
+tracking_system: file-system
+story_location: /Users/amorelliaoyan/projects/personal/lab/universal-memory/_bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: backlog
+  1-1-inicializar-scaffold-python-do-produto: backlog
+  1-2-definir-modelos-de-dom-nio-para-mem-ria: backlog
+  1-3-definir-exce-es-e-ports-de-dom-nio: backlog
+  1-4-criar-layout-local-umem-e-configura-o-toml: backlog
+  1-5-implementar-inicializa-o-cli-m-nima: backlog
+  epic-1-retrospective: optional
+  epic-2: backlog
+  2-1-implementar-scanner-de-segredos: backlog
+  2-2-criar-snapshot-antes-de-muta-o: backlog
+  2-3-implementar-escrita-at-mica-com-auditoria: backlog
+  2-4-listar-auditoria-e-snapshots: backlog
+  2-5-reverter-ltima-muta-o-por-escopo: backlog
+  epic-2-retrospective: optional
+  epic-3: backlog
+  3-1-gravar-e-listar-fatos-de-mem-ria: backlog
+  3-2-consultar-contexto-local-com-busca-textual: backlog
+  3-3-implementar-benchmark-de-recupera-o: backlog
+  3-4-montar-resumo-de-contexto-com-limites-de-tokens: backlog
+  3-5-exibir-status-da-mem-ria: backlog
+  3-6-purgar-fatos-e-executar-context-hygiene: backlog
+  epic-3-retrospective: optional
+  epic-4: backlog
+  4-1-estruturar-adapter-cli-com-typer-e-rich: backlog
+  4-2-implementar-servidor-mcp-base-com-fastmcp: backlog
+  4-3-implementar-matriz-de-paridade-cli-mcp: backlog
+  4-4-mapear-erros-de-dom-nio-para-cli-e-json-rpc: backlog
+  4-5-validar-conformidade-mcp-e-contratos-de-interface: backlog
+  epic-4-retrospective: optional
+  epic-5: backlog
+  5-1-modelar-hosts-e-alvos-de-instru-o: backlog
+  5-2-configurar-host-codex-com-agents-md: backlog
+  5-3-configurar-host-claude-code-com-claude-md: backlog
+  5-4-validar-leitura-de-contexto-por-host: backlog
+  5-5-sincronizar-regras-consolidadas-para-instru-es: backlog
+  5-6-fluxo-de-sele-o-de-hosts-no-onboarding: backlog
+  epic-5-retrospective: optional
+  epic-6: backlog
+  6-1-registrar-latent-skills-por-recorr-ncia: backlog
+  6-2-propor-cria-o-de-skill-com-aprova-o-expl-cita: backlog
+  6-3-gerar-estrutura-agent-skills: backlog
+  6-4-registrar-e-listar-skills: backlog
+  6-5-ativar-desativar-e-editar-skills-com-seguran-a: backlog
+  6-6-expor-gest-o-de-skills-por-cli-e-mcp: backlog
+  epic-6-retrospective: optional
