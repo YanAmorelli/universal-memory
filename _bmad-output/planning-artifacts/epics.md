@@ -122,6 +122,7 @@ NFR12: CLI, motor de persistência e servidor MCP devem executar leitura, grava�
 - Nenhum adapter pode bypassar o pipeline de mutação.
 - Deve existir matriz de paridade CLI/MCP para `init`, `context`, `remember`, list/purge facts, propose rule, audit list, snapshots list, rollback, host setup/check e skill proposal/list.
 - Todo novo use case deve adicionar cobertura CLI e MCP, exceto quando explicitamente marcado como interno.
+- As interações CLI/MCP devem seguir `_bmad-output/planning-artifacts/devex-interaction-spec.md` para saída humana, JSON parseável, confirmações seguras, erros acionáveis e paridade semântica.
 - Deve existir benchmark `benchmarks/retrieval.py` com 1.000 fatos, 30 consultas representativas, comparação textual versus candidato semântico local/stub, p95 latency, score de qualidade 1-5, compatibilidade offline e complexidade operacional.
 - A estratégia padrão de recuperação deve ser justificada em `.umem/benchmarks/retrieval-results.json`.
 - Storage ports devem existir em `src/universal_memory/domain/ports/` para fatos, regras, latent skills, snapshots, auditoria e resumos de contexto.
@@ -141,7 +142,7 @@ NFR12: CLI, motor de persistência e servidor MCP devem executar leitura, grava�
 
 ### UX Design Requirements
 
-Nenhum documento de UX Design foi encontrado em `_bmad-output/planning-artifacts`. Não há UX-DRs extraídos nesta etapa.
+Não há UX visual/web/mobile no MVP. A UX relevante é DevEx para CLI, MCP, arquivos locais, confirmações e erros. O contrato canônico de interação está em `_bmad-output/planning-artifacts/devex-interaction-spec.md` e deve ser usado pelas stories de interface como substituto intencional de uma especificação UX visual.
 
 ### FR Coverage Map
 
@@ -355,6 +356,7 @@ So that eu possa ativar a memória local em um repositório novo com feedback cl
 **Then** o comando cria a estrutura local do projeto
 **And** retorna uma mensagem humana indicando os caminhos criados
 **And** com `--format json`, retorna JSON puro com as chaves `project_path`, `config_path`, `memory_path`, `audit_path`, `snapshots_path`, `created`, `already_initialized` e `audit_reference`
+**And** a saída segue `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 **Given** um diretório que já contém `.umem/`
 **When** o usuário executa `umem init` novamente
@@ -460,6 +462,7 @@ So that eu entenda o que foi alterado, quando, por qual ação e como posso recu
 **Then** o sistema lista timestamp, ação, escopo, origem, resultado e referência do snapshot quando existir
 **And** a consulta pode ser feita em menos de 2 comandos a partir do diretório do projeto
 **And** com `--format json`, retorna JSON puro com `events[]` contendo `timestamp`, `action`, `scope`, `origin`, `result`, `snapshot_reference` e `audit_reference`
+**And** a saída segue `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 **Given** snapshots existentes em `.umem/snapshots/`
 **When** o usuário lista snapshots
@@ -623,6 +626,7 @@ So that eu saiba se o projeto está configurado e quais dados estão ativos.
 **Then** o sistema mostra contagem de fatos por escopo e status, regras ativas, skills registradas, tamanho aproximado da base e último health check conhecido
 **And** a saída humana é clara para leitura no terminal
 **And** com `--format json`, retorna JSON puro com `initialized`, `project_path`, `fact_counts`, `active_rules_count`, `registered_skills_count`, `approximate_size_bytes`, `last_health_check` e `host_validation`
+**And** a saída segue `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 **Given** o diretório atual não possui `.umem/`
 **When** o status é consultado
@@ -693,6 +697,7 @@ So that eu possa executar capacidades de memória manualmente ou por automação
 **When** o usuário solicita formato JSON
 **Then** a CLI retorna JSON puro adequado para parsing programático
 **And** não mistura Rich markup ou texto humano no payload estruturado
+**And** a saída humana, saída JSON, confirmações e erros seguem `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 ### Story 4.2: Implementar Servidor MCP Base com FastMCP
 
@@ -713,6 +718,7 @@ So that eu consiga ler contexto e invocar capacidades sem depender da CLI.
 **When** ela invoca uma capacidade implementada
 **Then** o adapter MCP delega ao mesmo use case usado pela CLI
 **And** não acessa repositories ou infraestrutura diretamente
+**And** respostas MCP preservam os campos semânticos definidos em `_bmad-output/planning-artifacts/devex-interaction-spec.md` para a capacidade equivalente
 
 **Given** o ambiente está offline
 **When** o servidor MCP executa capacidades locais
@@ -738,6 +744,7 @@ So that humanos e agentes tenham acesso consistente ao mesmo comportamento.
 **When** a suíte roda
 **Then** ela falha se um use case público estiver exposto somente em CLI ou somente em MCP sem justificativa
 **And** valida que ambos retornam dados semanticamente equivalentes
+**And** valida aderência aos contratos de interação de `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 **Given** uma nova capacidade futura
 **When** ela é registrada como pública
@@ -758,11 +765,13 @@ So that eu consiga entender falhas sem depender de detalhes internos.
 **When** elas chegam ao adapter CLI
 **Then** a CLI renderiza mensagem Rich clara e encerra com status não-zero
 **And** não imprime stack trace por padrão para erro de negócio esperado
+**And** a mensagem inclui detalhe seguro e hint de recuperação conforme `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 **Given** exceções de domínio conhecidas
 **When** elas chegam ao adapter MCP
 **Then** o MCP retorna JSON-RPC error com códigos mapeados: `SecretDetectedError` `-32010`, `SnapshotFailedError` `-32020`, `ValidationFailedError` `-32602`, `FactNotFoundError` `-32040`, `InvalidConfigError` `-32050` e `StorageError` `-32060`
 **And** inclui `data.detail` seguro para automação
+**And** inclui `data.recovery_hint` quando houver ação segura recomendada
 
 **Given** erro inesperado não classificado
 **When** ele ocorre em qualquer adapter
@@ -937,6 +946,7 @@ So that o setup inicial ative apenas integrações relevantes ao meu fluxo.
 **When** o onboarding de host é iniciado
 **Then** o usuário pode selecionar `codex`, `claude_code` ou ambos
 **And** o sistema registra a seleção em configuração local ou global apropriada
+**And** qualquer confirmação de escrita em arquivos de instrução mostra escopo, caminhos relativos, snapshot planejado e evento de auditoria conforme `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 **Given** um host selecionado
 **When** o setup é concluído
@@ -991,6 +1001,7 @@ So that o sistema aprenda sem automatizar decisões comportamentais sensíveis.
 **When** a proposta é apresentada ao usuário
 **Then** o sistema oferece opções explícitas `Sim`, `Sempre` e `Não`
 **And** explica o nome sugerido, propósito, escopo e evidências resumidas da recorrência
+**And** a confirmação segue o padrão de decisão e segurança de `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 **Given** o usuário escolhe `Sim`
 **When** a proposta é aceita
@@ -1047,6 +1058,7 @@ So that eu saiba quais metodologias foram formalizadas e estão disponíveis.
 **Then** o sistema mostra nome, escopo, status, caminho relativo, data de criação, última atualização e origem
 **And** diferencia skills ativas, desativadas e candidatas
 **And** com `--format json`, retorna JSON puro com `skills[]` contendo `name`, `scope`, `status`, `relative_path`, `created_at`, `updated_at`, `origin` e `audit_reference`
+**And** a saída segue `_bmad-output/planning-artifacts/devex-interaction-spec.md`
 
 **Given** nenhuma skill registrada
 **When** a listagem é executada
@@ -1109,3 +1121,4 @@ So that automações e hosts possam usar o mesmo fluxo sem duplicação de lógi
 **When** eles rodam para gestão de skills
 **Then** validam equivalência semântica das respostas
 **And** falham se uma capacidade pública de skills existir em apenas uma interface sem justificativa
+**And** validam os contratos de confirmação, erro e saída definidos em `_bmad-output/planning-artifacts/devex-interaction-spec.md`
