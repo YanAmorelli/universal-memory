@@ -3,6 +3,8 @@ _bmad/
 .agents/
 .gemini/
 .opencode/
+.agent/
+.antigravitycli/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
