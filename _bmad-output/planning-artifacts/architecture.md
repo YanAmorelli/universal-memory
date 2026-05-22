@@ -1,14 +1,18 @@
 ---
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 inputDocuments:
-  - "/Users/amorelliaoyan/projects/personal/lab/universal-memory/_bmad-output/planning-artifacts/prd.md"
+  - "_bmad-output/planning-artifacts/prd.md"
 workflowType: 'architecture'
 project_name: 'universal-memory'
 user_name: 'Yan'
 date: '2026-05-22'
 lastStep: 8
-status: 'complete'
+status: 'ready-with-minor-gaps'
 completedAt: '2026-05-22'
+revalidatedAt: '2026-05-22'
+patchedAt: '2026-05-22'
+lastCorrectionAt: '2026-05-22'
+readinessStatus: 'ready-with-minor-gaps'
 ---
 
 # Architecture Decision Document
@@ -69,7 +73,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - **Linting/Formatting:** Ruff (all-in-one: lint + format + import sort)
 - **Type Checking:** Pyright (strict mode, VS Code/Pylance integration)
 - **CLI Framework:** Typer + Rich (FastAPI-like DX, output profissional)
-- **MCP Framework:** FastMCP 3.0 (experiência existente do usuário; Components, Providers, Transforms)
+- **MCP Framework:** FastMCP 3.x (`fastmcp>=3.3.1,<4`) (experiência existente do usuário; Components, Providers, Transforms)
 - **Testing:** pytest + pytest-cov
 - **Layout:** src/ com Clean Architecture
 - **Distribution:** PyPI (MVP) → Container/Homebrew (post-MVP)
@@ -97,7 +101,7 @@ estrutura de camadas sem carregar decisões indesejadas.
 ```bash
 uv init --package universal-memory
 cd universal-memory
-uv add typer rich fastmcp
+uv add "typer>=0.25.1" "rich>=15.0.0" "fastmcp>=3.3.1,<4" "pydantic>=2.13.4,<3" "tomli-w>=1.2.0"
 uv add --dev pytest pytest-cov ruff pyright
 ```
 
@@ -110,7 +114,7 @@ Python 3.12+ com type hints obrigatórios (Pyright strict mode)
 Typer + Rich para interface de terminal profissional com saída colorida, tabelas e spinners
 
 **MCP Framework:**
-FastMCP 3.0 — Components, Providers, Transforms. Hot reload em dev, auto-threading, authorization granular
+FastMCP 3.x (`fastmcp>=3.3.1,<4`) — Components, Providers, Transforms. Hot reload em dev, auto-threading, authorization granular
 
 **Build Tooling:**
 uv (build, lock, run, publish) + Hatchling como build-backend
@@ -160,10 +164,10 @@ Rationale: combina "metadados estruturados para automação" com "legível por h
 **Validação de Dados:** Pydantic v2 como modelo de domínio e contrato.
 Rationale: padrão do ecossistema FastAPI/FastMCP; validação + serialização unificadas.
 
-**Busca/Recuperação:** Busca textual local (substring/regex em JSON) como padrão MVP.
+**Busca/Recuperação:** Busca textual local (substring/regex em JSON) como hipótese padrão MVP.
 Interface abstrata (contrato/port) para permitir implementação semântica futura.
-Benchmark PRD (30 consultas) executado como script de avaliação separado.
-Rationale: zero dependência, offline-first, < 150ms garantido.
+O padrão final de recuperação só pode ser confirmado após o benchmark obrigatório com 30 consultas representativas.
+Rationale: manter zero dependência e offline-first como hipótese inicial, mas validar latência, qualidade e custo operacional antes de congelar a estratégia.
 
 ### Security & Guardrails
 
@@ -218,7 +222,7 @@ Rationale: zero deps, single-user local, logs simples são suficientes.
 3. Implementação de storage (JSON + MD adapters)
 4. Use Cases (camada de aplicação)
 5. CLI adapter (Typer + Rich)
-6. MCP adapter (FastMCP 3.0)
+6. MCP adapter (FastMCP 3.x)
 7. Secret scanner (cross-cutting)
 8. Snapshot manager (cross-cutting)
 9. Audit logger (cross-cutting, JSONL)
@@ -344,10 +348,13 @@ universal-memory/
 │       └── ci.yml              # Roda ruff, pyright, pytest
 ├── tests/
 │   ├── conftest.py             # Fixtures globais do pytest
+│   ├── contracts/              # Testes de contrato para ports de storage e interfaces
 │   ├── domain/
 │   ├── application/
 │   ├── infrastructure/
 │   └── interfaces/
+├── benchmarks/
+│   └── retrieval.py            # Benchmark textual vs candidato semântico local
 └── src/
     └── universal_memory/
         ├── __init__.py
@@ -435,7 +442,7 @@ Todos os 8 domínios funcionais do PRD possuem mapeamento direto na árvore de d
 FR1 a FR28 cobertos estruturalmente. Destaque para o Secret Scanner (FR22-23) e Snapshot Manager (FR25-28), que foram elevados a "Cross-Cutting Concerns" a serem injetados nos Use Cases, garantindo execução obrigatória.
 
 **Non-Functional Requirements Coverage:**
-- Performance (< 150ms): Garantida pelo design de busca textual e repositório JSON local sem network overhead.
+- Performance (< 150ms): Suportada pela hipótese de busca textual e repositório JSON local sem network overhead; deve ser comprovada pelo benchmark de 30 consultas antes da estratégia final.
 - Offline-first: Adoção exclusiva de bibliotecas locais e persistência em FS.
 
 ### Implementation Readiness Validation ✅
@@ -485,7 +492,7 @@ Diretrizes explícitas sobre injeção de dependência e tratamento de erros (Ri
 
 ### Architecture Readiness Assessment
 
-**Overall Status:** READY FOR IMPLEMENTATION
+**Overall Status:** SUPERSEDED BY REVALIDATION PATCH
 
 **Confidence Level:** HIGH - A estrutura é sólida, os pacotes são modernos (Python 3.12+, uv, FastMCP) e o escopo foi adequadamente delimitado para um MVP local.
 
@@ -508,4 +515,389 @@ Diretrizes explícitas sobre injeção de dependência e tratamento de erros (Ri
 - Refer to this document for all architectural questions
 
 **First Implementation Priority:**
-Inicializar o projeto base (`uv init --package universal-memory`), configurar o `.python-version` para `3.12`, instalar as dependências base (`typer`, `rich`, `fastmcp`, `pydantic`) e as deps de dev (`pytest`, `pytest-cov`, `ruff`, `pyright`), e montar o esqueleto básico de diretórios de acordo com a `Complete Project Directory Structure`.
+Inicializar o projeto base (`uv init --package universal-memory`), configurar o `.python-version` para `3.12`, instalar as dependências base versionadas (`typer`, `rich`, `fastmcp`, `pydantic`, `tomli-w`) e as deps de dev (`pytest`, `pytest-cov`, `ruff`, `pyright`), e montar o esqueleto básico de diretórios de acordo com a `Complete Project Directory Structure`.
+
+## Architecture Revalidation Results
+
+### Coherence Validation
+
+**Decision Compatibility:**
+Parcial. Clean Architecture + Typer + FastMCP + Pydantic v2 é coerente, mas há inconsistência operacional: o comando inicial instala `typer`, `rich` e `fastmcp`, enquanto a arquitetura depende também de `pydantic` e `tomli-w`.
+
+**Pattern Consistency:**
+Boa, com ressalva. A regra CLI/MCP como adapters finos sobre use cases compartilhados é sólida. Falta, porém, uma matriz explícita de paridade CLI ↔ MCP para impedir drift entre interfaces.
+
+**Structure Alignment:**
+Parcial. A árvore suporta os domínios principais, mas ainda não define layout de dados em disco, política de merge de config global/projeto, nem contratos concretos de mutation pipeline.
+
+### Requirements Coverage Validation
+
+**Epic/Feature Coverage:**
+Parcial. Os 8 domínios do PRD têm pastas mapeadas, mas alguns requisitos têm apenas cobertura nominal.
+
+**Functional Requirements Coverage:**
+Parcial. Gaps principais: FR3 benchmark obrigatório, FR6 context hygiene, FR7 seleção de hosts, FR16 evidência de última leitura/falhas, FR18-FR21 registry/validação de skills.
+
+**Non-Functional Requirements Coverage:**
+Parcial. Performance e MCP compliance são objetivos declarados, mas faltam protocolo de benchmark, suíte de conformidade MCP e testes de contrato de storage.
+
+### Implementation Readiness Validation
+
+**Decision Completeness:**
+Parcial. Stack e camadas estão claras, mas versões/pacotes não estão totalmente fixados.
+
+**Structure Completeness:**
+Parcial. Falta layout canônico de arquivos de memória, snapshots, auditoria, config e skills geradas.
+
+**Pattern Completeness:**
+Parcial. Falta especificar fluxo transacional obrigatório: secret scan -> snapshot -> write -> audit -> rollback/failure event.
+
+### Gap Analysis Results
+
+**Critical Gaps:**
+
+- Benchmark textual vs semântico exigido pelo PRD ainda não foi definido nem executado antes da escolha final de recuperação textual.
+- Dependências iniciais incompletas: `pydantic` e `tomli-w` são decisões arquiteturais, mas não aparecem no comando base.
+- Layout persistente de dados não está especificado, apesar de ser central para edição manual, auditoria, rollback e portabilidade.
+
+**Important Gaps:**
+
+- Falta matriz CLI ↔ MCP por capacidade.
+- Falta contrato de storage com operações mínimas e testes de contrato.
+- Falta host support matrix arquitetural para `AGENTS.md`, `CLAUDE.md` e equivalentes.
+- Falta modelo de lifecycle para STM/context hygiene.
+- Falta schema/versionamento obrigatório nas entidades, não apenas como nice-to-have.
+- Falta política de error codes MCP/JSON-RPC por exceção de domínio.
+
+**Nice-to-Have Gaps:**
+
+- Registrar decisão explícita sobre sync/async nos use cases e adapters.
+- Separar `snapshot_manager.py` de `security/` se o domínio de backup crescer.
+
+### Architecture Completeness Checklist
+
+**Requirements Analysis**
+
+- [x] Project context thoroughly analyzed
+- [x] Scale and complexity assessed
+- [x] Technical constraints identified
+- [x] Cross-cutting concerns mapped
+
+**Architectural Decisions**
+
+- [ ] Critical decisions documented with versions
+- [ ] Technology stack fully specified
+- [x] Integration patterns defined
+- [ ] Performance considerations addressed
+
+**Implementation Patterns**
+
+- [x] Naming conventions established
+- [x] Structure patterns defined
+- [ ] Communication patterns specified
+- [ ] Process patterns documented
+
+**Project Structure**
+
+- [ ] Complete directory structure defined
+- [x] Component boundaries established
+- [ ] Integration points mapped
+- [ ] Requirements to structure mapping complete
+
+### Architecture Readiness Assessment
+
+**Overall Status:** SUPERSEDED BY ARCHITECTURE PATCH
+
+**Confidence Level:** medium
+
+**Key Strengths:**
+
+- Clean Architecture é a escolha correta para manter CLI e MCP consistentes.
+- Offline-first, arquivos locais e auditoria append-only combinam bem com o PRD.
+- Guardrails de secret scanning e snapshot foram corretamente tratados como cross-cutting concerns.
+
+**Areas for Future Enhancement:**
+
+- Adicionar um Architecture Patch antes de criar épicos/stories.
+- Transformar gaps críticos em decisões explícitas: data layout, benchmark protocol, dependency list, mutation pipeline e parity matrix.
+
+### Implementation Handoff
+
+**First Implementation Priority:**
+Atualizar este documento com um patch de arquitetura antes do scaffold inicial.
+
+## Architecture Patch - Revalidation Fixes
+
+### Technology Stack Corrections
+
+**Runtime:** Python 3.12+.
+
+**Runtime dependencies:**
+
+- `typer>=0.25.1`
+- `rich>=15.0.0`
+- `fastmcp>=3.3.1,<4`
+- `pydantic>=2.13.4,<3`
+- `tomli-w>=1.2.0`
+
+**Initialization Command:**
+
+```bash
+uv init --package universal-memory
+cd universal-memory
+uv add "typer>=0.25.1" "rich>=15.0.0" "fastmcp>=3.3.1,<4" "pydantic>=2.13.4,<3" "tomli-w>=1.2.0"
+uv add --dev pytest pytest-cov ruff pyright
+```
+
+### Persistent Data Layout
+
+**Global data root:** `~/.local/share/universal-memory/`
+
+**Project data root:** `.umem/`
+
+Canonical structure:
+
+```text
+.umem/
+├── config.toml
+├── memory/
+│   ├── facts.json
+│   ├── rules.json
+│   ├── latent_skills.json
+│   └── context_summaries.json
+├── audit/
+│   └── events.jsonl
+├── snapshots/
+│   ├── manifest.json
+│   └── files/
+├── skills/
+└── benchmarks/
+    └── retrieval-results.json
+```
+
+All persisted JSON entities must include `schema_version`, `id`, `created_at`, `updated_at`, `scope`, and `status`.
+
+### Mutation Pipeline
+
+Every automatic mutation must follow this order:
+
+1. Validate input with Pydantic.
+2. Run secret scanner.
+3. Resolve target scope and storage path.
+4. Create snapshot.
+5. If snapshot fails, abort mutation.
+6. Write data atomically through storage port.
+7. Append audit event.
+8. Return CLI/MCP result with audit reference.
+
+No adapter may bypass this pipeline.
+
+### CLI to MCP Parity Matrix
+
+| Capability | CLI | MCP |
+| --- | --- | --- |
+| initialize project memory | `umem init` | `initialize_project` |
+| get context | `umem context` | `get_context` |
+| remember fact | `umem remember` | `remember_fact` |
+| list facts | `umem facts list` | `list_facts` |
+| purge fact | `umem facts purge` | `purge_fact` |
+| propose rule | `umem rules propose` | `propose_rule` |
+| list audit events | `umem audit list` | `list_audit_events` |
+| list snapshots | `umem snapshots list` | `list_snapshots` |
+| rollback scope | `umem rollback` | `rollback_scope` |
+| host setup/check | `umem host setup/check` | `check_host` |
+| skill proposal/list | `umem skills propose/list` | `propose_skill`, `list_skills` |
+
+Every new use case must add both CLI and MCP coverage unless explicitly marked internal.
+
+### Retrieval Benchmark Protocol
+
+Before textual retrieval is final, implement `benchmarks/retrieval.py`.
+
+Minimum benchmark:
+
+- 1,000 synthetic or fixture facts.
+- 30 representative queries from PRD journeys.
+- Compare local substring/regex against a semantic retrieval stub or documented local semantic candidate.
+- Record p95 latency, quality score 1-5, offline compatibility, operational complexity.
+- Default retrieval strategy must be justified in `benchmarks/retrieval-results.json`.
+
+### Storage Contract
+
+Define storage ports in `src/universal_memory/domain/ports/`:
+
+- `FactRepository`
+- `RuleRepository`
+- `LatentSkillRepository`
+- `SnapshotRepository`
+- `AuditLogRepository`
+- `ContextSummaryRepository`
+
+Each repository must support read, list, write, delete/purge where applicable, and schema migration hooks. Contract tests live under `tests/contracts/`.
+
+### MCP Error Mapping
+
+Map domain exceptions to JSON-RPC errors:
+
+| Domain exception | JSON-RPC code |
+| --- | --- |
+| `SecretDetectedError` | `-32010` |
+| `SnapshotFailedError` | `-32020` |
+| `ValidationFailedError` | `-32602` |
+| `FactNotFoundError` | `-32040` |
+| `InvalidConfigError` | `-32050` |
+| `StorageError` | `-32060` |
+
+CLI renders the same errors through Rich and exits with non-zero status.
+
+### Host Support Matrix
+
+MVP host adapters:
+
+- `codex`: validates and consumes the shared `AGENTS.md` target.
+- `claude_code`: validates and consumes the `CLAUDE.md` target.
+
+Instruction targets:
+
+- `agents_md`: writes `AGENTS.md` exactly once as the shared cross-tool instruction manifest.
+- `claude_md`: writes `CLAUDE.md` only for Claude-specific instructions that cannot be represented in `AGENTS.md`.
+- Host-specific rules directories are separate targets and must not duplicate the full shared manifest.
+
+Each host adapter must define supported instruction targets, MCP configuration method, read validation, write validation, rollback behavior, and audit event type.
+
+### Instruction Target Ownership
+
+`AGENTS.md` is a shared standard followed partially by multiple tools. It is not owned by a single host adapter.
+
+The system must enforce single-writer ownership for shared instruction files:
+
+- `AGENTS.md` is owned by the `agents_md` instruction target and updated once per mutation cycle.
+- Hosts that support `AGENTS.md` reference the same file instead of generating their own copy.
+- Host-specific adapters may validate whether their provider reads `AGENTS.md`, but they must not rewrite it independently.
+- Provider-specific files store only deltas that are impossible or inappropriate in the shared manifest.
+
+`AGENTS.md` must remain a compact routing and policy manifest, not a full knowledge dump. It should point agents to specialized documents or rules when the provider supports that pattern.
+
+Recommended layout:
+
+```text
+AGENTS.md                         # Shared compact manifest, single writer
+CLAUDE.md                         # Claude-specific deltas only
+GEMINI.md                         # Gemini-specific deltas only, post-MVP
+.cursor/rules/*.mdc               # Cursor scoped rules, post-MVP
+.github/copilot-instructions.md   # Copilot-specific entrypoint, post-MVP
+.windsurf/rules/                  # Windsurf scoped rules, post-MVP
+.continue/rules/*.md              # Continue scoped rules, post-MVP
+.clinerules/                      # Cline/Roo scoped rules, post-MVP
+CONVENTIONS.md                    # Aider-readable convention doc, post-MVP
+```
+
+Provider-specific targets must prefer references to shared docs over repeated content. If a provider cannot follow references reliably, the adapter may generate a small provider-specific summary, but the summary must be derived from canonical shared content and audited as a generated delta.
+
+### Rules and Manifest Strategy
+
+The architecture distinguishes three layers:
+
+1. Canonical knowledge lives in project docs and memory records.
+2. `AGENTS.md` is the shared manifest that gives stable, concise operating rules and pointers.
+3. Provider-specific rule files express activation, scoping, or syntax required by a specific host.
+
+This prevents two failure modes:
+
+- A giant `AGENTS.md` that consumes too much context and becomes hard to maintain.
+- Repetitive host files that drift from one another and contradict the shared policy.
+
+Adapters must classify every proposed instruction update as one of:
+
+- `shared_policy`: belongs in `AGENTS.md`.
+- `provider_delta`: belongs in a provider-specific file.
+- `scoped_rule`: belongs in a host rules directory with activation metadata.
+- `canonical_doc`: belongs in project documentation and should only be linked from instruction files.
+
+### Context Hygiene Lifecycle
+
+STM facts must support lifecycle states:
+
+- `active`
+- `stale`
+- `archived`
+- `purged`
+
+Context hygiene runs after task completion or explicit CLI/MCP command and must archive stale project-scoped facts before deletion unless user requests purge.
+
+### Updated Readiness
+
+This patch resolves the critical revalidation gaps. Architecture can return to `READY WITH MINOR GAPS` after this content is saved and the validation section is updated.
+
+## Architecture Revalidation Closure
+
+### Corrections Applied
+
+As revisões do patch foram incorporadas às seções operacionais da arquitetura:
+
+- O comando de inicialização agora instala `pydantic` e `tomli-w` com versões compatíveis.
+- A decisão de recuperação textual foi rebaixada de escolha final para hipótese padrão condicionada ao benchmark obrigatório.
+- A estrutura de projeto agora inclui `tests/contracts/` e `benchmarks/retrieval.py`.
+- O handoff inicial agora exige dependências versionadas e o benchmark antes de congelar a estratégia de busca.
+
+### Residual Gap Analysis
+
+**Critical Gaps:** Nenhum gap crítico permanece aberto depois do patch.
+
+**Important Gaps:**
+
+- O benchmark textual vs candidato semântico ainda precisa ser implementado e registrado em `.umem/benchmarks/retrieval-results.json` durante as primeiras histórias.
+- A suíte de conformidade MCP precisa ser materializada como testes de integração quando os adapters MCP forem criados.
+- Os contratos de storage precisam ser validados em `tests/contracts/` assim que os ports forem implementados.
+
+**Nice-to-Have Gaps:**
+
+- Separar `snapshot_manager.py` de `infrastructure/security/` se backup/rollback crescer além de uma responsabilidade transversal simples.
+- Documentar um candidato semântico local específico após o primeiro benchmark, caso a busca textual não alcance qualidade suficiente.
+
+### Updated Architecture Completeness Checklist
+
+**Requirements Analysis**
+
+- [x] Project context thoroughly analyzed
+- [x] Scale and complexity assessed
+- [x] Technical constraints identified
+- [x] Cross-cutting concerns mapped
+
+**Architectural Decisions**
+
+- [x] Critical decisions documented with versions
+- [x] Technology stack fully specified
+- [x] Integration patterns defined
+- [x] Performance considerations addressed
+
+**Implementation Patterns**
+
+- [x] Naming conventions established
+- [x] Structure patterns defined
+- [x] Communication patterns specified
+- [x] Process patterns documented
+
+**Project Structure**
+
+- [x] Complete directory structure defined
+- [x] Component boundaries established
+- [x] Integration points mapped
+- [x] Requirements to structure mapping complete
+
+### Updated Architecture Readiness Assessment
+
+**Overall Status:** READY WITH MINOR GAPS
+
+**Confidence Level:** high
+
+**Rationale:**
+As decisões bloqueantes estão documentadas com versões, layout persistente, pipeline de mutação, matriz CLI/MCP, contrato de storage, mapeamento de erros MCP e estratégia de ownership de arquivos de instrução. Os gaps restantes são itens de execução das histórias iniciais, não bloqueadores de arquitetura.
+
+### Corrected Implementation Handoff
+
+**First Implementation Priority:**
+Inicializar o scaffold com `uv init --package universal-memory`, fixar Python 3.12+, instalar as dependências versionadas, criar os diretórios `src/`, `tests/contracts/`, `benchmarks/` e implementar primeiro os modelos/ports que sustentam storage, auditoria, snapshot, secret scanning e benchmark de recuperação.
+
+**Next Planning Step:**
+Prosseguir para criação ou atualização de épicos e histórias usando esta arquitetura corrigida como fonte de verdade.
