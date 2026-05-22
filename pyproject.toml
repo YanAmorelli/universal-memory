@@ -1,0 +1,51 @@
+[project]
+name = "universal-memory"
+version = "0.1.0"
+description = "Vendor-agnostic cognitive persistence layer for AI agents."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Yan L. Amorelli", email = "dev@amorelliaoyan.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=0.1.0",
+    "pydantic>=2.0",
+    "tomli-w>=1.0.0",
+    "typer>=0.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/YanAmorelli/universal-memory"
+Repository = "https://github.com/YanAmorelli/universal-memory"
+
+[project.scripts]
+universal-memory = "universal_memory.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.350",
+    "pytest>=8.0.0",
+    "ruff>=0.3.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "PL", "RUF", "B", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+
+[tool.pyright]
+include = ["src", "tests", "benchmarks"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+
