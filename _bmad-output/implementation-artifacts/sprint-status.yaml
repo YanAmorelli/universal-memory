@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-22T21:17:01.194515Z"
-last_updated: "2026-05-22T22:12:35Z"
+last_updated: "2026-05-22T22:54:20Z"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -45,8 +45,8 @@ development_status:
   epic-1: in-progress
   1-1-inicializar-scaffold-python-do-produto: done
 
-  1-2-definir-modelos-de-dom-nio-para-mem-ria: backlog
-  1-3-definir-exce-es-e-ports-de-dom-nio: backlog
+  1-2-definir-modelos-de-dom-nio-para-mem-ria: done
+  1-3-definir-exce-es-e-ports-de-dom-nio: ready-for-dev
   1-4-criar-layout-local-umem-e-configura-o-toml: backlog
   1-5-implementar-inicializa-o-cli-m-nima: backlog
   epic-1-retrospective: optional
