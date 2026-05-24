@@ -20,7 +20,8 @@ Homepage = "https://github.com/YanAmorelli/universal-memory"
 Repository = "https://github.com/YanAmorelli/universal-memory"
 
 [project.scripts]
-universal-memory = "universal_memory.__main__:main"
+umem = "universal_memory.bootstrap.cli:main"
+universal-memory = "universal_memory.bootstrap.cli:main"
 
 [dependency-groups]
 dev = [
@@ -48,4 +49,3 @@ select = ["E", "F", "I", "N", "UP", "PL", "RUF", "B", "S"]
 include = ["src", "tests", "benchmarks"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-

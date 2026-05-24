@@ -1,6 +1,4 @@
-def main() -> None:
-    print("universal-memory")
-
+from universal_memory.bootstrap.cli import main
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
