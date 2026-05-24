@@ -27,17 +27,21 @@ from universal_memory.domain.exceptions import (
 )
 from universal_memory.domain.ports import (
     AuditLogRepository,
+    ConfigValidationPort,
     ContextSummaryRepository,
     FactRepository,
     LatentSkillRepository,
+    ProjectLayoutPort,
     RuleRepository,
     SnapshotRepository,
 )
+from universal_memory.domain.project_layout import ProjectLayoutResult
 
 __all__ = [
     "AuditEvent",
     "AuditEventScope",
     "AuditLogRepository",
+    "ConfigValidationPort",
     "ContextSummary",
     "ContextSummaryRepository",
     "ContextSummaryScope",
@@ -51,6 +55,8 @@ __all__ = [
     "LatentSkillRepository",
     "LatentSkillScope",
     "LatentSkillStatus",
+    "ProjectLayoutPort",
+    "ProjectLayoutResult",
     "Rule",
     "RuleRepository",
     "RuleScope",

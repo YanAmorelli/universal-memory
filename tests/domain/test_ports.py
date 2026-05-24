@@ -1,6 +1,7 @@
 import inspect
 from abc import ABC
 from collections.abc import Callable
+from pathlib import Path
 from typing import get_type_hints
 
 import pytest
@@ -25,12 +26,15 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.ports import (
     AuditLogRepository,
+    ConfigValidationPort,
     ContextSummaryRepository,
     FactRepository,
     LatentSkillRepository,
+    ProjectLayoutPort,
     RuleRepository,
     SnapshotRepository,
 )
+from universal_memory.domain.project_layout import ProjectLayoutResult
 
 PortType = type[ABC]
 type MethodExpectations = dict[str, tuple[object, dict[str, object]]]
@@ -79,6 +83,15 @@ EXPECTED_METHODS: dict[PortType, MethodExpectations] = {
         "list": (list[ContextSummary], {"scope": ContextSummaryScope | None}),
         "write": (type(None), {"entity": ContextSummary}),
         "migrate": (type(None), {"target_version": int}),
+    },
+    ConfigValidationPort: {
+        "validate_project_config": (
+            type(None),
+            {"project_root": Path, "global_config_path": Path | None},
+        ),
+    },
+    ProjectLayoutPort: {
+        "ensure_project_layout": (ProjectLayoutResult, {"project_root": Path}),
     },
 }
 
