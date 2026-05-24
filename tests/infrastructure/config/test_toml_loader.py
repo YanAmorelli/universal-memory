@@ -59,7 +59,7 @@ def test_load_config_uses_default_global_path_when_not_overridden(
     project_config = project_root / ".umem" / "config.toml"
 
     project_config.parent.mkdir(parents=True)
-    project_config.write_text("[project]\nname = \"demo\"\n")
+    project_config.write_text('[project]\nname = "demo"\n')
 
     config = load_config(project_root=project_root)
 
@@ -70,7 +70,7 @@ def test_load_config_uses_default_global_path_when_not_overridden(
 
 def test_load_config_raises_invalid_config_error_for_invalid_toml(tmp_path: Path) -> None:
     broken_config = tmp_path / "broken.toml"
-    broken_config.write_text("[project\nname = \"demo\"\n")
+    broken_config.write_text('[project\nname = "demo"\n')
 
     with pytest.raises(InvalidConfigError, match=r"broken\.toml"):
         load_config(project_root=tmp_path, global_config_path=broken_config)
@@ -88,7 +88,7 @@ def test_load_config_raises_storage_error_for_os_read_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     broken_config = tmp_path / "broken.toml"
-    broken_config.write_text("[project]\nname = \"demo\"\n")
+    broken_config.write_text('[project]\nname = "demo"\n')
 
     def raise_os_error(*args: object, **kwargs: object) -> object:
         raise OSError("boom")
@@ -104,9 +104,9 @@ def test_load_config_returns_independent_merged_data(tmp_path: Path) -> None:
     project_root = tmp_path / "workspace"
     project_config = project_root / ".umem" / "config.toml"
 
-    global_config.write_text("[paths]\nstorage_root = \"/global/storage\"\n")
+    global_config.write_text('[paths]\nstorage_root = "/global/storage"\n')
     project_config.parent.mkdir(parents=True)
-    project_config.write_text("[paths]\nstorage_root = \".umem/memory\"\n")
+    project_config.write_text('[paths]\nstorage_root = ".umem/memory"\n')
 
     config = load_config(project_root=project_root, global_config_path=global_config)
     config.merged["paths"]["storage_root"] = "changed"
@@ -120,6 +120,4 @@ def test_dump_toml_document_serializes_with_tomli_w_style() -> None:
 
     rendered = dump_toml_document(document)
 
-    assert rendered == (
-        '[project]\nname = "demo"\n\n[paths]\nstorage_root = ".umem/memory"\n'
-    )
+    assert rendered == ('[project]\nname = "demo"\n\n[paths]\nstorage_root = ".umem/memory"\n')

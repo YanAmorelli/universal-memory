@@ -104,9 +104,7 @@ def _validate_existing_layout(umem_root: Path) -> list[str]:
             continue
         if not _matches_expected_kind(relative_path, target):
             expected_kind = "directory" if relative_path in DIRECTORY_LAYOUT_PATHS else "file"
-            raise StorageError(
-                f"Project layout path '{relative_path}' must be a {expected_kind}"
-            )
+            raise StorageError(f"Project layout path '{relative_path}' must be a {expected_kind}")
         existing_paths.append(relative_path)
 
     if missing_paths:

@@ -26,9 +26,7 @@ class LoadedConfig:
     resolved_paths: TomlData
 
 
-def load_config(
-    project_root: Path, global_config_path: Path | None = None
-) -> LoadedConfig:
+def load_config(project_root: Path, global_config_path: Path | None = None) -> LoadedConfig:
     normalized_project_root = project_root.resolve()
     resolved_global_config_path = (
         global_config_path.resolve()

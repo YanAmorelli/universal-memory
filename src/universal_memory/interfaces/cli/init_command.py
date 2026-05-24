@@ -130,9 +130,7 @@ def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
 
 def _format_human_init_output(result: SetupProjectResult) -> str:
     status = (
-        "Memoria local criada em .umem/."
-        if result.created
-        else "Memoria local ja inicializada."
+        "Memoria local criada em .umem/." if result.created else "Memoria local ja inicializada."
     )
     paths_label = "Caminhos criados:" if result.created else "Caminhos reutilizados:"
     paths = result.created_paths if result.created else result.existing_paths

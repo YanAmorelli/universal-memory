@@ -20,9 +20,7 @@ class FactRepository(ABC):
         ...
 
     @abstractmethod
-    def list(
-        self, scope: FactScope | None = None, status: FactStatus | None = None
-    ) -> list[Fact]:
+    def list(self, scope: FactScope | None = None, status: FactStatus | None = None) -> list[Fact]:
         """List all facts matching the optional scope and status filters.
 
         Args:

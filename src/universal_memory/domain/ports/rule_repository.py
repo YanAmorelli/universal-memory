@@ -20,9 +20,7 @@ class RuleRepository(ABC):
         ...
 
     @abstractmethod
-    def list(
-        self, scope: RuleScope | None = None, status: RuleStatus | None = None
-    ) -> list[Rule]:
+    def list(self, scope: RuleScope | None = None, status: RuleStatus | None = None) -> list[Rule]:
         """List all rules matching the optional scope and status filters.
 
         Args:
