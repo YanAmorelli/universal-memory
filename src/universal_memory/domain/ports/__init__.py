@@ -5,6 +5,7 @@ from universal_memory.domain.ports.fact_repository import FactRepository
 from universal_memory.domain.ports.latent_skill_repository import LatentSkillRepository
 from universal_memory.domain.ports.project_layout_port import ProjectLayoutPort
 from universal_memory.domain.ports.rule_repository import RuleRepository
+from universal_memory.domain.ports.secret_scanner_port import SecretScannerPort
 from universal_memory.domain.ports.snapshot_repository import SnapshotRepository
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "LatentSkillRepository",
     "ProjectLayoutPort",
     "RuleRepository",
+    "SecretScannerPort",
     "SnapshotRepository",
 ]
