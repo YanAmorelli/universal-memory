@@ -21,6 +21,7 @@ class SnapshotStatus(StrEnum):
 class Snapshot(BaseEntity):
     timestamp: datetime
     scope: SnapshotScope
+    origin: str = "unknown"
     action: str
     relative_path: str
     hash: str = Field(pattern=r"^[a-fA-F0-9]{64}$")

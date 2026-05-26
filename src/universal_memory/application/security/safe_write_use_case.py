@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -53,7 +54,7 @@ class SafeWriteUseCase:
         
         try:
             self.secret_scanner.scan(command.content, origin=command.origin)
-        except SecretDetectedError as exc:
+        except SecretDetectedError:
             try:
                 dummy_snapshot_ref = str(uuid4())
                 self._record_audit(
@@ -111,7 +112,6 @@ class SafeWriteUseCase:
             )
             audit_ref = event.audit_reference
         except Exception as audit_exc:
-            import sys
             print(
                 f"CRITICAL COMPLIANCE WARNING: Atomic write succeeded for {relative_path}, "
                 f"but audit logging failed: {audit_exc}. This write is UNAUDITED.",
@@ -160,6 +160,7 @@ class SafeWriteUseCase:
             updated_at=timestamp,
             timestamp=timestamp,
             scope=snapshot_scope,
+            origin=command.origin,
             action=command.action,
             relative_path=relative_path,
             hash=sha256(previous_bytes).hexdigest(),

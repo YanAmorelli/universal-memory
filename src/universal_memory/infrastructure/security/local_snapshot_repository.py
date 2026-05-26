@@ -17,6 +17,8 @@ from universal_memory.domain import SnapshotFailedError, StorageError
 from universal_memory.domain.entities import Snapshot, SnapshotScope, SnapshotStatus
 from universal_memory.domain.ports import SnapshotRepository
 
+STALE_LOCK_SECONDS = 10.0
+
 
 class LocalSnapshotRepository(SnapshotRepository):
     def __init__(
@@ -39,12 +41,12 @@ class LocalSnapshotRepository(SnapshotRepository):
     def _lock(self) -> Generator[None, None, None]:
         lock_path = self.manifest_path.with_suffix(".json.lock")
         self.snapshots_root.mkdir(parents=True, exist_ok=True)
-        
+
         # Break stale locks older than 10 seconds
         if lock_path.exists():
             try:
                 mtime = os.path.getmtime(lock_path)
-                if time.time() - mtime > 10.0:
+                if time.time() - mtime > STALE_LOCK_SECONDS:
                     lock_path.unlink(missing_ok=True)
             except OSError:
                 pass
@@ -99,7 +101,7 @@ class LocalSnapshotRepository(SnapshotRepository):
             self.snapshots_root.mkdir(parents=True, exist_ok=True)
             self.files_root.mkdir(parents=True, exist_ok=True)
             copied_file = self._copy_current_file(entity)
-            
+
             with self._lock():
                 snapshots = [
                     snapshot for snapshot in self._load_snapshots() if snapshot.id != entity.id

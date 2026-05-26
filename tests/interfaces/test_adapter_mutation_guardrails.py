@@ -1,6 +1,8 @@
 import ast
 from pathlib import Path
 
+MIN_OPEN_ARGS_WITH_MODE = 2
+
 # Explicitly flag functions/methods that write or mutate files.
 # For open() or Path.open(), we analyze the mode argument to avoid flagging reads.
 MUTATION_FUNCTIONS = {
@@ -57,14 +59,18 @@ def _is_write_mode_open(node: ast.Call) -> bool:
     mode = "r"
     
     # Check positional arguments. The mode is typically the second argument: open(file, mode)
-    if len(node.args) >= 2:
+    if len(node.args) >= MIN_OPEN_ARGS_WITH_MODE:
         mode_arg = node.args[1]
         if isinstance(mode_arg, ast.Constant) and isinstance(mode_arg.value, str):
             mode = mode_arg.value
 
     # Check keyword arguments: open(file, mode="w")
     for kw in node.keywords:
-        if kw.arg == "mode" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+        if (
+            kw.arg == "mode"
+            and isinstance(kw.value, ast.Constant)
+            and isinstance(kw.value.value, str)
+        ):
             mode = kw.value.value
 
     # If mode contains w, a, x, or +, it is a mutation write/append

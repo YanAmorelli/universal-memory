@@ -1,9 +1,33 @@
 """Security use cases for universal-memory."""
 
+from universal_memory.application.security.list_audit_log_use_case import (
+    AuditLogEntry,
+    ListAuditLogCommand,
+    ListAuditLogResult,
+    ListAuditLogUseCase,
+)
+from universal_memory.application.security.list_snapshots_use_case import (
+    ListSnapshotsCommand,
+    ListSnapshotsResult,
+    ListSnapshotsUseCase,
+    SnapshotEntry,
+)
 from universal_memory.application.security.safe_write_use_case import (
     SafeWriteCommand,
     SafeWriteResult,
     SafeWriteUseCase,
 )
 
-__all__ = ["SafeWriteCommand", "SafeWriteResult", "SafeWriteUseCase"]
+__all__ = [
+    "AuditLogEntry",
+    "ListAuditLogCommand",
+    "ListAuditLogResult",
+    "ListAuditLogUseCase",
+    "ListSnapshotsCommand",
+    "ListSnapshotsResult",
+    "ListSnapshotsUseCase",
+    "SafeWriteCommand",
+    "SafeWriteResult",
+    "SafeWriteUseCase",
+    "SnapshotEntry",
+]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -13,6 +14,8 @@ from pydantic import ValidationError
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import AuditEvent, AuditEventScope
 from universal_memory.domain.ports import AuditLogRepository
+
+STALE_LOCK_SECONDS = 10.0
 
 
 class LocalAuditLogRepository(AuditLogRepository):
@@ -31,7 +34,7 @@ class LocalAuditLogRepository(AuditLogRepository):
         if lock_path.exists():
             try:
                 mtime = os.path.getmtime(lock_path)
-                if time.time() - mtime > 10.0:
+                if time.time() - mtime > STALE_LOCK_SECONDS:
                     lock_path.unlink(missing_ok=True)
             except OSError:
                 pass
@@ -104,7 +107,6 @@ class LocalAuditLogRepository(AuditLogRepository):
                     try:
                         events.append(AuditEvent.model_validate(json.loads(line)))
                     except (json.JSONDecodeError, ValidationError) as line_exc:
-                        import sys
                         print(f"Skipping corrupt audit log line: {line_exc}", file=sys.stderr)
                 return events
         except (OSError, StorageError) as exc:
