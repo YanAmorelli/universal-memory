@@ -24,6 +24,7 @@ class AuditEvent(BaseEntity):
     snapshot_reference: str
     audit_reference: str
     status: str
+    details: str | None = None
 
     @field_validator("timestamp")
     @classmethod

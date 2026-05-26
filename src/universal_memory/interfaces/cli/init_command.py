@@ -2,29 +2,55 @@ import argparse
 import json
 import sys
 from collections.abc import Callable, Sequence
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+from pydantic import ValidationError
 
 from universal_memory.application.onboarding.setup_project import (
     SetupProjectResult,
     setup_project,
 )
+from universal_memory.application.security import (
+    ListAuditLogCommand,
+    ListAuditLogResult,
+    ListSnapshotsCommand,
+    ListSnapshotsResult,
+    RollbackCommand,
+    RollbackResult,
+)
 from universal_memory.domain import (
     ConfigValidationPort,
     InvalidConfigError,
     ProjectLayoutPort,
+    SnapshotFailedError,
     StorageError,
     ValidationFailedError,
+)
+from universal_memory.domain.entities import (
+    AuditEventScope,
+    Snapshot,
+    SnapshotScope,
+    SnapshotStatus,
 )
 
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
 SetupProjectCommand = Callable[[Path], SetupProjectResult]
+ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
+ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
+RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
+RollbackPreviewHandler = Callable[[SnapshotScope], Snapshot]
 
 
-def main(
+def main(  # noqa: PLR0913
     argv: Sequence[str] | None = None,
     *,
     setup_project_command: SetupProjectCommand | None = None,
+    audit_list_command: ListAuditLogCommandHandler | None = None,
+    snapshots_list_command: ListSnapshotsCommandHandler | None = None,
+    rollback_command: RollbackCommandHandler | None = None,
+    rollback_preview_command: RollbackPreviewHandler | None = None,
 ) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -36,14 +62,53 @@ def main(
         command = setup_project_command
         return _run_init(command, output_format=args.output_format)
 
+    if args.command == "audit" and args.audit_command == "list":
+        if audit_list_command is None:
+            msg = "CLI audit_list_command dependency was not configured."
+            raise RuntimeError(msg)
+        return _run_audit_list(
+            audit_list_command,
+            output_format=args.output_format,
+            scope=_audit_scope(args.scope),
+        )
+
+    if args.command == "snapshots" and args.snapshots_command == "list":
+        if snapshots_list_command is None:
+            msg = "CLI snapshots_list_command dependency was not configured."
+            raise RuntimeError(msg)
+        return _run_snapshots_list(
+            snapshots_list_command,
+            output_format=args.output_format,
+            scope=_snapshot_scope(args.scope),
+        )
+
+    if args.command == "rollback":
+        if rollback_command is None:
+            msg = "CLI rollback_command dependency was not configured."
+            raise RuntimeError(msg)
+        if rollback_preview_command is None:
+            msg = "CLI rollback_preview_command dependency was not configured."
+            raise RuntimeError(msg)
+        return _run_rollback(
+            rollback_command,
+            rollback_preview_command=rollback_preview_command,
+            output_format=args.output_format,
+            scope=_snapshot_scope(args.scope),
+            yes=args.yes,
+        )
+
     parser.print_help()
     return 0
 
 
-def build_main(
+def build_main(  # noqa: PLR0913
     *,
     layout_port: ProjectLayoutPort,
     config_validation_port: ConfigValidationPort,
+    audit_list_command: ListAuditLogCommandHandler,
+    snapshots_list_command: ListSnapshotsCommandHandler,
+    rollback_command: RollbackCommandHandler,
+    rollback_preview_command: RollbackPreviewHandler,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -51,7 +116,14 @@ def build_main(
     )
 
     def configured_main(argv: Sequence[str] | None = None) -> int:
-        return main(argv, setup_project_command=command)
+        return main(
+            argv,
+            setup_project_command=command,
+            audit_list_command=audit_list_command,
+            snapshots_list_command=snapshots_list_command,
+            rollback_command=rollback_command,
+            rollback_preview_command=rollback_preview_command,
+        )
 
     return configured_main
 
@@ -67,6 +139,61 @@ def _build_parser() -> argparse.ArgumentParser:
         default="human",
         dest="output_format",
         help="Output format",
+    )
+
+    audit_parser = subparsers.add_parser("audit", help="Inspect audit events")
+    audit_subparsers = audit_parser.add_subparsers(dest="audit_command")
+    audit_list_parser = audit_subparsers.add_parser("list", help="List audit events")
+    audit_list_parser.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        dest="output_format",
+        help="Output format",
+    )
+    audit_list_parser.add_argument(
+        "--scope",
+        choices=["project", "global"],
+        default="project",
+        help="Scope filter",
+    )
+
+    snapshots_parser = subparsers.add_parser("snapshots", help="Inspect snapshots")
+    snapshots_subparsers = snapshots_parser.add_subparsers(dest="snapshots_command")
+    snapshots_list_parser = snapshots_subparsers.add_parser("list", help="List snapshots")
+    snapshots_list_parser.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        dest="output_format",
+        help="Output format",
+    )
+    snapshots_list_parser.add_argument(
+        "--scope",
+        choices=["project", "global"],
+        default="project",
+        help="Scope filter",
+    )
+
+    rollback_parser = subparsers.add_parser("rollback", help="Restore latest snapshot")
+    rollback_parser.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        dest="output_format",
+        help="Output format",
+    )
+    rollback_parser.add_argument(
+        "--scope",
+        choices=["project", "global"],
+        default="project",
+        help="Scope to roll back",
+    )
+    rollback_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip interactive confirmation",
     )
 
     return parser
@@ -105,12 +232,145 @@ def _run_init(command: SetupProjectCommand, output_format: str) -> int:
     return 0
 
 
+def _run_audit_list(
+    command: ListAuditLogCommandHandler,
+    *,
+    output_format: str,
+    scope: AuditEventScope,
+) -> int:
+    try:
+        result = command(ListAuditLogCommand(scope=scope))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except StorageError as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_audit_success_envelope(result, scope=scope), sort_keys=True))
+    else:
+        print(_format_human_audit_output(result))
+
+    return 0
+
+
+def _run_snapshots_list(
+    command: ListSnapshotsCommandHandler,
+    *,
+    output_format: str,
+    scope: SnapshotScope,
+) -> int:
+    try:
+        result = command(ListSnapshotsCommand(scope=scope, status=SnapshotStatus.created))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except StorageError as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_snapshots_success_envelope(result, scope=scope), sort_keys=True))
+    else:
+        print(_format_human_snapshots_output(result))
+
+    return 0
+
+
+def _run_rollback(
+    command: RollbackCommandHandler,
+    *,
+    rollback_preview_command: RollbackPreviewHandler,
+    output_format: str,
+    scope: SnapshotScope,
+    yes: bool,
+) -> int:
+    try:
+        if output_format == "json" and not yes:
+            raise SnapshotFailedError(
+                "A flag --yes / -y e obrigatoria para executar rollback com saida JSON."
+            )
+        preview = rollback_preview_command(scope)
+        if output_format != "json":
+            print(_format_human_rollback_preview(preview))
+            if not yes:
+                try:
+                    answer = input("Deseja prosseguir com o rollback? [s/N]: ")
+                except (EOFError, KeyboardInterrupt):
+                    print("\nRollback cancelado.")
+                    return 1
+                if answer.strip().lower() not in {"s", "sim", "y", "yes"}:
+                    print("Rollback cancelado.")
+                    return 1
+
+        result = command(RollbackCommand(scope=scope, origin="cli"))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except (SnapshotFailedError, StorageError, ValidationFailedError) as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_rollback_success_envelope(result), sort_keys=True))
+    else:
+        print(_format_human_rollback_success(result))
+
+    return 0
+
+
 def _success_envelope(result: SetupProjectResult) -> dict[str, Any]:
     return {
         "ok": True,
         "operation": "init",
         "scope": "project",
         "data": _init_payload(result),
+        "warnings": [],
+    }
+
+
+def _audit_success_envelope(
+    result: ListAuditLogResult, *, scope: AuditEventScope
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "audit",
+        "scope": scope.value,
+        "data": {"events": [asdict(event) for event in result.events]},
+        "warnings": [],
+    }
+
+
+def _snapshots_success_envelope(
+    result: ListSnapshotsResult, *, scope: SnapshotScope
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "snapshots",
+        "scope": scope.value,
+        "data": {"snapshots": [asdict(snapshot) for snapshot in result.snapshots]},
+        "warnings": [],
+    }
+
+
+def _rollback_success_envelope(result: RollbackResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "rollback",
+        "scope": result.scope.value,
+        "data": {
+            "scope": result.scope.value,
+            "snapshot_reference": result.snapshot_reference,
+            "restored_paths": result.restored_paths,
+            "audit_reference": result.audit_reference,
+        },
         "warnings": [],
     }
 
@@ -147,6 +407,88 @@ def _format_human_init_output(result: SetupProjectResult) -> str:
     )
 
 
+def _format_human_audit_output(result: ListAuditLogResult) -> str:
+    if not result.events:
+        return "Nenhum evento de auditoria encontrado."
+
+    lines = ["Eventos de auditoria:"]
+    for event in result.events:
+        lines.append(
+            " | ".join(
+                [
+                    event.timestamp,
+                    event.scope,
+                    event.origin,
+                    event.action,
+                    event.result,
+                    f"audit={event.audit_reference}",
+                    f"snapshot={event.snapshot_reference}",
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def _format_human_snapshots_output(result: ListSnapshotsResult) -> str:
+    if not result.snapshots:
+        return "Nenhum snapshot encontrado."
+
+    lines = ["Snapshots:"]
+    for snapshot in result.snapshots:
+        lines.append(
+            " | ".join(
+                [
+                    snapshot.timestamp,
+                    snapshot.scope,
+                    snapshot.origin,
+                    snapshot.action,
+                    snapshot.relative_path,
+                    snapshot.hash,
+                    snapshot.manifest_path,
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def _format_human_rollback_preview(snapshot: Snapshot) -> str:
+    return "\n".join(
+        [
+            "Rollback selecionado:",
+            f"Escopo: {snapshot.scope.value}",
+            f"Snapshot: {snapshot.id}",
+            f"Timestamp: {snapshot.timestamp.isoformat()}",
+            f"Acao original: {snapshot.action}",
+            f"Arquivo: {snapshot.relative_path}",
+        ]
+    )
+
+
+def _format_human_rollback_success(result: RollbackResult) -> str:
+    return "\n".join(
+        [
+            "Rollback concluido.",
+            f"Escopo: {result.scope.value}",
+            f"Snapshot: {result.snapshot_reference}",
+            f"Arquivos restaurados: {', '.join(result.restored_paths)}",
+            f"Auditoria: {result.audit_reference}",
+        ]
+    )
+
+
+def _recovery_hint(error: Exception) -> str:
+    msg = str(error)
+    if "Hint: " in msg:
+        return msg.split("Hint: ", 1)[1]
+    if isinstance(error, SnapshotFailedError):
+        return "Execute uma mutacao segura antes de tentar rollback ou verifique o escopo."
+    if isinstance(error, InvalidConfigError):
+        return "Verifique as configuracoes no arquivo config.toml."
+    if isinstance(error, ValidationFailedError):
+        return "Corrija os dados invalidos informados."
+    return "Verifique o layout local e execute umem init na raiz do projeto."
+
+
 def _print_expected_error(error: Exception, output_format: str) -> None:
     code = _error_code(error)
     detail = str(error)
@@ -156,7 +498,7 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
             "code": code,
             "message": _error_message(error),
             "detail": detail,
-            "recovery_hint": "Verifique o layout local e execute umem init na raiz do projeto.",
+            "recovery_hint": _recovery_hint(error),
             "audit_reference": None,
         },
     }
@@ -178,6 +520,8 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
 
 
 def _error_code(error: Exception) -> str:
+    if isinstance(error, SnapshotFailedError):
+        return "snapshot_failed"
     if isinstance(error, InvalidConfigError):
         return "invalid_config"
     if isinstance(error, ValidationFailedError):
@@ -186,6 +530,8 @@ def _error_code(error: Exception) -> str:
 
 
 def _error_message(error: Exception) -> str:
+    if isinstance(error, SnapshotFailedError):
+        return "Falha de snapshot."
     if isinstance(error, InvalidConfigError):
         return "Configuracao invalida."
     if isinstance(error, ValidationFailedError):
@@ -195,3 +541,11 @@ def _error_message(error: Exception) -> str:
 
 def _path_to_posix(path: Path) -> str:
     return path.as_posix()
+
+
+def _audit_scope(value: str) -> AuditEventScope:
+    return AuditEventScope.global_ if value == "global" else AuditEventScope.project
+
+
+def _snapshot_scope(value: str) -> SnapshotScope:
+    return SnapshotScope.global_ if value == "global" else SnapshotScope.project

@@ -33,6 +33,7 @@ from universal_memory.domain.ports import (
     LatentSkillRepository,
     ProjectLayoutPort,
     RuleRepository,
+    SecretScannerPort,
     SnapshotRepository,
 )
 from universal_memory.domain.project_layout import ProjectLayoutResult
@@ -62,6 +63,7 @@ __all__ = [
     "RuleScope",
     "RuleStatus",
     "SecretDetectedError",
+    "SecretScannerPort",
     "Snapshot",
     "SnapshotFailedError",
     "SnapshotRepository",

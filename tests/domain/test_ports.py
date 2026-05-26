@@ -32,6 +32,7 @@ from universal_memory.domain.ports import (
     LatentSkillRepository,
     ProjectLayoutPort,
     RuleRepository,
+    SecretScannerPort,
     SnapshotRepository,
 )
 from universal_memory.domain.project_layout import ProjectLayoutResult
@@ -68,6 +69,7 @@ EXPECTED_METHODS: dict[PortType, MethodExpectations] = {
     },
     SnapshotRepository: {
         "read": (Snapshot, {"id": str}),
+        "get_content": (bytes, {"id": str}),
         "list": (list[Snapshot], {"scope": SnapshotScope | None, "status": SnapshotStatus | None}),
         "write": (type(None), {"entity": Snapshot}),
         "migrate": (type(None), {"target_version": int}),
@@ -92,6 +94,9 @@ EXPECTED_METHODS: dict[PortType, MethodExpectations] = {
     },
     ProjectLayoutPort: {
         "ensure_project_layout": (ProjectLayoutResult, {"project_root": Path}),
+    },
+    SecretScannerPort: {
+        "scan": (type(None), {"content": str}),
     },
 }
 
@@ -136,3 +141,14 @@ def test_ports_expose_abstract_methods_with_typed_signatures(
         optional_filters = {"scope", "status"} & set(expected_parameters)
         for parameter_name in optional_filters:
             assert signature.parameters[parameter_name].default is None
+
+
+def test_secret_scanner_port_accepts_optional_origin_keyword() -> None:
+    signature = inspect.signature(SecretScannerPort.scan)
+    hints = get_type_hints(SecretScannerPort.scan)
+
+    origin = signature.parameters["origin"]
+
+    assert origin.kind is inspect.Parameter.KEYWORD_ONLY
+    assert origin.default is None
+    assert hints["origin"] == str | None
