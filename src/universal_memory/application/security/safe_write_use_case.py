@@ -51,7 +51,7 @@ class SafeWriteUseCase:
 
     def execute(self, command: SafeWriteCommand) -> SafeWriteResult:
         relative_path = self._validate_relative_path(command.relative_path)
-        
+
         try:
             self.secret_scanner.scan(command.content, origin=command.origin)
         except SecretDetectedError:

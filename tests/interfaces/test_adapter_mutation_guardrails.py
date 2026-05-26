@@ -32,12 +32,12 @@ def test_interface_adapters_do_not_bypass_safe_write_use_case_for_mutations() ->
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 name = _call_name(node.func)
-                
+
                 # Check for direct mutation calls like write_text, copy, replace, etc.
                 if name in MUTATION_FUNCTIONS:
                     violations.append(f"{path}:{node.lineno}:{name}")
                     continue
-                
+
                 # Check for open() or Path.open() with write/append modes
                 if name == "open":
                     if _is_write_mode_open(node):
@@ -57,7 +57,7 @@ def _call_name(node: ast.expr) -> str | None:
 def _is_write_mode_open(node: ast.Call) -> bool:
     # By default, open() opens in read mode ("r")
     mode = "r"
-    
+
     # Check positional arguments. The mode is typically the second argument: open(file, mode)
     if len(node.args) >= MIN_OPEN_ARGS_WITH_MODE:
         mode_arg = node.args[1]

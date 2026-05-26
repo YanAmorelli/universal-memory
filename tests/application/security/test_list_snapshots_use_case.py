@@ -20,6 +20,9 @@ class RecordingSnapshotRepository(SnapshotRepository):
     def read(self, id: str) -> Snapshot:
         raise KeyError(id)
 
+    def get_content(self, id: str) -> bytes:
+        raise KeyError(id)
+
     def list(
         self, scope: SnapshotScope | None = None, status: SnapshotStatus | None = None
     ) -> list[Snapshot]:

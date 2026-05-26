@@ -34,6 +34,9 @@ class RecordingSnapshotRepository(SnapshotRepository):
     def read(self, id: str) -> Snapshot:
         raise KeyError(id)
 
+    def get_content(self, id: str) -> bytes:
+        raise KeyError(id)
+
     def list(self, scope=None, status=None) -> list[Snapshot]:
         return self.written
 

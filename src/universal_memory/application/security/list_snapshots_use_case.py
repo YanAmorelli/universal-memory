@@ -55,4 +55,3 @@ class ListSnapshotsUseCase:
             hash=snapshot.hash,
             manifest_path=manifest_path,
         )
-

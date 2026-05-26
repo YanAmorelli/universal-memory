@@ -46,4 +46,3 @@ class ListAuditLogUseCase:
             snapshot_reference=event.snapshot_reference,
             audit_reference=event.audit_reference,
         )
-

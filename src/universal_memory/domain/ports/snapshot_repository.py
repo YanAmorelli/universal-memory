@@ -20,6 +20,21 @@ class SnapshotRepository(ABC):
         ...
 
     @abstractmethod
+    def get_content(self, id: str) -> bytes:
+        """Read the physical backup bytes associated with a snapshot ID.
+
+        Args:
+            id: The unique identifier of the snapshot backup file.
+
+        Returns:
+            The backed up file content.
+
+        Raises:
+            UniversalMemoryError: If the backup file cannot be read.
+        """
+        ...
+
+    @abstractmethod
     def list(
         self, scope: SnapshotScope | None = None, status: SnapshotStatus | None = None
     ) -> list[Snapshot]:

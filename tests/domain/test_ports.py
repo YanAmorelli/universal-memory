@@ -69,6 +69,7 @@ EXPECTED_METHODS: dict[PortType, MethodExpectations] = {
     },
     SnapshotRepository: {
         "read": (Snapshot, {"id": str}),
+        "get_content": (bytes, {"id": str}),
         "list": (list[Snapshot], {"scope": SnapshotScope | None, "status": SnapshotStatus | None}),
         "write": (type(None), {"entity": Snapshot}),
         "migrate": (type(None), {"target_version": int}),

@@ -63,9 +63,7 @@ def test_list_filters_by_scope_and_read_returns_events_ordered_by_timestamp(
     global_event = make_audit_event(
         scope=AuditEventScope.global_, created_at=base + timedelta(minutes=1)
     )
-    newer = make_audit_event(
-        scope=AuditEventScope.project, created_at=base + timedelta(minutes=2)
-    )
+    newer = make_audit_event(scope=AuditEventScope.project, created_at=base + timedelta(minutes=2))
 
     repository.write(newer)
     repository.write(global_event)

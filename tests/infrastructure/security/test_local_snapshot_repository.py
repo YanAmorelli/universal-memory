@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from universal_memory.domain import SnapshotFailedError
+from universal_memory.domain import SnapshotFailedError, StorageError
 from universal_memory.domain.entities import Snapshot, SnapshotScope, SnapshotStatus
 from universal_memory.infrastructure.security import LocalSnapshotRepository
 
@@ -51,6 +51,30 @@ def test_write_copies_existing_file_and_records_manifest_metadata(tmp_path: Path
     stored = repository.read(snapshot.id)
     assert stored == snapshot
     assert repository.list(scope=SnapshotScope.project, status=SnapshotStatus.created) == [snapshot]
+
+
+def test_get_content_reads_physical_backup_file(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspace"
+    data_root = project_root / ".umem"
+    original = project_root / "memory" / "facts.jsonl"
+    content = b"previous state\n"
+    original.parent.mkdir(parents=True)
+    original.write_bytes(content)
+    repository = LocalSnapshotRepository(project_root=project_root, data_root=data_root)
+    snapshot = make_snapshot(content=content)
+    repository.write(snapshot)
+
+    assert repository.get_content(snapshot.id) == content
+
+
+def test_get_content_raises_storage_error_when_backup_file_is_missing(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspace"
+    repository = LocalSnapshotRepository(
+        project_root=project_root, data_root=project_root / ".umem"
+    )
+
+    with pytest.raises(StorageError, match="Snapshot backup file not found"):
+        repository.get_content(str(uuid4()))
 
 
 def test_write_records_initial_creation_without_physical_copy(tmp_path: Path) -> None:
@@ -129,12 +153,10 @@ def test_write_retains_only_five_newest_snapshots_per_scope_and_removes_old_file
     retained = repository.list(scope=SnapshotScope.project)
     assert [snapshot.id for snapshot in retained] == [snapshot.id for snapshot in snapshots[2:]]
     assert all(
-        (data_root / "snapshots" / "files" / snapshot.id).exists()
-        for snapshot in snapshots[2:]
+        (data_root / "snapshots" / "files" / snapshot.id).exists() for snapshot in snapshots[2:]
     )
     assert all(
-        not (data_root / "snapshots" / "files" / snapshot.id).exists()
-        for snapshot in snapshots[:2]
+        not (data_root / "snapshots" / "files" / snapshot.id).exists() for snapshot in snapshots[:2]
     )
 
 
@@ -186,9 +208,7 @@ def test_write_prevents_symlink_path_traversal(tmp_path: Path) -> None:
     symlink_path.parent.mkdir(parents=True, exist_ok=True)
     symlink_path.symlink_to(outside_file)
 
-    repository = LocalSnapshotRepository(
-        project_root=project_root, data_root=data_root
-    )
+    repository = LocalSnapshotRepository(project_root=project_root, data_root=data_root)
     snapshot = make_snapshot(relative_path="memory/exploit.txt", content=b"sensitive content")
 
     with pytest.raises(SnapshotFailedError, match="path traversal detected"):
@@ -238,4 +258,3 @@ def test_concurrency_lock_prevents_clash(tmp_path: Path) -> None:
 
     os.close(fd)
     os.unlink(lock_path)
-

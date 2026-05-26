@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-22T21:17:01.194515Z"
-last_updated: "2026-05-26T22:30:00Z"
+last_updated: "2026-05-26T20:36:00Z"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -55,7 +55,7 @@ development_status:
   2-2-criar-snapshot-antes-de-muta-o: done
   2-3-implementar-escrita-at-mica-com-auditoria: done
   2-4-listar-auditoria-e-snapshots: done
-  2-5-reverter-ltima-muta-o-por-escopo: backlog
+  2-5-reverter-ltima-muta-o-por-escopo: done
   epic-2-retrospective: optional
   epic-3: backlog
   3-1-gravar-e-listar-fatos-de-mem-ria: backlog

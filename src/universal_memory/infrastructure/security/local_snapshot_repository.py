@@ -84,6 +84,21 @@ class LocalSnapshotRepository(SnapshotRepository):
                 return snapshot
         raise StorageError(f"Snapshot not found: {id}")
 
+    def get_content(self, id: str) -> bytes:
+        if os.path.basename(id) != id or ".." in id or "/" in id or "\\" in id:
+            raise StorageError(f"Invalid snapshot ID format: {id}")
+        backup_path = (self.files_root / id).resolve()
+        try:
+            backup_path.relative_to(self.files_root.resolve())
+        except ValueError as exc:
+            raise StorageError(f"Invalid snapshot ID path traversal: {id}") from exc
+        try:
+            return backup_path.read_bytes()
+        except FileNotFoundError as exc:
+            raise StorageError(f"Snapshot backup file not found: {id}") from exc
+        except OSError as exc:
+            raise StorageError(f"Failed to read snapshot backup file: {id}") from exc
+
     def list(
         self, scope: SnapshotScope | None = None, status: SnapshotStatus | None = None
     ) -> list[Snapshot]:
@@ -195,9 +210,7 @@ class LocalSnapshotRepository(SnapshotRepository):
             self._remove_file(temp_manifest)
             raise StorageError("Failed to write snapshot manifest") from exc
 
-    def _apply_retention(
-        self, snapshots: list[Snapshot]
-    ) -> tuple[list[Snapshot], list[Snapshot]]:
+    def _apply_retention(self, snapshots: list[Snapshot]) -> tuple[list[Snapshot], list[Snapshot]]:
         by_scope: dict[SnapshotScope, list[Snapshot]] = defaultdict(list)
         for snapshot in snapshots:
             by_scope[snapshot.scope].append(snapshot)
@@ -209,7 +222,7 @@ class LocalSnapshotRepository(SnapshotRepository):
                 scope_snapshots,
                 key=lambda snapshot: self._normalize_datetime(snapshot.timestamp),
             )
-            retired.extend(ordered[:-self.retention_limit])
+            retired.extend(ordered[: -self.retention_limit])
             retained.extend(ordered[-self.retention_limit :])
 
         return (
