@@ -40,6 +40,15 @@ class LocalSnapshotRepository(SnapshotRepository):
         lock_path = self.manifest_path.with_suffix(".json.lock")
         self.snapshots_root.mkdir(parents=True, exist_ok=True)
         
+        # Break stale locks older than 10 seconds
+        if lock_path.exists():
+            try:
+                mtime = os.path.getmtime(lock_path)
+                if time.time() - mtime > 10.0:
+                    lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
         max_attempts = 20
         delay = 0.1
         acquired = False
