@@ -5,6 +5,9 @@ _bmad/
 .opencode/
 .agent/
 .antigravitycli/
+*.diff
+_bmad-output/**/review-prompt-*.md
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
