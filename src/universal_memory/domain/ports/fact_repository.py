@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 from universal_memory.domain.entities import Fact, FactScope, FactStatus
@@ -33,7 +35,20 @@ class FactRepository(ABC):
         ...
 
     @abstractmethod
-    def write(self, entity: Fact) -> None:
+    def search(self, query: str, include_inactive: bool = False) -> list[Fact]:
+        """Search facts by local text matching.
+
+        Args:
+            query: Text or regex query to match against fact content.
+            include_inactive: Whether archived, stale, or purged facts are included.
+
+        Returns:
+            A list of matching Fact entities.
+        """
+        ...
+
+    @abstractmethod
+    def write(self, entity: Fact) -> object | None:
         """Write or update a fact in the repository.
 
         Args:

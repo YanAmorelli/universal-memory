@@ -11,6 +11,8 @@ from universal_memory.application.memory import (
     ListFactsUseCase,
     RememberFactCommand,
     RememberFactUseCase,
+    SearchFactsCommand,
+    SearchFactsUseCase,
 )
 from universal_memory.application.security import SafeWriteUseCase
 from universal_memory.domain import FactNotFoundError, SecretDetectedError
@@ -76,6 +78,7 @@ class RecordingFactRepository(FactRepository):
     def __init__(self, facts: list[Fact] | None = None) -> None:
         self.facts = facts or []
         self.filters: list[tuple[FactScope | None, FactStatus | None]] = []
+        self.searches: list[tuple[str, bool]] = []
 
     def read(self, id: str) -> Fact:
         for fact in self.facts:
@@ -91,6 +94,44 @@ class RecordingFactRepository(FactRepository):
         if status is not None:
             facts = [fact for fact in facts if fact.status == status]
         return sorted(facts, key=lambda fact: fact.created_at)
+
+    def search(self, query: str, include_inactive: bool = False) -> list[Fact]:
+        self.searches.append((query, include_inactive))
+        if not query.strip():
+            return []
+        
+        is_regex = query.startswith("/") and query.endswith("/") and len(query) > 2
+        clean_query = query[1:-1] if is_regex else query
+
+        import unicodedata
+        import re
+
+        def normalize(value: str) -> str:
+            decomposed = unicodedata.normalize("NFKD", value)
+            without_accents = "".join(char for char in decomposed if not unicodedata.combining(char))
+            return without_accents.casefold()
+
+        normalized_query = normalize(clean_query)
+        facts = self.facts
+        if not include_inactive:
+            facts = [fact for fact in facts if fact.status == FactStatus.active]
+
+        matches = []
+        for fact in facts:
+            if fact.content is None:
+                continue
+            normalized_content = normalize(fact.content)
+            if is_regex:
+                try:
+                    if re.search(normalized_query, normalized_content) is not None:
+                        matches.append(fact)
+                except re.error:
+                    pass
+            else:
+                if normalized_query in normalized_content:
+                    matches.append(fact)
+
+        return sorted(matches, key=lambda fact: fact.created_at, reverse=True)
 
     def write(self, entity: Fact) -> None:
         self.facts = [fact for fact in self.facts if fact.id != entity.id]
@@ -111,13 +152,14 @@ def make_fact(
     scope: FactScope = FactScope.project,
     status: FactStatus = FactStatus.active,
     created_at: datetime | None = None,
+    content: str = "Fato persistido",
 ) -> Fact:
     timestamp = created_at or datetime.now(UTC)
     return Fact(
         id=str(uuid4()),
         created_at=timestamp,
         updated_at=timestamp,
-        content="Fato persistido",
+        content=content,
         scope=scope,
         source="test",
         status=status,
@@ -235,3 +277,32 @@ def test_list_facts_returns_explicit_empty_list() -> None:
     result = use_case.execute(ListFactsCommand(scope=FactScope.global_, status=FactStatus.stale))
 
     assert result.facts == []
+
+
+def test_search_facts_delegates_query_and_inactive_filter_to_repository() -> None:
+    base = datetime(2026, 5, 26, tzinfo=UTC)
+    archived = make_fact(status=FactStatus.archived, content="Fato arquivado de teste", created_at=base)
+    active = make_fact(status=FactStatus.active, content="Fato ativo de teste", created_at=base + timedelta(minutes=1))
+    repository = RecordingFactRepository([active, archived])
+    use_case = SearchFactsUseCase(fact_repository=repository)
+
+    result = use_case.execute(SearchFactsCommand(query="fato", include_inactive=True))
+
+    assert repository.searches == [("fato", True)]
+    assert len(result.items) == 2
+    assert result.items[0].fact == active
+    assert result.items[0].match_snippet == "Fato ativo de teste"
+    assert result.items[0].match_reason == "Correspondência exata por substring"
+    assert result.items[1].fact == archived
+    assert result.items[1].match_snippet == "Fato arquivado de teste"
+    assert result.items[1].match_reason == "Correspondência exata por substring"
+
+
+def test_search_facts_returns_empty_result_for_blank_query_without_repository_call() -> None:
+    repository = RecordingFactRepository([make_fact()])
+    use_case = SearchFactsUseCase(fact_repository=repository)
+
+    result = use_case.execute(SearchFactsCommand(query="   "))
+
+    assert repository.searches == []
+    assert result.items == []

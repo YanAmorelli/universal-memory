@@ -8,6 +8,12 @@ from universal_memory.application.memory.remember_fact_use_case import (
     RememberFactResult,
     RememberFactUseCase,
 )
+from universal_memory.application.memory.search_facts_use_case import (
+    SearchFactsCommand,
+    SearchFactsResult,
+    SearchFactsUseCase,
+    SearchResultItem,
+)
 
 __all__ = [
     "ListFactsCommand",
@@ -16,4 +22,8 @@ __all__ = [
     "RememberFactCommand",
     "RememberFactResult",
     "RememberFactUseCase",
+    "SearchFactsCommand",
+    "SearchFactsResult",
+    "SearchFactsUseCase",
+    "SearchResultItem",
 ]

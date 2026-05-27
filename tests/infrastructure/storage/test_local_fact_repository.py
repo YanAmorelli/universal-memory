@@ -142,3 +142,88 @@ def test_unreadable_storage_raises_typed_storage_error(tmp_path: Path) -> None:
 
     with pytest.raises(StorageError, match="Failed to read facts"):
         repository.list()
+
+
+def test_search_matches_case_insensitive_substring(tmp_path: Path) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    matching = make_fact(content="Preferir TDD para memoria local")
+    other = make_fact(content="Registrar auditoria antes da mutacao")
+    repository.write(other)
+    repository.write(matching)
+
+    assert repository.search("tdd") == [matching]
+
+
+def test_search_matches_normalized_accents(tmp_path: Path) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    matching = make_fact(content="Memória local deve funcionar offline")
+    repository.write(matching)
+
+    assert repository.search("memoria") == [matching]
+
+
+def test_search_supports_python_regex(tmp_path: Path) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    matching = make_fact(content="Escopo project deve preceder global")
+    other = make_fact(content="Sem padrao compativel")
+    repository.write(other)
+    repository.write(matching)
+
+    assert repository.search(r"/escopo\s+project/") == [matching]
+
+
+def test_search_escapes_regex_special_characters_for_literal_queries(tmp_path: Path) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    matching = make_fact(content="Programar em C++")
+    other = make_fact(content="Programar em C")
+    repository.write(other)
+    repository.write(matching)
+
+    assert repository.search("C++") == [matching]
+    assert repository.search("C+") == [matching]  # matches C++ since C+ is a literal substring, but must not match "Programar em C"
+
+
+def test_search_filters_inactive_facts_by_default(tmp_path: Path) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    active = make_fact(status=FactStatus.active, content="Contexto recuperavel")
+    archived = make_fact(status=FactStatus.archived, content="Contexto arquivado")
+    stale = make_fact(status=FactStatus.stale, content="Contexto obsoleto")
+    purged = make_fact(status=FactStatus.purged, content="Contexto purgado")
+    for fact in [archived, stale, purged, active]:
+        repository.write(fact)
+
+    assert repository.search("contexto") == [active]
+
+
+def test_search_can_include_inactive_facts_for_diagnostics(tmp_path: Path) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    base = datetime(2026, 5, 26, tzinfo=UTC)
+    archived = make_fact(
+        status=FactStatus.archived, content="Contexto arquivado", created_at=base
+    )
+    stale = make_fact(
+        status=FactStatus.stale, content="Contexto obsoleto", created_at=base + timedelta(minutes=1)
+    )
+    purged = make_fact(
+        status=FactStatus.purged, content="Contexto purgado", created_at=base + timedelta(minutes=2)
+    )
+    active = make_fact(
+        status=FactStatus.active,
+        content="Contexto recuperavel",
+        created_at=base + timedelta(minutes=3),
+    )
+    for fact in [archived, stale, purged, active]:
+        repository.write(fact)
+
+    assert repository.search("contexto", include_inactive=True) == [active, purged, stale, archived]
+
+
+def test_search_orders_matches_by_created_at_descending(tmp_path: Path) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    base = datetime(2026, 5, 26, tzinfo=UTC)
+    older = make_fact(content="Contexto TDD antigo", created_at=base)
+    newer = make_fact(content="Contexto TDD recente", created_at=base + timedelta(minutes=1))
+    repository.write(older)
+    repository.write(newer)
+
+    assert repository.search("tdd") == [newer, older]

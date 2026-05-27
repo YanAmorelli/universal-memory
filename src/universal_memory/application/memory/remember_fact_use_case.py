@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from universal_memory.application.security import SafeWriteUseCase
@@ -40,15 +40,16 @@ class RememberFactUseCase:
         
         # Propagate safe_write_use_case to repository for legacy test structures
         if safe_write_use_case is not None and hasattr(fact_repository, "safe_write_use_case"):
-            if fact_repository.safe_write_use_case is None:
-                fact_repository.safe_write_use_case = safe_write_use_case
+            local_repository = cast(Any, fact_repository)
+            if local_repository.safe_write_use_case is None:
+                local_repository.safe_write_use_case = safe_write_use_case
                 global_use_case = SafeWriteUseCase(
-                    project_root=Path.home(),
+                    project_root=getattr(safe_write_use_case, "project_root", Path.home()),
                     secret_scanner=safe_write_use_case.secret_scanner,
                     snapshot_repository=safe_write_use_case.snapshot_repository,
                     audit_log_repository=safe_write_use_case.audit_log_repository,
                 )
-                fact_repository.global_safe_write_use_case = global_use_case
+                local_repository.global_safe_write_use_case = global_use_case
 
     def execute(self, command: RememberFactCommand) -> RememberFactResult:
         timestamp = datetime.now(UTC)
@@ -73,8 +74,9 @@ class RememberFactUseCase:
         
         # SafeWriteResult can be returned from LocalFactRepository.write in python
         if write_result is not None and hasattr(write_result, "audit_reference"):
-            audit_ref = write_result.audit_reference
-            snapshot_ref = write_result.snapshot_reference
+            safe_result = cast(Any, write_result)
+            audit_ref = getattr(safe_result, "audit_reference", "UNAUDITED")
+            snapshot_ref = getattr(safe_result, "snapshot_reference", "")
 
         return RememberFactResult(
             fact=fact,

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
+import unicodedata
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -132,6 +134,44 @@ class LocalFactRepository(FactRepository):
             facts = [fact for fact in facts if fact.status == status]
 
         return sorted(facts, key=lambda fact: self._normalize_datetime(fact.created_at))
+
+    def search(self, query: str, include_inactive: bool = False) -> list[Fact]:
+        if not isinstance(query, str) or not query.strip():
+            return []
+
+        # Optimization: Filter by status at the list I/O layer instead of loading all in memory
+        status_filter = FactStatus.active if not include_inactive else None
+        facts = self.list(status=status_filter)
+
+        is_regex = query.startswith("/") and query.endswith("/") and len(query) > 2
+        clean_query = query[1:-1] if is_regex else query
+
+        normalized_query = self._normalize_search_text(clean_query)
+        if not normalized_query:
+            return []
+
+        matches = []
+        for fact in facts:
+            if fact.content is None:
+                continue
+
+            normalized_content = self._normalize_search_text(fact.content)
+
+            if is_regex:
+                try:
+                    if re.search(normalized_query, normalized_content) is not None:
+                        matches.append(fact)
+                except re.error:
+                    pass
+            else:
+                if normalized_query in normalized_content:
+                    matches.append(fact)
+
+        return sorted(
+            matches,
+            key=lambda fact: self._normalize_datetime(fact.created_at),
+            reverse=True,
+        )
 
     def write(self, entity: Fact) -> SafeWriteResult | None:
         try:
@@ -284,7 +324,35 @@ class LocalFactRepository(FactRepository):
             return False
 
     @staticmethod
-    def _normalize_datetime(dt: datetime) -> datetime:
+    def _normalize_datetime(dt: datetime | None) -> datetime:
+        if dt is None:
+            return datetime.min.replace(tzinfo=UTC)
         if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
             return dt.replace(tzinfo=UTC)
         return dt
+
+    @staticmethod
+    def _normalize_search_text(value: str | None) -> str:
+        if value is None:
+            return ""
+        decomposed = unicodedata.normalize("NFKD", value)
+        without_accents = "".join(char for char in decomposed if not unicodedata.combining(char))
+        return without_accents.casefold()
+
+    @classmethod
+    def _matches_search_query(cls, content: str | None, normalized_query: str) -> bool:
+        if content is None:
+            return False
+        normalized_content = cls._normalize_search_text(content)
+        
+        # Check if query is explicitly regex (wrapped in /)
+        is_regex = normalized_query.startswith("/") and normalized_query.endswith("/") and len(normalized_query) > 2
+        clean_query = normalized_query[1:-1] if is_regex else normalized_query
+        
+        if is_regex:
+            try:
+                return re.search(clean_query, normalized_content) is not None
+            except re.error:
+                return False
+        else:
+            return clean_query in normalized_content
