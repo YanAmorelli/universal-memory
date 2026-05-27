@@ -3,6 +3,11 @@ from universal_memory.application.memory.assemble_context_summary_use_case impor
     AssembleContextSummaryResult,
     AssembleContextSummaryUseCase,
 )
+from universal_memory.application.memory.context_hygiene_use_case import (
+    ContextHygieneCommand,
+    ContextHygieneResult,
+    ContextHygieneUseCase,
+)
 from universal_memory.application.memory.get_memory_status_use_case import (
     GetMemoryStatusCommand,
     GetMemoryStatusResult,
@@ -12,6 +17,11 @@ from universal_memory.application.memory.list_facts_use_case import (
     ListFactsCommand,
     ListFactsResult,
     ListFactsUseCase,
+)
+from universal_memory.application.memory.purge_fact_use_case import (
+    PurgeFactCommand,
+    PurgeFactResult,
+    PurgeFactUseCase,
 )
 from universal_memory.application.memory.remember_fact_use_case import (
     RememberFactCommand,
@@ -29,12 +39,18 @@ __all__ = [
     "AssembleContextSummaryCommand",
     "AssembleContextSummaryResult",
     "AssembleContextSummaryUseCase",
+    "ContextHygieneCommand",
+    "ContextHygieneResult",
+    "ContextHygieneUseCase",
     "GetMemoryStatusCommand",
     "GetMemoryStatusResult",
     "GetMemoryStatusUseCase",
     "ListFactsCommand",
     "ListFactsResult",
     "ListFactsUseCase",
+    "PurgeFactCommand",
+    "PurgeFactResult",
+    "PurgeFactUseCase",
     "RememberFactCommand",
     "RememberFactResult",
     "RememberFactUseCase",

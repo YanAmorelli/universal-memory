@@ -96,12 +96,12 @@ class LocalContextSummaryRepository(ContextSummaryRepository):
                 summaries = self._load_summaries_unlocked(raise_on_corrupt=True)
                 updated = [summary for summary in summaries if summary.id != entity.id]
                 updated.append(entity)
-                
+
                 # Implement retention policy: keep only the last N historical summaries
                 updated = sorted(updated, key=lambda s: self._normalize_datetime(s.created_at))
                 if len(updated) > RETENTION_LIMIT:
                     updated = updated[-RETENTION_LIMIT:]
-                    
+
                 self._write_summaries_unlocked(updated)
         except StorageError:
             raise

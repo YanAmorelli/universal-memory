@@ -402,4 +402,3 @@ def test_audit_event_logs_blocked_rule_ids_with_secrets() -> None:
     assert "sk-test-secret-rule" not in result.context_markdown
     details = json.loads(audit_repository.events[0].details or "{}")
     assert secret_rule.id in details["blocked_rule_ids"]
-

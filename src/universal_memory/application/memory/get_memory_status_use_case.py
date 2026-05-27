@@ -108,10 +108,7 @@ class GetMemoryStatusUseCase:
 
 
 def _empty_fact_counts() -> dict[str, dict[str, int]]:
-    return {
-        scope.value: {status.value: 0 for status in FactStatus}
-        for scope in FactScope
-    }
+    return {scope.value: {status.value: 0 for status in FactStatus} for scope in FactScope}
 
 
 def _directory_size(root: Path) -> int:
@@ -149,4 +146,3 @@ def _relative_project_path(project_root: Path) -> str:
         return rel if rel != "." else "."
     except (ValueError, OSError):
         return "."
-

@@ -198,9 +198,7 @@ def test_search_filters_inactive_facts_by_default(tmp_path: Path) -> None:
 def test_search_can_include_inactive_facts_for_diagnostics(tmp_path: Path) -> None:
     repository = LocalFactRepository(project_root=tmp_path)
     base = datetime(2026, 5, 26, tzinfo=UTC)
-    archived = make_fact(
-        status=FactStatus.archived, content="Contexto arquivado", created_at=base
-    )
+    archived = make_fact(status=FactStatus.archived, content="Contexto arquivado", created_at=base)
     stale = make_fact(
         status=FactStatus.stale, content="Contexto obsoleto", created_at=base + timedelta(minutes=1)
     )
@@ -227,3 +225,27 @@ def test_search_orders_matches_by_created_at_descending(tmp_path: Path) -> None:
     repository.write(newer)
 
     assert repository.search("tdd") == [newer, older]
+
+
+def test_write_batch_and_purge_batch(tmp_path: Path) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    base = datetime(2026, 5, 26, tzinfo=UTC)
+    fact1 = make_fact(content="Fato 1", created_at=base)
+    fact2 = make_fact(content="Fato 2", created_at=base + timedelta(minutes=1))
+    fact3 = make_fact(content="Fato 3", created_at=base + timedelta(minutes=2))
+
+    # Write batch
+    repository.write_batch([fact1, fact2, fact3])
+    all_facts = repository.list()
+    expected_all_count = 3
+    assert len(all_facts) == expected_all_count
+    assert fact1.id in [f.id for f in all_facts]
+    assert fact2.id in [f.id for f in all_facts]
+    assert fact3.id in [f.id for f in all_facts]
+
+    # Purge batch
+    repository.purge_batch([fact1.id, fact3.id])
+    remaining = repository.list()
+    expected_remaining_count = 1
+    assert len(remaining) == expected_remaining_count
+    assert remaining[0].id == fact2.id

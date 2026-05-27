@@ -288,18 +288,18 @@ class AssembleContextSummaryUseCase:
 
     @staticmethod
     def _fact_priority(fact: Fact, scope: ContextSummaryScope) -> tuple[int, int, int, datetime]:
-        scope_score = 1 if (
-            scope == ContextSummaryScope.project and fact.scope == FactScope.project
-        ) else 0
+        scope_score = (
+            1 if (scope == ContextSummaryScope.project and fact.scope == FactScope.project) else 0
+        )
         tag_score = 1 if HIGH_PRIORITY_TAGS.intersection(fact.tags) else 0
         created_at = AssembleContextSummaryUseCase._normalize_datetime(fact.created_at)
         return (scope_score, tag_score, fact.recurrence_count, created_at)
 
     @staticmethod
     def _rule_priority(rule: Rule, scope: ContextSummaryScope) -> tuple[int, int, int, datetime]:
-        scope_score = 1 if (
-            scope == ContextSummaryScope.project and rule.scope == RuleScope.project
-        ) else 0
+        scope_score = (
+            1 if (scope == ContextSummaryScope.project and rule.scope == RuleScope.project) else 0
+        )
         created_at = AssembleContextSummaryUseCase._normalize_datetime(rule.created_at)
         return (scope_score, 0, 0, created_at)
 

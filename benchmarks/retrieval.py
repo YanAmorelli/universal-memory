@@ -137,7 +137,7 @@ def generate_synthetic_facts(count: int = MIN_FACT_COUNT) -> list[Fact]:
         scope = FactScope.global_ if index % 5 == 0 else FactScope.project
         case_variant = title.upper() if index % 7 == 0 else title
         accent_text = "recuperação, memória, configuração e segurança"
-        
+
         # Apenas os primeiros len(specs) fatos contêm os termos de busca específicos
         if sequence <= len(specs):
             content = (
@@ -151,7 +151,7 @@ def generate_synthetic_facts(count: int = MIN_FACT_COUNT) -> list[Fact]:
                 f"Fato sintético distrator {sequence}: conteúdo de desenvolvimento genérico "
                 f"para universal-memory sobre escopo {scope.value}. Inclui {accent_text}."
             )
-            
+
         facts.append(
             Fact(
                 id=_benchmark_uuid(sequence),
@@ -173,7 +173,7 @@ def _local_text_search(facts: list[Fact], query: str) -> list[Fact]:
     is_regex = query.startswith("/") and query.endswith("/") and len(query) > MIN_REGEX_QUERY_LENGTH
     clean_query = query[1:-1] if is_regex else query
     normalized_query = _normalize_text(clean_query)
-    
+
     matches: list[Fact] = []
     for fact in facts:
         if fact.status != FactStatus.active:

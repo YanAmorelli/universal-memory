@@ -37,7 +37,7 @@ class RememberFactUseCase:
     ) -> None:
         self.fact_repository = fact_repository
         self.safe_write_use_case = safe_write_use_case
-        
+
         # Propagate safe_write_use_case to repository for legacy test structures
         if safe_write_use_case is not None and hasattr(fact_repository, "safe_write_use_case"):
             local_repository = cast(Any, fact_repository)
@@ -71,7 +71,7 @@ class RememberFactUseCase:
         # Retrieve audit and snapshot references from the repository safe write execution
         audit_ref = "UNAUDITED"
         snapshot_ref = ""
-        
+
         # SafeWriteResult can be returned from LocalFactRepository.write in python
         if write_result is not None and hasattr(write_result, "audit_reference"):
             safe_result = cast(Any, write_result)

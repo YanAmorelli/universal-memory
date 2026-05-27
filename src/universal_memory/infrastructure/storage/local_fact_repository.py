@@ -6,6 +6,7 @@ import re
 import sys
 import time
 import unicodedata
+from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -198,9 +199,14 @@ class LocalFactRepository(FactRepository):
                 updated_facts = []
                 for f in facts:
                     if f.id == id:
-                        updated_facts.append(f.model_copy(
-                            update={"status": FactStatus.archived, "updated_at": datetime.now(UTC)}
-                        ))
+                        updated_facts.append(
+                            f.model_copy(
+                                update={
+                                    "status": FactStatus.archived,
+                                    "updated_at": datetime.now(UTC),
+                                }
+                            )
+                        )
                         found = True
                     else:
                         updated_facts.append(f)
@@ -227,6 +233,50 @@ class LocalFactRepository(FactRepository):
             raise
         except OSError as exc:
             raise StorageError("Failed to purge fact") from exc
+
+    def write_batch(self, entities: list[Fact]) -> SafeWriteResult | None:
+        if not entities:
+            return None
+        by_scope = defaultdict(list)
+        for entity in entities:
+            by_scope[entity.scope].append(entity)
+
+        last_result = None
+        for scope, scope_entities in by_scope.items():
+            try:
+                with self._lock(scope):
+                    unlocked_facts = self._load_facts_unlocked(scope, raise_on_corrupt=True)
+                    facts_dict = {fact.id: fact for fact in unlocked_facts}
+                    for entity in scope_entities:
+                        facts_dict[entity.id] = entity
+                    last_result = self._write_facts_unlocked(list(facts_dict.values()), scope)
+            except StorageError:
+                raise
+            except OSError as exc:
+                raise StorageError("Failed to write batch of facts") from exc
+        return last_result
+
+    def purge_batch(self, ids: list[str]) -> None:
+        if not ids:
+            return
+        facts_to_purge = [f for f in self.list() if f.id in ids]
+        if not facts_to_purge:
+            return
+
+        by_scope = defaultdict(list)
+        for fact in facts_to_purge:
+            by_scope[fact.scope].append(fact.id)
+
+        for scope, scope_ids in by_scope.items():
+            try:
+                with self._lock(scope):
+                    facts = self._load_facts_unlocked(scope, raise_on_corrupt=True)
+                    updated_facts = [f for f in facts if f.id not in scope_ids]
+                    self._write_facts_unlocked(updated_facts, scope)
+            except StorageError:
+                raise
+            except OSError as exc:
+                raise StorageError("Failed to purge batch of facts") from exc
 
     def migrate(self, target_version: int) -> None:
         if target_version != 1:

@@ -258,9 +258,7 @@ def test_remember_fact_blocks_secret_and_records_safe_block_audit(tmp_path: Path
 
 def test_list_facts_delegates_filters_to_repository() -> None:
     base = datetime(2026, 5, 26, tzinfo=UTC)
-    project_active = make_fact(
-        scope=FactScope.project, status=FactStatus.active, created_at=base
-    )
+    project_active = make_fact(scope=FactScope.project, status=FactStatus.active, created_at=base)
     global_active = make_fact(
         scope=FactScope.global_, status=FactStatus.active, created_at=base + timedelta(minutes=1)
     )
