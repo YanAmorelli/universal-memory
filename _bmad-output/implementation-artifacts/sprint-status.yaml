@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-22T21:17:01.194515Z"
-last_updated: "2026-05-27T16:41:00Z"
+last_updated: "2026-05-27T19:09:30Z"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -60,7 +60,7 @@ development_status:
   epic-3: in-progress
   3-1-gravar-e-listar-fatos-de-mem-ria: done
   3-2-consultar-contexto-local-com-busca-textual: done
-  3-3-implementar-benchmark-de-recupera-o: backlog
+  3-3-implementar-benchmark-de-recupera-o: done
   3-4-montar-resumo-de-contexto-com-limites-de-tokens: backlog
   3-5-exibir-status-da-mem-ria: backlog
   3-6-purgar-fatos-e-executar-context-hygiene: backlog

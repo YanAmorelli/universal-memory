@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -24,6 +26,9 @@ from universal_memory.domain.ports import (
     SnapshotRepository,
 )
 from universal_memory.infrastructure.storage import LocalFactRepository
+
+MIN_REGEX_QUERY_LENGTH = 2
+EXPECTED_SEARCH_RESULT_COUNT = 2
 
 
 class RecordingScanner(SecretScannerPort):
@@ -99,16 +104,17 @@ class RecordingFactRepository(FactRepository):
         self.searches.append((query, include_inactive))
         if not query.strip():
             return []
-        
-        is_regex = query.startswith("/") and query.endswith("/") and len(query) > 2
-        clean_query = query[1:-1] if is_regex else query
 
-        import unicodedata
-        import re
+        is_regex = (
+            query.startswith("/") and query.endswith("/") and len(query) > MIN_REGEX_QUERY_LENGTH
+        )
+        clean_query = query[1:-1] if is_regex else query
 
         def normalize(value: str) -> str:
             decomposed = unicodedata.normalize("NFKD", value)
-            without_accents = "".join(char for char in decomposed if not unicodedata.combining(char))
+            without_accents = "".join(
+                char for char in decomposed if not unicodedata.combining(char)
+            )
             return without_accents.casefold()
 
         normalized_query = normalize(clean_query)
@@ -127,9 +133,8 @@ class RecordingFactRepository(FactRepository):
                         matches.append(fact)
                 except re.error:
                     pass
-            else:
-                if normalized_query in normalized_content:
-                    matches.append(fact)
+            elif normalized_query in normalized_content:
+                matches.append(fact)
 
         return sorted(matches, key=lambda fact: fact.created_at, reverse=True)
 
@@ -281,15 +286,23 @@ def test_list_facts_returns_explicit_empty_list() -> None:
 
 def test_search_facts_delegates_query_and_inactive_filter_to_repository() -> None:
     base = datetime(2026, 5, 26, tzinfo=UTC)
-    archived = make_fact(status=FactStatus.archived, content="Fato arquivado de teste", created_at=base)
-    active = make_fact(status=FactStatus.active, content="Fato ativo de teste", created_at=base + timedelta(minutes=1))
+    archived = make_fact(
+        status=FactStatus.archived,
+        content="Fato arquivado de teste",
+        created_at=base,
+    )
+    active = make_fact(
+        status=FactStatus.active,
+        content="Fato ativo de teste",
+        created_at=base + timedelta(minutes=1),
+    )
     repository = RecordingFactRepository([active, archived])
     use_case = SearchFactsUseCase(fact_repository=repository)
 
     result = use_case.execute(SearchFactsCommand(query="fato", include_inactive=True))
 
     assert repository.searches == [("fato", True)]
-    assert len(result.items) == 2
+    assert len(result.items) == EXPECTED_SEARCH_RESULT_COUNT
     assert result.items[0].fact == active
     assert result.items[0].match_snippet == "Fato ativo de teste"
     assert result.items[0].match_reason == "Correspondência exata por substring"

@@ -180,7 +180,7 @@ def test_search_escapes_regex_special_characters_for_literal_queries(tmp_path: P
     repository.write(matching)
 
     assert repository.search("C++") == [matching]
-    assert repository.search("C+") == [matching]  # matches C++ since C+ is a literal substring, but must not match "Programar em C"
+    assert repository.search("C+") == [matching]
 
 
 def test_search_filters_inactive_facts_by_default(tmp_path: Path) -> None:

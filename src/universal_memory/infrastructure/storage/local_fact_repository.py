@@ -24,6 +24,7 @@ from universal_memory.domain.entities import AuditEventScope, Fact, FactScope, F
 from universal_memory.domain.ports import FactRepository
 
 STALE_LOCK_SECONDS = 10.0
+MIN_REGEX_QUERY_LENGTH = 2
 
 
 class LocalFactRepository(FactRepository):
@@ -143,7 +144,9 @@ class LocalFactRepository(FactRepository):
         status_filter = FactStatus.active if not include_inactive else None
         facts = self.list(status=status_filter)
 
-        is_regex = query.startswith("/") and query.endswith("/") and len(query) > 2
+        is_regex = (
+            query.startswith("/") and query.endswith("/") and len(query) > MIN_REGEX_QUERY_LENGTH
+        )
         clean_query = query[1:-1] if is_regex else query
 
         normalized_query = self._normalize_search_text(clean_query)
@@ -163,9 +166,8 @@ class LocalFactRepository(FactRepository):
                         matches.append(fact)
                 except re.error:
                     pass
-            else:
-                if normalized_query in normalized_content:
-                    matches.append(fact)
+            elif normalized_query in normalized_content:
+                matches.append(fact)
 
         return sorted(
             matches,
@@ -344,11 +346,15 @@ class LocalFactRepository(FactRepository):
         if content is None:
             return False
         normalized_content = cls._normalize_search_text(content)
-        
+
         # Check if query is explicitly regex (wrapped in /)
-        is_regex = normalized_query.startswith("/") and normalized_query.endswith("/") and len(normalized_query) > 2
+        is_regex = (
+            normalized_query.startswith("/")
+            and normalized_query.endswith("/")
+            and len(normalized_query) > MIN_REGEX_QUERY_LENGTH
+        )
         clean_query = normalized_query[1:-1] if is_regex else normalized_query
-        
+
         if is_regex:
             try:
                 return re.search(clean_query, normalized_content) is not None

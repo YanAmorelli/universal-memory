@@ -13,3 +13,10 @@
 - Clean Architecture Violation: Dynamic Runtime State and Injection on Repository Port: Injecting fields dynamically onto repository instances inside Use Case violating stateless Clean Architecture boundaries. [src/universal_memory/application/memory/remember_fact_use_case.py:40]
 - **Skills para Agentes (Capacidades UMEM)**: Criar BMad/Agent Skills específicas para documentar e explicar aos agentes de IA externos cada capacidade entregue pelo UMEM (como a busca offline por substring/regex com metadados de destaque, escrita atômica segura com auditoria e restauração, etc.), permitindo que os agentes usem e gerenciem a memória local de forma totalmente autônoma.
 
+
+## Deferred from: code review of 3-3-implementar-benchmark-de-recupera-o.md (2026-05-27)
+
+- Duplicação da constante `MIN_REGEX_QUERY_LENGTH` em múltiplos arquivos de teste e produção (`search_facts_use_case.py`, `local_fact_repository.py`, `test_memory_use_cases.py`), reduzindo o DRY.
+- Duplicação da lógica de normalização de texto (remoção de acentos via `unicodedata` e `casefold`) entre produção e o script de benchmark.
+- Silenciamento silencioso e inseguro de exceções de Expressões Regulares (`except re.error: pass`) ocultando consultas inválidas no repositório de fatos.
+- Exposição teórica a vulnerabilidades de negação de serviço por expressões regulares (ReDoS) na busca padrão via entrada direta de strings sem validação de tamanho.
