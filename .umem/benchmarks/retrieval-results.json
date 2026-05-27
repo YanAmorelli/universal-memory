@@ -1,0 +1,238 @@
+{
+  "default_strategy_justification": "A estrategia local_text foi selecionada porque mantem p95 abaixo do limite de 150ms, opera 100% offline e evita dependencias pesadas como PyTorch/SentenceTransformers. O candidato semantic_stub permanece util para comparacao, mas tem maior complexidade operacional e custo de provisionamento.",
+  "fact_count": 1000,
+  "generated_at": "2026-05-27T19:05:54.373257Z",
+  "queries": [
+    {
+      "category": "segredos",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "text": "segredos github_pat bloqueio scanner"
+    },
+    {
+      "category": "segredos",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000002"
+      ],
+      "text": "chave aws secret access scanner"
+    },
+    {
+      "category": "regras",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000003"
+      ],
+      "text": "regras locais AGENTS.md precedencia"
+    },
+    {
+      "category": "regras",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000004"
+      ],
+      "text": "instrucoes CLAUDE.md host claude"
+    },
+    {
+      "category": "global",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000005"
+      ],
+      "text": "escopo global preferencia entre projetos"
+    },
+    {
+      "category": "global",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000006"
+      ],
+      "text": "memoria global compartilhada"
+    },
+    {
+      "category": "project",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000007"
+      ],
+      "text": "escopo project memoria local"
+    },
+    {
+      "category": "arquitetura",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000008"
+      ],
+      "text": "Arquitetura hexagonal ports adapters"
+    },
+    {
+      "category": "arquitetura",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000009"
+      ],
+      "text": "MCP FastMCP adapter CLI paridade"
+    },
+    {
+      "category": "auditoria",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000010"
+      ],
+      "text": "auditoria snapshots rollback mutacao"
+    },
+    {
+      "category": "auditoria",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000011"
+      ],
+      "text": "snapshot antes de mutacao segura"
+    },
+    {
+      "category": "latencia",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000012"
+      ],
+      "text": "latencia recuperacao 150ms p95"
+    },
+    {
+      "category": "latencia",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000013"
+      ],
+      "text": "consulta local abaixo 150ms"
+    },
+    {
+      "category": "benchmark",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000014"
+      ],
+      "text": "benchmark recuperacao textual semantico"
+    },
+    {
+      "category": "benchmark",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000015"
+      ],
+      "text": "resultado retrieval-results json"
+    },
+    {
+      "category": "onboarding",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000016"
+      ],
+      "text": "inicializacao .umem config toml"
+    },
+    {
+      "category": "onboarding",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000017"
+      ],
+      "text": "layout local diretorio .umem"
+    },
+    {
+      "category": "skills",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000018"
+      ],
+      "text": "latent skills recorrencia aprovacao"
+    },
+    {
+      "category": "skills",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000019"
+      ],
+      "text": "agent skills estrutura ativar"
+    },
+    {
+      "category": "higiene",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000020"
+      ],
+      "text": "context hygiene purge fatos"
+    },
+    {
+      "category": "higiene",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000021"
+      ],
+      "text": "purgar fatos obsoletos"
+    },
+    {
+      "category": "busca",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000022"
+      ],
+      "text": "busca textual substring regex acentuacao"
+    },
+    {
+      "category": "busca",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000023"
+      ],
+      "text": "normalizacao caixa acentos"
+    },
+    {
+      "category": "cli",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000024"
+      ],
+      "text": "CLI Typer Rich comandos"
+    },
+    {
+      "category": "cli",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000025"
+      ],
+      "text": "comando remember list search"
+    },
+    {
+      "category": "mcp",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000026"
+      ],
+      "text": "JSON-RPC contrato MCP tools"
+    },
+    {
+      "category": "mcp",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000027"
+      ],
+      "text": "servidor MCP base fastmcp"
+    },
+    {
+      "category": "simplicidade",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000028"
+      ],
+      "text": "boring technology sem pytorch"
+    },
+    {
+      "category": "simplicidade",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000029"
+      ],
+      "text": "sem sentence transformers instalacao simples"
+    },
+    {
+      "category": "qualidade",
+      "expected_fact_ids": [
+        "00000000-0000-4000-8000-000000000030"
+      ],
+      "text": "score qualidade precisao revocabilidade"
+    }
+  ],
+  "query_count": 30,
+  "selected_default_strategy": "local_text",
+  "strategies": {
+    "local_text": {
+      "average_latency_ms": 5.614,
+      "notes": "Busca textual local sem dependencias adicionais, downloads ou modelo residente.",
+      "offline_compatibility": "100% offline",
+      "operational_complexity": 1,
+      "p95_latency_ms": 5.676,
+      "quality_score": 5
+    },
+    "semantic_stub": {
+      "average_latency_ms": 7.533,
+      "notes": "Stub heuristico para representar candidato semantico local; uma versao real exigiria embeddings, memoria adicional e distribuicao de modelo.",
+      "offline_compatibility": "offline somente apos provisionamento local do modelo",
+      "operational_complexity": 4,
+      "p95_latency_ms": 7.693,
+      "quality_score": 5
+    }
+  },
+  "target_p95_latency_ms": 150.0
+}

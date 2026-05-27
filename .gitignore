@@ -5,6 +5,13 @@ _bmad/
 .opencode/
 .agent/
 .antigravitycli/
+*.diff
+_bmad-output/**/review-prompt-*.md
+
+# Universal Memory Local Database & Benchmarks
+.umem/*
+!.umem/benchmarks/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

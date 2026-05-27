@@ -2,48 +2,122 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from universal_memory.application.memory import (
+    ContextHygieneUseCase,
+    GetMemoryStatusUseCase,
+    ListFactsUseCase,
+    PurgeFactUseCase,
+)
 from universal_memory.application.security import (
     ListAuditLogUseCase,
     ListSnapshotsUseCase,
     RollbackUseCase,
+    SafeWriteUseCase,
 )
 from universal_memory.domain import SnapshotFailedError
-from universal_memory.domain.entities import Snapshot, SnapshotScope, SnapshotStatus
+from universal_memory.domain.entities import (
+    LatentSkill,
+    LatentSkillScope,
+    LatentSkillStatus,
+    Rule,
+    RuleScope,
+    RuleStatus,
+    Snapshot,
+    SnapshotScope,
+    SnapshotStatus,
+)
+from universal_memory.domain.ports import LatentSkillRepository, RuleRepository
 from universal_memory.infrastructure.config import (
     LocalConfigValidationPort,
     LocalProjectLayoutPort,
 )
 from universal_memory.infrastructure.security import (
+    EntropySecretScanner,
     LocalAuditLogRepository,
     LocalSnapshotRepository,
 )
+from universal_memory.infrastructure.storage import LocalFactRepository
 from universal_memory.interfaces.cli import build_main
+
+
+class EmptyRuleRepository(RuleRepository):
+    def read(self, id: str) -> Rule:
+        raise KeyError(id)
+
+    def list(self, scope: RuleScope | None = None, status: RuleStatus | None = None) -> list[Rule]:
+        return []
+
+    def write(self, entity: Rule) -> None:
+        return None
+
+    def delete(self, id: str) -> None:
+        return None
+
+    def migrate(self, target_version: int) -> None:
+        return None
+
+
+class EmptyLatentSkillRepository(LatentSkillRepository):
+    def read(self, id: str) -> LatentSkill:
+        raise KeyError(id)
+
+    def list(
+        self, scope: LatentSkillScope | None = None, status: LatentSkillStatus | None = None
+    ) -> list[LatentSkill]:
+        return []
+
+    def write(self, entity: LatentSkill) -> None:
+        return None
+
+    def delete(self, id: str) -> None:
+        return None
+
+    def migrate(self, target_version: int) -> None:
+        return None
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     project_root = Path.cwd()
     data_root = project_root / ".umem"
-    audit_list_use_case = ListAuditLogUseCase(
-        audit_log_repository=LocalAuditLogRepository(
-            project_root=project_root,
-            data_root=data_root,
-        )
+    layout_port = LocalProjectLayoutPort()
+    audit_log_repository = LocalAuditLogRepository(
+        project_root=project_root,
+        data_root=data_root,
     )
+    snapshot_repository = LocalSnapshotRepository(project_root=project_root, data_root=data_root)
+    safe_write_use_case = SafeWriteUseCase(
+        project_root=project_root,
+        secret_scanner=EntropySecretScanner(),
+        snapshot_repository=snapshot_repository,
+        audit_log_repository=audit_log_repository,
+    )
+    fact_repository = LocalFactRepository(
+        project_root=project_root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
+    audit_list_use_case = ListAuditLogUseCase(audit_log_repository=audit_log_repository)
     manifest_file = data_root / "snapshots" / "manifest.json"
     manifest_rel_path = str(manifest_file.relative_to(project_root))
     snapshots_list_use_case = ListSnapshotsUseCase(
-        snapshot_repository=LocalSnapshotRepository(project_root=project_root, data_root=data_root),
+        snapshot_repository=snapshot_repository,
         manifest_path=manifest_rel_path,
     )
-    snapshot_repository = LocalSnapshotRepository(project_root=project_root, data_root=data_root)
     rollback_use_case = RollbackUseCase(
         project_root=project_root,
         snapshot_repository=snapshot_repository,
-        audit_log_repository=LocalAuditLogRepository(
-            project_root=project_root,
-            data_root=data_root,
-        ),
+        audit_log_repository=audit_log_repository,
     )
+    status_use_case = GetMemoryStatusUseCase(
+        fact_repository=fact_repository,
+        rule_repository=EmptyRuleRepository(),
+        latent_skill_repository=EmptyLatentSkillRepository(),
+        layout_port=layout_port,
+        data_root=data_root,
+    )
+    facts_list_use_case = ListFactsUseCase(fact_repository=fact_repository)
+    facts_purge_use_case = PurgeFactUseCase(fact_repository=fact_repository)
+    facts_hygiene_use_case = ContextHygieneUseCase(fact_repository=fact_repository)
 
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
         snapshots = snapshot_repository.list(scope=scope, status=SnapshotStatus.created)
@@ -61,11 +135,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return max(snapshots, key=lambda snapshot: _normalize_datetime(snapshot.timestamp))
 
     configured_main = build_main(
-        layout_port=LocalProjectLayoutPort(),
+        layout_port=layout_port,
         config_validation_port=LocalConfigValidationPort(),
         audit_list_command=audit_list_use_case.execute,
         snapshots_list_command=snapshots_list_use_case.execute,
         rollback_command=rollback_use_case.execute,
         rollback_preview_command=rollback_preview,
+        status_command=status_use_case.execute,
+        facts_list_command=facts_list_use_case.execute,
+        facts_purge_command=facts_purge_use_case.execute,
+        facts_hygiene_command=facts_hygiene_use_case.execute,
     )
     return configured_main(argv)

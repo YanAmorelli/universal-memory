@@ -8,6 +8,16 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from universal_memory.application.memory import (
+    ContextHygieneCommand,
+    ContextHygieneResult,
+    GetMemoryStatusCommand,
+    GetMemoryStatusResult,
+    ListFactsCommand,
+    ListFactsResult,
+    PurgeFactCommand,
+    PurgeFactResult,
+)
 from universal_memory.application.onboarding.setup_project import (
     SetupProjectResult,
     setup_project,
@@ -22,6 +32,7 @@ from universal_memory.application.security import (
 )
 from universal_memory.domain import (
     ConfigValidationPort,
+    FactNotFoundError,
     InvalidConfigError,
     ProjectLayoutPort,
     SnapshotFailedError,
@@ -30,6 +41,9 @@ from universal_memory.domain import (
 )
 from universal_memory.domain.entities import (
     AuditEventScope,
+    Fact,
+    FactScope,
+    FactStatus,
     Snapshot,
     SnapshotScope,
     SnapshotStatus,
@@ -41,9 +55,13 @@ ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 RollbackPreviewHandler = Callable[[SnapshotScope], Snapshot]
+StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
+ListFactsCommandHandler = Callable[[ListFactsCommand], ListFactsResult]
+PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
+ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneResult]
 
 
-def main(  # noqa: PLR0913
+def main(  # noqa: PLR0911, PLR0912, PLR0913
     argv: Sequence[str] | None = None,
     *,
     setup_project_command: SetupProjectCommand | None = None,
@@ -51,6 +69,10 @@ def main(  # noqa: PLR0913
     snapshots_list_command: ListSnapshotsCommandHandler | None = None,
     rollback_command: RollbackCommandHandler | None = None,
     rollback_preview_command: RollbackPreviewHandler | None = None,
+    status_command: StatusCommandHandler | None = None,
+    facts_list_command: ListFactsCommandHandler | None = None,
+    facts_purge_command: PurgeFactCommandHandler | None = None,
+    facts_hygiene_command: ContextHygieneCommandHandler | None = None,
 ) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -61,6 +83,41 @@ def main(  # noqa: PLR0913
             raise RuntimeError(msg)
         command = setup_project_command
         return _run_init(command, output_format=args.output_format)
+
+    if args.command == "status":
+        if status_command is None:
+            msg = "CLI status_command dependency was not configured."
+            raise RuntimeError(msg)
+        return _run_status(status_command, output_format=args.output_format)
+
+    if args.command == "facts" and args.facts_command == "list":
+        if facts_list_command is None:
+            msg = "CLI facts_list_command dependency was not configured."
+            raise RuntimeError(msg)
+        return _run_facts_list(
+            facts_list_command,
+            output_format=args.output_format,
+            scope=_fact_scope(args.scope),
+            status=_fact_status(args.status) if args.status is not None else FactStatus.active,
+        )
+
+    if args.command == "facts" and args.facts_command == "purge":
+        if facts_purge_command is None:
+            msg = "CLI facts_purge_command dependency was not configured."
+            raise RuntimeError(msg)
+        return _run_facts_purge(
+            facts_purge_command,
+            output_format=args.output_format,
+            id=args.id,
+            scope=_fact_scope(args.scope),
+            yes=args.yes,
+        )
+
+    if args.command == "facts" and args.facts_command == "hygiene":
+        if facts_hygiene_command is None:
+            msg = "CLI facts_hygiene_command dependency was not configured."
+            raise RuntimeError(msg)
+        return _run_facts_hygiene(facts_hygiene_command, output_format=args.output_format)
 
     if args.command == "audit" and args.audit_command == "list":
         if audit_list_command is None:
@@ -109,6 +166,10 @@ def build_main(  # noqa: PLR0913
     snapshots_list_command: ListSnapshotsCommandHandler,
     rollback_command: RollbackCommandHandler,
     rollback_preview_command: RollbackPreviewHandler,
+    status_command: StatusCommandHandler,
+    facts_list_command: ListFactsCommandHandler,
+    facts_purge_command: PurgeFactCommandHandler,
+    facts_hygiene_command: ContextHygieneCommandHandler,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -123,6 +184,10 @@ def build_main(  # noqa: PLR0913
             snapshots_list_command=snapshots_list_command,
             rollback_command=rollback_command,
             rollback_preview_command=rollback_preview_command,
+            status_command=status_command,
+            facts_list_command=facts_list_command,
+            facts_purge_command=facts_purge_command,
+            facts_hygiene_command=facts_hygiene_command,
         )
 
     return configured_main
@@ -134,6 +199,70 @@ def _build_parser() -> argparse.ArgumentParser:
 
     init_parser = subparsers.add_parser("init", help="Initialize local universal-memory state")
     init_parser.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        dest="output_format",
+        help="Output format",
+    )
+
+    status_parser = subparsers.add_parser("status", help="Inspect local memory status")
+    status_parser.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        dest="output_format",
+        help="Output format",
+    )
+
+    facts_parser = subparsers.add_parser("facts", help="Gerenciar fatos de memoria")
+    facts_subparsers = facts_parser.add_subparsers(dest="facts_command")
+    facts_list_parser = facts_subparsers.add_parser("list", help="Listar fatos")
+    facts_list_parser.add_argument(
+        "--scope",
+        choices=["project", "global"],
+        default=None,
+        help="Scope filter",
+    )
+    facts_list_parser.add_argument(
+        "--status",
+        choices=["active", "stale", "archived", "purged"],
+        default=None,
+        help="Status filter",
+    )
+    facts_list_parser.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        dest="output_format",
+        help="Output format",
+    )
+
+    facts_purge_parser = facts_subparsers.add_parser("purge", help="Purgar fatos")
+    facts_purge_target = facts_purge_parser.add_mutually_exclusive_group(required=True)
+    facts_purge_target.add_argument("--id", default=None, help="Fact ID to purge")
+    facts_purge_target.add_argument(
+        "--scope",
+        choices=["project", "global"],
+        default=None,
+        help="Scope to purge",
+    )
+    facts_purge_parser.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        dest="output_format",
+        help="Output format",
+    )
+    facts_purge_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip interactive confirmation",
+    )
+
+    facts_hygiene_parser = facts_subparsers.add_parser("hygiene", help="Executar higiene")
+    facts_hygiene_parser.add_argument(
         "--format",
         choices=["human", "json"],
         default="human",
@@ -228,6 +357,119 @@ def _run_init(command: SetupProjectCommand, output_format: str) -> int:
         print(json.dumps(_success_envelope(result), sort_keys=True))
     else:
         print(_format_human_init_output(result))
+
+    return 0
+
+
+def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
+    try:
+        result = command(GetMemoryStatusCommand(project_root=Path.cwd()))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except StorageError as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except Exception as error:
+        _print_expected_error(
+            StorageError(f"Erro inesperado: {error}"), output_format=output_format
+        )
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_status_success_envelope(result), sort_keys=True))
+    else:
+        print(_format_human_status_output(result))
+
+    return 0
+
+
+def _run_facts_list(
+    command: ListFactsCommandHandler,
+    *,
+    output_format: str,
+    scope: FactScope | None,
+    status: FactStatus,
+) -> int:
+    try:
+        result = command(ListFactsCommand(scope=scope, status=status))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except StorageError as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_facts_list_success_envelope(result, scope=scope), sort_keys=True))
+    else:
+        print(_format_human_facts_list_output(result))
+
+    return 0
+
+
+def _run_facts_purge(
+    command: PurgeFactCommandHandler,
+    *,
+    output_format: str,
+    id: str | None,
+    scope: FactScope | None,
+    yes: bool,
+) -> int:
+    try:
+        if output_format == "json" and not yes:
+            raise ValidationFailedError(
+                "A flag --yes / -y e obrigatoria para executar purge com saida JSON."
+            )
+        if output_format != "json":
+            print(_format_human_purge_preview(id=id, scope=scope))
+            if not yes:
+                try:
+                    answer = input("Confirmar purga permanente? [y/N]: ")
+                except (EOFError, KeyboardInterrupt):
+                    print("\nPurga cancelada.")
+                    return 1
+                if answer.strip().lower() not in {"s", "sim", "y", "yes"}:
+                    print("Purga cancelada.")
+                    return 1
+
+        result = command(PurgeFactCommand(id=id, scope=scope, origin="cli"))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except (FactNotFoundError, StorageError, ValidationFailedError) as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_facts_purge_success_envelope(result, scope=scope), sort_keys=True))
+    else:
+        print(_format_human_purge_success(result))
+
+    return 0
+
+
+def _run_facts_hygiene(command: ContextHygieneCommandHandler, *, output_format: str) -> int:
+    scope = FactScope.project
+    try:
+        result = command(ContextHygieneCommand(scope=scope))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except StorageError as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_facts_hygiene_success_envelope(result, scope=scope), sort_keys=True))
+    else:
+        print(_format_human_hygiene_success(result))
 
     return 0
 
@@ -375,6 +617,60 @@ def _rollback_success_envelope(result: RollbackResult) -> dict[str, Any]:
     }
 
 
+def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "status",
+        "scope": "project",
+        "data": _status_payload(result),
+        "warnings": [],
+    }
+
+
+def _facts_list_success_envelope(
+    result: ListFactsResult, *, scope: FactScope | None
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "facts.list",
+        "scope": scope.value if scope is not None else "all",
+        "data": {"facts": [_fact_payload(fact) for fact in result.facts]},
+        "warnings": [],
+    }
+
+
+def _facts_purge_success_envelope(
+    result: PurgeFactResult, *, scope: FactScope | None
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "facts.purge",
+        "scope": scope.value if scope is not None else "fact",
+        "data": {
+            "purged_count": result.purged_count,
+            "affected_ids": result.affected_ids,
+            "audit_reference": result.audit_reference,
+        },
+        "warnings": [],
+    }
+
+
+def _facts_hygiene_success_envelope(
+    result: ContextHygieneResult, *, scope: FactScope
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "facts.hygiene",
+        "scope": scope.value,
+        "data": {
+            "stale_count": result.stale_count,
+            "archived_count": result.archived_count,
+            "audit_reference": result.audit_reference,
+        },
+        "warnings": [],
+    }
+
+
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
     return {
         "project_path": _path_to_posix(result.project_path),
@@ -385,6 +681,41 @@ def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
         "created": result.created_paths,
         "already_initialized": result.already_initialized,
         "audit_reference": AUDIT_REFERENCE_PLACEHOLDER,
+    }
+
+
+def _fact_payload(fact: Fact) -> dict[str, Any]:
+    return {
+        "id": fact.id,
+        "content": fact.content,
+        "scope": fact.scope.value,
+        "source": fact.source,
+        "status": fact.status.value,
+        "recurrence_count": fact.recurrence_count,
+        "tags": fact.tags,
+        "metadata": fact.metadata,
+        "created_at": fact.created_at.isoformat(),
+        "updated_at": fact.updated_at.isoformat(),
+    }
+
+
+def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
+    if not result.initialized:
+        return {
+            "initialized": False,
+            "project_path": result.project_path,
+            "recommended_action": result.recommended_action,
+        }
+
+    return {
+        "initialized": True,
+        "project_path": result.project_path,
+        "fact_counts": result.fact_counts,
+        "active_rules_count": result.active_rules_count,
+        "registered_skills_count": result.registered_skills_count,
+        "approximate_size_bytes": result.approximate_size_bytes,
+        "last_health_check": result.last_health_check,
+        "host_validation": result.host_validation,
     }
 
 
@@ -403,6 +734,90 @@ def _format_human_init_output(result: SetupProjectResult) -> str:
             rendered_paths,
             f"Auditoria: {AUDIT_REFERENCE_PLACEHOLDER}",
             "Proximo comando sugerido: umem status",
+        ]
+    )
+
+
+def _format_human_status_output(result: GetMemoryStatusResult) -> str:
+    if not result.initialized:
+        return "\n".join(
+            [
+                "Memoria local nao inicializada.",
+                f"Projeto: {result.project_path}",
+                f"Proxima acao: {result.recommended_action}",
+            ]
+        )
+
+    lines = [
+        "Memoria local inicializada.",
+        f"Projeto: {result.project_path}",
+        f"Tamanho aproximado: {result.approximate_size_bytes} bytes",
+        f"Ultimo health check: {result.last_health_check}",
+        f"Regras ativas: {result.active_rules_count}",
+        f"Skills registradas: {result.registered_skills_count}",
+        "Hosts:",
+    ]
+    for host, status in result.host_validation.items():
+        lines.append(f"- {host}: {status}")
+    lines.append("Fatos por escopo/status:")
+    for scope, counts in result.fact_counts.items():
+        rendered_counts = ", ".join(f"{status}: {count}" for status, count in counts.items())
+        lines.append(f"- {scope} {rendered_counts}")
+    return "\n".join(lines)
+
+
+def _format_human_facts_list_output(result: ListFactsResult) -> str:
+    if not result.facts:
+        return "Nenhum fato encontrado."
+
+    lines = ["Fatos:"]
+    for fact in result.facts:
+        lines.append(
+            " | ".join(
+                [
+                    fact.id,
+                    fact.scope.value,
+                    fact.status.value,
+                    fact.source,
+                    fact.content,
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def _format_human_purge_preview(*, id: str | None, scope: FactScope | None) -> str:
+    target = f"ID: {id}" if id is not None else f"Escopo: {scope.value if scope else 'n/a'}"
+    return "\n".join(
+        [
+            "Purga permanente selecionada:",
+            target,
+            "Caminho afetado: .umem/memory/facts.jsonl",
+            "Snapshot: criado pelo pipeline seguro quando configurado",
+            "Auditoria: evento de mutacao segura esperado",
+            "Padrao: nao confirmar.",
+        ]
+    )
+
+
+def _format_human_purge_success(result: PurgeFactResult) -> str:
+    return "\n".join(
+        [
+            "Purga concluida.",
+            f"Itens purgados: {result.purged_count}",
+            f"IDs afetados: {', '.join(result.affected_ids)}",
+            f"Auditoria: {result.audit_reference}",
+        ]
+    )
+
+
+def _format_human_hygiene_success(result: ContextHygieneResult) -> str:
+    return "\n".join(
+        [
+            "Higiene de contexto concluida.",
+            f"Fatos marcados como stale: {result.stale_count}",
+            f"Fatos arquivados: {result.archived_count}",
+            f"Auditoria: {result.audit_reference}",
         ]
     )
 
@@ -486,6 +901,8 @@ def _recovery_hint(error: Exception) -> str:
         return "Verifique as configuracoes no arquivo config.toml."
     if isinstance(error, ValidationFailedError):
         return "Corrija os dados invalidos informados."
+    if isinstance(error, FactNotFoundError):
+        return "Verifique o identificador ou escopo informado."
     return "Verifique o layout local e execute umem init na raiz do projeto."
 
 
@@ -526,6 +943,8 @@ def _error_code(error: Exception) -> str:
         return "invalid_config"
     if isinstance(error, ValidationFailedError):
         return "validation_failed"
+    if isinstance(error, FactNotFoundError):
+        return "fact_not_found"
     return "storage_error"
 
 
@@ -536,6 +955,8 @@ def _error_message(error: Exception) -> str:
         return "Configuracao invalida."
     if isinstance(error, ValidationFailedError):
         return "Validacao falhou."
+    if isinstance(error, FactNotFoundError):
+        return "Fato nao encontrado."
     return "Falha de armazenamento."
 
 
@@ -549,3 +970,13 @@ def _audit_scope(value: str) -> AuditEventScope:
 
 def _snapshot_scope(value: str) -> SnapshotScope:
     return SnapshotScope.global_ if value == "global" else SnapshotScope.project
+
+
+def _fact_scope(value: str | None) -> FactScope | None:
+    if value is None:
+        return None
+    return FactScope.global_ if value == "global" else FactScope.project
+
+
+def _fact_status(value: str) -> FactStatus:
+    return FactStatus(value)

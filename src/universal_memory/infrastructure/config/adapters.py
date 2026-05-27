@@ -1,13 +1,19 @@
 from pathlib import Path
 
 from universal_memory.domain import ConfigValidationPort, ProjectLayoutPort, ProjectLayoutResult
-from universal_memory.infrastructure.config.project_layout import ensure_project_layout
+from universal_memory.infrastructure.config.project_layout import (
+    ensure_project_layout,
+    is_project_initialized,
+)
 from universal_memory.infrastructure.config.toml_loader import load_config
 
 
 class LocalProjectLayoutPort(ProjectLayoutPort):
     def ensure_project_layout(self, project_root: Path) -> ProjectLayoutResult:
         return ensure_project_layout(project_root)
+
+    def is_project_initialized(self, project_root: Path) -> bool:
+        return is_project_initialized(project_root)
 
 
 class LocalConfigValidationPort(ConfigValidationPort):

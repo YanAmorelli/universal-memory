@@ -45,7 +45,8 @@ EXPECTED_METHODS: dict[PortType, MethodExpectations] = {
     FactRepository: {
         "read": (Fact, {"id": str}),
         "list": (list[Fact], {"scope": FactScope | None, "status": FactStatus | None}),
-        "write": (type(None), {"entity": Fact}),
+        "search": (list[Fact], {"query": str, "include_inactive": bool}),
+        "write": (object | None, {"entity": Fact}),
         "delete": (type(None), {"id": str}),
         "purge": (type(None), {"id": str}),
         "migrate": (type(None), {"target_version": int}),
@@ -94,6 +95,7 @@ EXPECTED_METHODS: dict[PortType, MethodExpectations] = {
     },
     ProjectLayoutPort: {
         "ensure_project_layout": (ProjectLayoutResult, {"project_root": Path}),
+        "is_project_initialized": (bool, {"project_root": Path}),
     },
     SecretScannerPort: {
         "scan": (type(None), {"content": str}),
