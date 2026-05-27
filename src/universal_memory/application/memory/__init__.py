@@ -3,6 +3,11 @@ from universal_memory.application.memory.assemble_context_summary_use_case impor
     AssembleContextSummaryResult,
     AssembleContextSummaryUseCase,
 )
+from universal_memory.application.memory.get_memory_status_use_case import (
+    GetMemoryStatusCommand,
+    GetMemoryStatusResult,
+    GetMemoryStatusUseCase,
+)
 from universal_memory.application.memory.list_facts_use_case import (
     ListFactsCommand,
     ListFactsResult,
@@ -24,6 +29,9 @@ __all__ = [
     "AssembleContextSummaryCommand",
     "AssembleContextSummaryResult",
     "AssembleContextSummaryUseCase",
+    "GetMemoryStatusCommand",
+    "GetMemoryStatusResult",
+    "GetMemoryStatusUseCase",
     "ListFactsCommand",
     "ListFactsResult",
     "ListFactsUseCase",

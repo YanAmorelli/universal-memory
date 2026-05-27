@@ -8,6 +8,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from universal_memory.application.memory import (
+    GetMemoryStatusCommand,
+    GetMemoryStatusResult,
+)
 from universal_memory.application.onboarding.setup_project import (
     SetupProjectResult,
     setup_project,
@@ -41,6 +45,7 @@ ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 RollbackPreviewHandler = Callable[[SnapshotScope], Snapshot]
+StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
 
 
 def main(  # noqa: PLR0913
@@ -51,6 +56,7 @@ def main(  # noqa: PLR0913
     snapshots_list_command: ListSnapshotsCommandHandler | None = None,
     rollback_command: RollbackCommandHandler | None = None,
     rollback_preview_command: RollbackPreviewHandler | None = None,
+    status_command: StatusCommandHandler | None = None,
 ) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -61,6 +67,12 @@ def main(  # noqa: PLR0913
             raise RuntimeError(msg)
         command = setup_project_command
         return _run_init(command, output_format=args.output_format)
+
+    if args.command == "status":
+        if status_command is None:
+            msg = "CLI status_command dependency was not configured."
+            raise RuntimeError(msg)
+        return _run_status(status_command, output_format=args.output_format)
 
     if args.command == "audit" and args.audit_command == "list":
         if audit_list_command is None:
@@ -109,6 +121,7 @@ def build_main(  # noqa: PLR0913
     snapshots_list_command: ListSnapshotsCommandHandler,
     rollback_command: RollbackCommandHandler,
     rollback_preview_command: RollbackPreviewHandler,
+    status_command: StatusCommandHandler,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -123,6 +136,7 @@ def build_main(  # noqa: PLR0913
             snapshots_list_command=snapshots_list_command,
             rollback_command=rollback_command,
             rollback_preview_command=rollback_preview_command,
+            status_command=status_command,
         )
 
     return configured_main
@@ -134,6 +148,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
     init_parser = subparsers.add_parser("init", help="Initialize local universal-memory state")
     init_parser.add_argument(
+        "--format",
+        choices=["human", "json"],
+        default="human",
+        dest="output_format",
+        help="Output format",
+    )
+
+    status_parser = subparsers.add_parser("status", help="Inspect local memory status")
+    status_parser.add_argument(
         "--format",
         choices=["human", "json"],
         default="human",
@@ -228,6 +251,32 @@ def _run_init(command: SetupProjectCommand, output_format: str) -> int:
         print(json.dumps(_success_envelope(result), sort_keys=True))
     else:
         print(_format_human_init_output(result))
+
+    return 0
+
+
+def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
+    try:
+        result = command(GetMemoryStatusCommand(project_root=Path.cwd()))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except StorageError as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except Exception as error:
+        _print_expected_error(
+            StorageError(f"Erro inesperado: {error}"), output_format=output_format
+        )
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_status_success_envelope(result), sort_keys=True))
+    else:
+        print(_format_human_status_output(result))
 
     return 0
 
@@ -375,6 +424,16 @@ def _rollback_success_envelope(result: RollbackResult) -> dict[str, Any]:
     }
 
 
+def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "status",
+        "scope": "project",
+        "data": _status_payload(result),
+        "warnings": [],
+    }
+
+
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
     return {
         "project_path": _path_to_posix(result.project_path),
@@ -385,6 +444,26 @@ def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
         "created": result.created_paths,
         "already_initialized": result.already_initialized,
         "audit_reference": AUDIT_REFERENCE_PLACEHOLDER,
+    }
+
+
+def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
+    if not result.initialized:
+        return {
+            "initialized": False,
+            "project_path": result.project_path,
+            "recommended_action": result.recommended_action,
+        }
+
+    return {
+        "initialized": True,
+        "project_path": result.project_path,
+        "fact_counts": result.fact_counts,
+        "active_rules_count": result.active_rules_count,
+        "registered_skills_count": result.registered_skills_count,
+        "approximate_size_bytes": result.approximate_size_bytes,
+        "last_health_check": result.last_health_check,
+        "host_validation": result.host_validation,
     }
 
 
@@ -405,6 +484,34 @@ def _format_human_init_output(result: SetupProjectResult) -> str:
             "Proximo comando sugerido: umem status",
         ]
     )
+
+
+def _format_human_status_output(result: GetMemoryStatusResult) -> str:
+    if not result.initialized:
+        return "\n".join(
+            [
+                "Memoria local nao inicializada.",
+                f"Projeto: {result.project_path}",
+                f"Proxima acao: {result.recommended_action}",
+            ]
+        )
+
+    lines = [
+        "Memoria local inicializada.",
+        f"Projeto: {result.project_path}",
+        f"Tamanho aproximado: {result.approximate_size_bytes} bytes",
+        f"Ultimo health check: {result.last_health_check}",
+        f"Regras ativas: {result.active_rules_count}",
+        f"Skills registradas: {result.registered_skills_count}",
+        "Hosts:",
+    ]
+    for host, status in result.host_validation.items():
+        lines.append(f"- {host}: {status}")
+    lines.append("Fatos por escopo/status:")
+    for scope, counts in result.fact_counts.items():
+        rendered_counts = ", ".join(f"{status}: {count}" for status, count in counts.items())
+        lines.append(f"- {scope} {rendered_counts}")
+    return "\n".join(lines)
 
 
 def _format_human_audit_output(result: ListAuditLogResult) -> str:

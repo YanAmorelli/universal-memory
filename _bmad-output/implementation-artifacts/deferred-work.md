@@ -20,3 +20,8 @@
 - Duplicação da lógica de normalização de texto (remoção de acentos via `unicodedata` e `casefold`) entre produção e o script de benchmark.
 - Silenciamento silencioso e inseguro de exceções de Expressões Regulares (`except re.error: pass`) ocultando consultas inválidas no repositório de fatos.
 - Exposição teórica a vulnerabilidades de negação de serviço por expressões regulares (ReDoS) na busca padrão via entrada direta de strings sem validação de tamanho.
+
+## Deferred from: code review of 3-5-exibir-status-da-mem-ria.md (2026-05-27)
+
+- Inefficient full-database scan to count facts: The status command fetches all facts in memory via `fact_repository.list()` and iterates over them to count them by scope and status. If a user has a massive repository history, this full scan will consume excessive memory and CPU. The repository interface should expose a lightweight count or metadata method instead. [src/universal_memory/application/memory/get_memory_status_use_case.py]
+

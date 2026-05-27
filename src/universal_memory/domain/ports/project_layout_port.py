@@ -9,3 +9,8 @@ class ProjectLayoutPort(ABC):
     def ensure_project_layout(self, project_root: Path) -> ProjectLayoutResult:
         """Materialize or validate the canonical `.umem/` layout."""
         ...
+
+    @abstractmethod
+    def is_project_initialized(self, project_root: Path) -> bool:
+        """Return whether the canonical `.umem/` layout already exists."""
+        ...

@@ -95,6 +95,7 @@ EXPECTED_METHODS: dict[PortType, MethodExpectations] = {
     },
     ProjectLayoutPort: {
         "ensure_project_layout": (ProjectLayoutResult, {"project_root": Path}),
+        "is_project_initialized": (bool, {"project_root": Path}),
     },
     SecretScannerPort: {
         "scan": (type(None), {"content": str}),
