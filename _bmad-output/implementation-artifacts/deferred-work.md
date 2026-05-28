@@ -44,3 +44,12 @@
 - Lógica de internacionalização (locale) hardcoded nos payloads de erro: O método `error_payload` realiza uma verificação binária simples baseada na string `"pt-BR"` para traduzir ou não a mensagem técnica, misturando lógica de localização de interface direto na construção dos dados. [src/universal_memory/interfaces/errors.py:157-165]
 - Acesso direto a variáveis de ambiente (os.environ) em adapters CLI: Chamadas estáticas diretas a `os.environ.get("UMEM_DEBUG_ERRORS")` dificultam o teste unitário isolado e controle programático do comportamento do CLI. [src/universal_memory/interfaces/cli/init_command.py:1282]
 - Violação DRY na repetição de lógica de capturas de exceções OSError na CLI: Repetição de tratamento de `OSError` e mapeamento idêntico de erros em quase todos os comandos da CLI (`_run_init`, `_run_status`, etc.), gerando código boilerplate desnecessário. [src/universal_memory/interfaces/cli/init_command.py]
+
+## Deferred from: code review of 5-1-modelar-hosts-e-alvos-de-instru-o.md (2026-05-28)
+
+- Untyped escape hatch in metadata field: `dict[str, Any]` allows arbitrary data without domain validation. [src/universal_memory/domain/entities/host.py:86]
+- Missing access mode classification (read-only vs write) for Host targets: Adiado para a camada de casos de uso (camada de aplicação) nas próximas stories.
+- Missing Instruction Entity and Serialization Validation: Adiado para as próximas stories (5.2/5.3), mantendo o escopo de 5.1 na infraestrutura básica de hosts e targets.
+- Lack of relationship validation between Host and InstructionTarget ownership: Adiado para a validação na camada de aplicação/serviço onde os repositórios estarão acessíveis.
+
+
