@@ -176,11 +176,13 @@ async def test_mcp_errors_are_sanitized_without_absolute_paths_or_secret_values(
     result = await server.call_tool("status", {})
     payload = result.structured_content
     assert payload is not None
+    error_payload = payload.get("structuredContent", payload)
 
-    assert payload["ok"] is False
-    assert payload["error"]["code"] == JSON_RPC_SECRET_DETECTED
-    assert str(tmp_path) not in payload["error"]["detail"]
-    assert secret not in payload["error"]["detail"]
+    assert payload.get("isError", True) is True
+    assert error_payload["ok"] is False
+    assert error_payload["error"]["code"] == JSON_RPC_SECRET_DETECTED
+    assert str(tmp_path) not in error_payload["error"]["data"]["detail"]
+    assert secret not in error_payload["error"]["data"]["detail"]
 
 
 @pytest.mark.anyio

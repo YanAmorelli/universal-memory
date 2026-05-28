@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-22T21:17:01.194515Z"
-last_updated: "2026-05-28T15:33:00-03:00"
+last_updated: "2026-05-28T16:12:00-03:00"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -69,7 +69,7 @@ development_status:
   4-1-estruturar-adapter-cli-com-typer-e-rich: done
   4-2-implementar-servidor-mcp-base-com-fastmcp: done
   4-3-implementar-matriz-de-paridade-cli-mcp: done
-  4-4-mapear-erros-de-dom-nio-para-cli-e-json-rpc: backlog
+  4-4-mapear-erros-de-dom-nio-para-cli-e-json-rpc: done
   4-5-validar-conformidade-mcp-e-contratos-de-interface: backlog
   epic-4-retrospective: optional
   epic-5: backlog

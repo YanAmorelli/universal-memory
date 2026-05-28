@@ -36,3 +36,11 @@
 - Crude and Hardcoded Token Count Estimation: Both CLI and MCP approximate token counts using a crude, hardcoded divide-by-four logic rather than leveraging a real tokenizer. [src/universal_memory/interfaces/cli/init_command.py:1008]
 - Hardcoded "not-implemented-yet" Placeholders in Production Contracts: The CLI `AUDIT_REFERENCE_PLACEHOLDER` and the MCP `_init_payload` both fallback to the hardcoded string "not-implemented-yet" for the `audit_reference` field, violating production contract readiness. [src/universal_memory/interfaces/cli/init_command.py:64]
 
+
+## Deferred from: code review of 4-4-mapear-erros-de-dom-nio-para-cli-e-json-rpc.md (2026-05-28)
+
+- Importação redundante e namespace poluído: Importa todo o módulo `errors` sob o alias `interface_errors` e, na sequência imediata, importa individualmente funções e chaves do mesmo módulo, poluindo o namespace local. [src/universal_memory/interfaces/mcp/server.py:44-50]
+- Expressões regulares simplistas em sanitização de caminhos absolutos e chaves: Expressões regulares de caminho não capturam caminhos contendo espaços, nem caminhos relativos perigosos. As de chaves de API podem sofrer de falsos positivos em variáveis legítimas. [src/universal_memory/interfaces/errors.py]
+- Lógica de internacionalização (locale) hardcoded nos payloads de erro: O método `error_payload` realiza uma verificação binária simples baseada na string `"pt-BR"` para traduzir ou não a mensagem técnica, misturando lógica de localização de interface direto na construção dos dados. [src/universal_memory/interfaces/errors.py:157-165]
+- Acesso direto a variáveis de ambiente (os.environ) em adapters CLI: Chamadas estáticas diretas a `os.environ.get("UMEM_DEBUG_ERRORS")` dificultam o teste unitário isolado e controle programático do comportamento do CLI. [src/universal_memory/interfaces/cli/init_command.py:1282]
+- Violação DRY na repetição de lógica de capturas de exceções OSError na CLI: Repetição de tratamento de `OSError` e mapeamento idêntico de erros em quase todos os comandos da CLI (`_run_init`, `_run_status`, etc.), gerando código boilerplate desnecessário. [src/universal_memory/interfaces/cli/init_command.py]

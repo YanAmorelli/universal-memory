@@ -1,5 +1,7 @@
 import json
+import os
 import sys
+import traceback
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
@@ -41,10 +43,7 @@ from universal_memory.application.security import (
 )
 from universal_memory.domain import (
     ConfigValidationPort,
-    FactNotFoundError,
-    InvalidConfigError,
     ProjectLayoutPort,
-    SecretDetectedError,
     SnapshotFailedError,
     StorageError,
     ValidationFailedError,
@@ -60,6 +59,12 @@ from universal_memory.domain.entities import (
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
+from universal_memory.interfaces.errors import (
+    DOMAIN_ERROR_TYPES,
+    error_descriptor,
+    error_payload,
+    recovery_hint,
+)
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
@@ -85,6 +90,18 @@ OutputFormatOption = Annotated[
     ),
 ]
 YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Ignorar confirmacao interativa.")]
+
+
+def _determine_output_format(argv: Sequence[str] | None) -> str:
+    if argv is None:
+        return "human"
+    args = [arg.lower() for arg in argv]
+    for i, arg in enumerate(args):
+        if arg in ("--format", "-f") and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith("--format="):
+            return arg.split("=", 1)[1]
+    return "human"
 
 
 def main(  # noqa: PLR0913
@@ -126,7 +143,8 @@ def main(  # noqa: PLR0913
     except RuntimeError:
         raise
     except Exception as e:
-        _stderr_console().print(f"[bold red]Erro inesperado:[/bold red] {e}")
+        fmt = _determine_output_format(argv)
+        _print_unexpected_error(e, output_format=fmt)
         return 1
     if isinstance(result, int):
         return result
@@ -520,7 +538,7 @@ def _run_init(command: SetupProjectCommand, output_format: str) -> int:
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (InvalidConfigError, SecretDetectedError, StorageError, ValidationFailedError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
@@ -538,16 +556,14 @@ def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError, InvalidConfigError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
         _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
         return 1
     except Exception as error:
-        _print_expected_error(
-            StorageError(f"Erro inesperado: {error}"), output_format=output_format
-        )
+        _print_unexpected_error(error, output_format=output_format)
         return 1
 
     if output_format == "json":
@@ -577,7 +593,7 @@ def _run_context(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError, InvalidConfigError, ValidationFailedError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -621,7 +637,7 @@ def _run_remember(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError, InvalidConfigError, ValidationFailedError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -651,7 +667,7 @@ def _run_facts_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -690,7 +706,7 @@ def _run_facts_purge(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (FactNotFoundError, SecretDetectedError, StorageError, ValidationFailedError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
@@ -728,7 +744,7 @@ def _run_facts_hygiene(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError, ValidationFailedError, InvalidConfigError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
@@ -751,7 +767,7 @@ def _run_audit_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -777,7 +793,7 @@ def _run_snapshots_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -821,14 +837,7 @@ def _run_rollback(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (
-        SecretDetectedError,
-        SnapshotFailedError,
-        StorageError,
-        ValidationFailedError,
-        FactNotFoundError,
-        InvalidConfigError,
-    ) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
@@ -1253,36 +1262,13 @@ def _format_human_rollback_success(result: RollbackResult) -> str:
 
 
 def _recovery_hint(error: Exception) -> str:
-    msg = str(error)
-    if "Hint: " in msg:
-        return msg.split("Hint: ", 1)[1]
-    hints = {
-        SnapshotFailedError: (
-            "Execute uma mutacao segura antes de tentar rollback ou verifique o escopo."
-        ),
-        SecretDetectedError: "Remova ou mascare valores sensiveis antes de repetir a operacao.",
-        InvalidConfigError: "Verifique as configuracoes no arquivo config.toml.",
-        ValidationFailedError: "Corrija os dados invalidos informados.",
-        FactNotFoundError: "Verifique o identificador ou escopo informado.",
-    }
-    for error_type, hint in hints.items():
-        if isinstance(error, error_type):
-            return hint
-    return "Verifique o layout local e execute umem init na raiz do projeto."
+    return recovery_hint(error)
 
 
 def _print_expected_error(error: Exception, output_format: str) -> None:
-    code = _error_code(error)
-    detail = str(error)
     payload = {
         "ok": False,
-        "error": {
-            "code": code,
-            "message": _error_message(error),
-            "detail": detail,
-            "recovery_hint": _recovery_hint(error),
-            "audit_reference": None,
-        },
+        "error": error_payload(error, message_locale="pt-BR"),
     }
 
     if output_format == "json":
@@ -1294,7 +1280,7 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
             "\n".join(
                 [
                     f"[bold]Falha:[/bold] {payload['error']['message']}",
-                    f"[bold]Detalhe:[/bold] {detail}",
+                    f"[bold]Detalhe:[/bold] {payload['error']['detail']}",
                     f"[bold]Recuperacao:[/bold] {payload['error']['recovery_hint']}",
                 ]
             )
@@ -1305,32 +1291,18 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
     _stderr_console().print(panel)
 
 
+def _print_unexpected_error(error: Exception, output_format: str) -> None:
+    if os.environ.get("UMEM_DEBUG_ERRORS") == "1":
+        traceback.print_exc(file=sys.stderr)
+    _print_expected_error(error, output_format=output_format)
+
+
 def _error_code(error: Exception) -> str:
-    if isinstance(error, SnapshotFailedError):
-        return "snapshot_failed"
-    if isinstance(error, InvalidConfigError):
-        return "invalid_config"
-    if isinstance(error, ValidationFailedError):
-        return "validation_failed"
-    if isinstance(error, FactNotFoundError):
-        return "fact_not_found"
-    if isinstance(error, SecretDetectedError):
-        return "secret_detected"
-    return "storage_error"
+    return error_descriptor(error).slug
 
 
 def _error_message(error: Exception) -> str:
-    if isinstance(error, SnapshotFailedError):
-        return "Falha de snapshot."
-    if isinstance(error, InvalidConfigError):
-        return "Configuracao invalida."
-    if isinstance(error, ValidationFailedError):
-        return "Validacao falhou."
-    if isinstance(error, FactNotFoundError):
-        return "Fato nao encontrado."
-    if isinstance(error, SecretDetectedError):
-        return "Conteudo sensivel bloqueado."
-    return "Falha de armazenamento."
+    return error_descriptor(error).cli_message
 
 
 def _path_to_posix(path: Path) -> str:

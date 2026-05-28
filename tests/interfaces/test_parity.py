@@ -234,10 +234,12 @@ async def test_mcp_domain_errors_use_json_rpc_codes_and_sanitized_detail(tmp_pat
     payload = (await server.call_tool("remember_fact", {"content": "secret"})).structured_content
 
     assert payload is not None
-    assert payload["ok"] is False
-    assert payload["error"]["code"] == JSON_RPC_SECRET_DETECTED
-    assert str(tmp_path) not in payload["error"]["detail"]
-    assert SECRET_SENTINEL not in payload["error"]["detail"]
+    error_payload = payload.get("structuredContent", payload)
+    assert payload.get("isError", True) is True
+    assert error_payload["ok"] is False
+    assert error_payload["error"]["code"] == JSON_RPC_SECRET_DETECTED
+    assert str(tmp_path) not in error_payload["error"]["data"]["detail"]
+    assert SECRET_SENTINEL not in error_payload["error"]["data"]["detail"]
 
 
 def cli_use_cases(project_root: Path) -> dict[str, Any]:
@@ -295,12 +297,15 @@ async def test_mcp_destructive_mutations_require_confirm_flag(tmp_path: Path) ->
     # Calling without confirm=True should return a validation error envelope
     purge_payload = (await server.call_tool("purge_fact", {"confirm": False})).structured_content
     assert purge_payload is not None
-    assert purge_payload["ok"] is False
-    assert "destructive" in purge_payload["error"]["detail"]
+    purge_error = purge_payload.get("structuredContent", purge_payload)
+    assert purge_payload.get("isError", True) is True
+    assert purge_error["ok"] is False
+    assert "destructive" in purge_error["error"]["data"]["detail"]
 
     rollback_res = await server.call_tool("rollback_scope", {"confirm": False})
     rollback_payload = rollback_res.structured_content
     assert rollback_payload is not None
-    assert rollback_payload["ok"] is False
-    assert "destructive" in rollback_payload["error"]["detail"]
-
+    rollback_error = rollback_payload.get("structuredContent", rollback_payload)
+    assert rollback_payload.get("isError", True) is True
+    assert rollback_error["ok"] is False
+    assert "destructive" in rollback_error["error"]["data"]["detail"]

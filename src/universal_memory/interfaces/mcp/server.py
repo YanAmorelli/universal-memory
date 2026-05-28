@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import sys
 import traceback
 from collections.abc import Callable
@@ -9,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastmcp import FastMCP
-from pydantic import ValidationError
+from mcp.types import CallToolResult, TextContent
 
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
@@ -32,15 +31,7 @@ from universal_memory.application.security import (
     RollbackCommand,
     RollbackResult,
 )
-from universal_memory.domain import (
-    FactNotFoundError,
-    InvalidConfigError,
-    SecretDetectedError,
-    SnapshotFailedError,
-    StorageError,
-    UniversalMemoryError,
-    ValidationFailedError,
-)
+from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEventScope,
     ContextSummaryScope,
@@ -50,17 +41,24 @@ from universal_memory.domain.entities import (
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
+from universal_memory.interfaces import errors as interface_errors
+from universal_memory.interfaces.errors import (
+    error_descriptor,
+    error_payload,
+    json_rpc_error_payload,
+    sanitize_error_detail,
+)
+
+JSON_RPC_SECRET_DETECTED = interface_errors.JSON_RPC_SECRET_DETECTED
+JSON_RPC_SNAPSHOT_FAILED = interface_errors.JSON_RPC_SNAPSHOT_FAILED
+JSON_RPC_VALIDATION_FAILED = interface_errors.JSON_RPC_VALIDATION_FAILED
+JSON_RPC_FACT_NOT_FOUND = interface_errors.JSON_RPC_FACT_NOT_FOUND
+JSON_RPC_INVALID_CONFIG = interface_errors.JSON_RPC_INVALID_CONFIG
+JSON_RPC_STORAGE_ERROR = interface_errors.JSON_RPC_STORAGE_ERROR
+JSON_RPC_UNEXPECTED_ERROR = interface_errors.JSON_RPC_UNEXPECTED_ERROR
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 TOKEN_ESTIMATE_CHARS = 4
-JSON_RPC_SECRET_DETECTED = -32010
-JSON_RPC_SNAPSHOT_FAILED = -32020
-JSON_RPC_VALIDATION_FAILED = -32602
-JSON_RPC_FACT_NOT_FOUND = -32040
-JSON_RPC_INVALID_CONFIG = -32050
-JSON_RPC_STORAGE_ERROR = -32060
-JSON_RPC_UNEXPECTED_ERROR = -32603
-
 SetupProjectCommandHandler = Callable[[Path], SetupProjectResult]
 StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
 ContextCommandHandler = Callable[[AssembleContextSummaryCommand], AssembleContextSummaryResult]
@@ -113,8 +111,7 @@ def configure_server(  # noqa: PLR0915
                 data=_init_payload(result, root),
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     @server.tool(name="status")
     def status() -> dict[str, Any]:
@@ -131,8 +128,7 @@ def configure_server(  # noqa: PLR0915
                 data=_status_payload(result),
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     @server.tool(name="context")
     def context(
@@ -160,8 +156,7 @@ def configure_server(  # noqa: PLR0915
                 data=_context_payload(result, max_size_chars=max_size_chars),
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     @server.tool(name="remember_fact")
     def remember_fact(
@@ -187,8 +182,7 @@ def configure_server(  # noqa: PLR0915
                 data=_remember_payload(result),
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     @server.tool(name="list_facts")
     def list_facts(
@@ -207,8 +201,7 @@ def configure_server(  # noqa: PLR0915
                 data={"facts": [_fact_payload(fact) for fact in result.facts]},
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     @server.tool(name="purge_fact")
     def purge_fact(
@@ -234,11 +227,12 @@ def configure_server(  # noqa: PLR0915
                 data=_purge_payload(result),
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     @server.tool(name="list_audit_events")
-    def list_audit_events(scope: Literal["project", "global"] = "project") -> dict[str, Any]:
+    def list_audit_events(
+        scope: Literal["project", "global"] = "project",
+    ) -> dict[str, Any]:
         """List audit events for a scope."""
         try:
             audit_scope = _audit_scope(scope)
@@ -249,11 +243,12 @@ def configure_server(  # noqa: PLR0915
                 data={"events": [_entry_dict(event) for event in result.events]},
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     @server.tool(name="list_snapshots")
-    def list_snapshots(scope: Literal["project", "global"] = "project") -> dict[str, Any]:
+    def list_snapshots(
+        scope: Literal["project", "global"] = "project",
+    ) -> dict[str, Any]:
         """List created snapshots for a scope."""
         try:
             snapshot_scope = _snapshot_scope(scope)
@@ -266,8 +261,7 @@ def configure_server(  # noqa: PLR0915
                 data={"snapshots": [_entry_dict(snapshot) for snapshot in result.snapshots]},
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     @server.tool(name="rollback_scope")
     def rollback_scope(
@@ -292,8 +286,7 @@ def configure_server(  # noqa: PLR0915
                 data=_rollback_payload(result),
             )
         except Exception as error:
-            traceback.print_exc(file=sys.stderr)
-            return _error_envelope(error)
+            return _mcp_tool_error(error)
 
     return server
 
@@ -463,58 +456,32 @@ def _error_envelope(error: Exception) -> dict[str, Any]:
         "ok": False,
         "operation": "mcp",
         "scope": "project",
-        "error": {
-            "code": _error_code(error),
-            "message": _error_message(error),
-            "detail": _sanitize_error_detail(error),
-            "recovery_hint": getattr(error, "recovery_hint", None),
-            "audit_reference": getattr(error, "audit_reference", None),
-        },
+        "error": error_payload(error, message_locale="en"),
         "warnings": [],
     }
 
 
+def _mcp_tool_error(error: Exception) -> CallToolResult:
+    if _error_code(error) == JSON_RPC_UNEXPECTED_ERROR:
+        traceback.print_exc(file=sys.stderr)
+    else:
+        print(f"{type(error).__name__}: {_sanitize_error_detail(error)}", file=sys.stderr)
+
+    payload = json_rpc_error_payload(error)
+    return CallToolResult(
+        content=[TextContent(type="text", text=payload["message"])],
+        structuredContent={"ok": False, "error": payload},
+        isError=True,
+    )
+
+
 def _error_code(error: Exception) -> int:
-    mappings: tuple[tuple[type[Exception] | tuple[type[Exception], ...], int], ...] = (
-        (SecretDetectedError, JSON_RPC_SECRET_DETECTED),
-        (SnapshotFailedError, JSON_RPC_SNAPSHOT_FAILED),
-        ((ValidationError, ValidationFailedError, ValueError), JSON_RPC_VALIDATION_FAILED),
-        (FactNotFoundError, JSON_RPC_FACT_NOT_FOUND),
-        (InvalidConfigError, JSON_RPC_INVALID_CONFIG),
-        ((StorageError, OSError), JSON_RPC_STORAGE_ERROR),
-    )
-    return next(
-        (code for error_type, code in mappings if isinstance(error, error_type)),
-        JSON_RPC_UNEXPECTED_ERROR,
-    )
+    return error_descriptor(error).json_rpc_code
 
 
 def _error_message(error: Exception) -> str:
-    mappings: tuple[tuple[type[Exception] | tuple[type[Exception], ...], str], ...] = (
-        (SecretDetectedError, "Sensitive content blocked."),
-        ((ValidationError, ValidationFailedError, ValueError), "Validation failed."),
-        (InvalidConfigError, "Invalid configuration."),
-        (FactNotFoundError, "Fact not found."),
-        (SnapshotFailedError, "Snapshot failed."),
-        ((StorageError, OSError), "Storage error."),
-    )
-    return next(
-        (message for error_type, message in mappings if isinstance(error, error_type)),
-        "Unexpected error.",
-    )
+    return error_descriptor(error).mcp_message
 
 
 def _sanitize_error_detail(error: Exception) -> str:
-    if isinstance(error, SecretDetectedError):
-        return "Sensitive content was detected and blocked."
-    detail = (
-        getattr(error, "message", str(error))
-        if isinstance(error, UniversalMemoryError)
-        else str(error)
-    )
-    # Scrub Unix absolute paths
-    detail = re.sub(r"/(?:[^/\s:]+/)+[^/\s:]+", "<path>", detail)
-    # Scrub Windows absolute and UNC paths
-    detail = re.sub(r"(?:[a-zA-Z]:)?\\(?:[^\\\s:]+\\)+[^\\\s:]+", "<path>", detail)
-    detail = re.sub(r"\b(?:sk|pk)-[A-Za-z0-9_-]{6,}\b", "<secret>", detail)
-    return detail[:240]
+    return sanitize_error_detail(error)
