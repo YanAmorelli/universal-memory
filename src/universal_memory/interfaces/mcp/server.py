@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastmcp import FastMCP
-from mcp.types import TextContent
 
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
