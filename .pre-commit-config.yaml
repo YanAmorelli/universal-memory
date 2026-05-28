@@ -1,0 +1,6 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2 # Versão estável do hook
+    hooks:
+      - id: gitleaks
+        stages: [pre-push]
