@@ -25,3 +25,8 @@
 
 - Inefficient full-database scan to count facts: The status command fetches all facts in memory via `fact_repository.list()` and iterates over them to count them by scope and status. If a user has a massive repository history, this full scan will consume excessive memory and CPU. The repository interface should expose a lightweight count or metadata method instead. [src/universal_memory/application/memory/get_memory_status_use_case.py]
 
+## Deferred from: code review of 4-2-implementar-servidor-mcp-base-com-fastmcp.md (2026-05-28)
+
+- Tool calls catch-all wrapper prevents standard JSON-RPC error signaling: The server catches all exceptions and wraps them in a standard JSON response (`{"ok": False, "error": ...}`) within the success stream, rather than raising exceptions that the JSON-RPC host can catch and mark as failed tool executions. Returning a success status blocks the standard error handling flow of the MCP protocol. [src/universal_memory/interfaces/mcp/server.py:58]
+- Static project root binding prevents dynamic multi-project directory switching: The project root is statically bound at configuration time to `Path.cwd()`. Long-running MCP processes used across different editor windows or workspaces will always query the startup directory instead of dynamically adapting to the client's current file path. [src/universal_memory/bootstrap/mcp.py:26]
+
