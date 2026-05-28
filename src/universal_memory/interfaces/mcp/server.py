@@ -68,6 +68,7 @@ PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
+ToolResponse = dict[str, Any] | CallToolResult
 
 
 def _missing_use_case(_command: Any) -> Any:
@@ -101,7 +102,7 @@ def configure_server(  # noqa: PLR0915
     root = project_root or Path.cwd()
 
     @server.tool(name="initialize_project")
-    def initialize_project() -> dict[str, Any]:
+    def initialize_project() -> ToolResponse:
         """Initialize the local Universal Memory project layout."""
         try:
             result = use_cases.initialize_project(root)
@@ -114,7 +115,7 @@ def configure_server(  # noqa: PLR0915
             return _mcp_tool_error(error)
 
     @server.tool(name="status")
-    def status() -> dict[str, Any]:
+    def status() -> ToolResponse:
         """Expose local cognitive persistence memory initialization and health check status.
 
         Returns initialization state, fact counts, active rules, registered skills,
@@ -135,7 +136,7 @@ def configure_server(  # noqa: PLR0915
         scope: Literal["project", "global"] = "project",
         max_size_chars: int = DEFAULT_CONTEXT_MAX_SIZE_CHARS,
         agent_session_key: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> ToolResponse:
         """Assemble the active cognitive memory context for AI agent operations.
 
         Retrieves and compiles project-specific or global context facts, preferences,
@@ -163,7 +164,7 @@ def configure_server(  # noqa: PLR0915
         content: str,
         scope: Literal["project", "global"] = "project",
         tags: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> ToolResponse:
         """Persist a memory fact through the shared safe mutation pipeline."""
         try:
             fact_scope = _fact_scope(scope)
@@ -188,7 +189,7 @@ def configure_server(  # noqa: PLR0915
     def list_facts(
         scope: Literal["project", "global"] | None = None,
         status: Literal["active", "stale", "archived", "purged"] = "active",
-    ) -> dict[str, Any]:
+    ) -> ToolResponse:
         """List memory facts with optional scope and status filters."""
         try:
             fact_scope = _fact_scope_optional(scope)
@@ -208,7 +209,7 @@ def configure_server(  # noqa: PLR0915
         id: str | None = None,
         scope: Literal["project", "global"] | None = None,
         confirm: bool = False,
-    ) -> dict[str, Any]:
+    ) -> ToolResponse:
         """Purge one fact by id or all facts in a scope through the shared use case.
 
         Requires `confirm=True` to execute.
@@ -232,7 +233,7 @@ def configure_server(  # noqa: PLR0915
     @server.tool(name="list_audit_events")
     def list_audit_events(
         scope: Literal["project", "global"] = "project",
-    ) -> dict[str, Any]:
+    ) -> ToolResponse:
         """List audit events for a scope."""
         try:
             audit_scope = _audit_scope(scope)
@@ -248,7 +249,7 @@ def configure_server(  # noqa: PLR0915
     @server.tool(name="list_snapshots")
     def list_snapshots(
         scope: Literal["project", "global"] = "project",
-    ) -> dict[str, Any]:
+    ) -> ToolResponse:
         """List created snapshots for a scope."""
         try:
             snapshot_scope = _snapshot_scope(scope)
@@ -267,7 +268,7 @@ def configure_server(  # noqa: PLR0915
     def rollback_scope(
         scope: Literal["project", "global"] = "project",
         confirm: bool = False,
-    ) -> dict[str, Any]:
+    ) -> ToolResponse:
         """Rollback the latest created snapshot for a scope.
 
         Requires `confirm=True` to execute.
