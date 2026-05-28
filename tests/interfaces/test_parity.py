@@ -19,9 +19,11 @@ from universal_memory.application.memory import (
 )
 from universal_memory.application.onboarding import SetupProjectResult
 from universal_memory.application.security import (
+    AuditLogEntry,
     ListAuditLogResult,
     ListSnapshotsResult,
     RollbackResult,
+    SnapshotEntry,
 )
 from universal_memory.domain import SecretDetectedError
 from universal_memory.domain.entities import (
@@ -185,6 +187,7 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
 @pytest.mark.parametrize(
     ("cli_args", "mcp_tool", "mcp_args"),
     [
+        (["init", "--format", "json"], "initialize_project", {}),
         (["status", "--format", "json"], "status", {}),
         (["context", "--format", "json"], "context", {}),
         (
@@ -220,7 +223,7 @@ async def test_cli_and_mcp_json_data_keys_match_for_public_capabilities(  # noqa
 
     assert exit_code == 0
     assert mcp_payload is not None
-    assert set(cli_payload["data"]) == set(mcp_payload["data"])
+    assert_contract_data_equivalent(cli_payload["data"], mcp_payload["data"], capability=mcp_tool)
 
 
 @pytest.mark.anyio
@@ -254,8 +257,10 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
         ),
         "facts_list_command": lambda _command: ListFactsResult(facts=[fact_fixture()]),
         "facts_purge_command": lambda _command: PurgeFactResult(1, ["fact-1"], "audit-1"),
-        "audit_list_command": lambda _command: ListAuditLogResult(events=[]),
-        "snapshots_list_command": lambda _command: ListSnapshotsResult(snapshots=[]),
+        "audit_list_command": lambda _command: ListAuditLogResult(events=[audit_entry_fixture()]),
+        "snapshots_list_command": lambda _command: ListSnapshotsResult(
+            snapshots=[snapshot_entry_fixture()]
+        ),
         "rollback_command": lambda command: RollbackResult(
             scope=command.scope,
             snapshot_reference="snapshot-1",
@@ -279,8 +284,8 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         ),
         list_facts=lambda _command: ListFactsResult(facts=[fact_fixture()]),
         purge_fact=lambda _command: PurgeFactResult(1, ["fact-1"], "audit-1"),
-        list_audit_events=lambda _command: ListAuditLogResult(events=[]),
-        list_snapshots=lambda _command: ListSnapshotsResult(snapshots=[]),
+        list_audit_events=lambda _command: ListAuditLogResult(events=[audit_entry_fixture()]),
+        list_snapshots=lambda _command: ListSnapshotsResult(snapshots=[snapshot_entry_fixture()]),
         rollback_scope=lambda command: RollbackResult(
             scope=command.scope,
             snapshot_reference="snapshot-1",
@@ -288,6 +293,67 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
             audit_reference="audit-1",
         ),
     )
+
+
+def audit_entry_fixture() -> AuditLogEntry:
+    return AuditLogEntry(
+        timestamp="2026-05-28T12:00:00Z",
+        action="remember_fact",
+        scope="project",
+        origin="test",
+        result="success",
+        snapshot_reference="snapshot-1",
+        audit_reference="audit-1",
+    )
+
+
+def snapshot_entry_fixture() -> SnapshotEntry:
+    return SnapshotEntry(
+        timestamp="2026-05-28T12:00:00Z",
+        scope="project",
+        origin="test",
+        action="remember_fact",
+        relative_path=".umem/memory/facts.jsonl",
+        hash="abc123",
+        manifest_path=".umem/snapshots/manifest.json",
+    )
+
+
+def assert_contract_data_equivalent(
+    cli_data: dict[str, Any],
+    mcp_data: dict[str, Any],
+    *,
+    capability: str,
+) -> None:
+    assert set(cli_data) == set(mcp_data), (
+        f"{capability}: data keys differ; "
+        f"missing_in_mcp={sorted(set(cli_data) - set(mcp_data))} "
+        f"extra_in_mcp={sorted(set(mcp_data) - set(cli_data))}"
+    )
+    _assert_contract_shape(cli_data, mcp_data, path=capability)
+
+
+def _assert_contract_shape(left: Any, right: Any, *, path: str) -> None:
+    assert type(left) is type(right), (
+        f"{path}: type mismatch; CLI={type(left).__name__}, MCP={type(right).__name__}"
+    )
+    if isinstance(left, dict):
+        assert set(left) == set(right), (
+            f"{path}: object keys differ; "
+            f"missing_in_mcp={sorted(set(left) - set(right))} "
+            f"extra_in_mcp={sorted(set(right) - set(left))}"
+        )
+        for key in sorted(left):
+            _assert_contract_shape(left[key], right[key], path=f"{path}.{key}")
+        return
+    if isinstance(left, list):
+        assert len(left) == len(right), (
+            f"{path}: list length differs; CLI={len(left)}, MCP={len(right)}"
+        )
+        for index, (left_item, right_item) in enumerate(zip(left, right, strict=True)):
+            _assert_contract_shape(left_item, right_item, path=f"{path}[{index}]")
+        return
+    assert left == right, f"{path}: value mismatch; CLI={left!r}, MCP={right!r}"
 
 
 @pytest.mark.anyio

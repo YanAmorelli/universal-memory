@@ -978,12 +978,13 @@ def _facts_hygiene_success_envelope(
 
 
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
+    project_root = result.project_path
     return {
-        "project_path": _path_to_posix(result.project_path),
-        "config_path": _path_to_posix(result.config_path),
-        "memory_path": _path_to_posix(result.memory_path),
-        "audit_path": _path_to_posix(result.audit_path),
-        "snapshots_path": _path_to_posix(result.snapshots_path),
+        "project_path": _relative_path(result.project_path, project_root),
+        "config_path": _relative_path(result.config_path, project_root),
+        "memory_path": _relative_path(result.memory_path, project_root),
+        "audit_path": _relative_path(result.audit_path, project_root),
+        "snapshots_path": _relative_path(result.snapshots_path, project_root),
         "created": result.created_paths,
         "already_initialized": result.already_initialized,
         "audit_reference": AUDIT_REFERENCE_PLACEHOLDER,
@@ -1305,8 +1306,11 @@ def _error_message(error: Exception) -> str:
     return error_descriptor(error).cli_message
 
 
-def _path_to_posix(path: Path) -> str:
-    return path.as_posix()
+def _relative_path(path: Path, project_root: Path) -> str:
+    try:
+        return path.resolve().relative_to(project_root.resolve()).as_posix()
+    except (ValueError, OSError, RuntimeError):
+        return path.as_posix()
 
 
 def _audit_scope(value: str) -> AuditEventScope:
