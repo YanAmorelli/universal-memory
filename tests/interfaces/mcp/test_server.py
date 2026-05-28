@@ -18,6 +18,7 @@ from universal_memory.bootstrap.mcp import build_server
 from universal_memory.domain import SecretDetectedError
 from universal_memory.domain.entities import ContextSummary, ContextSummaryScope
 from universal_memory.interfaces.mcp.server import (
+    JSON_RPC_SECRET_DETECTED,
     MCPUseCases,
     configure_server,
     create_mcp_server,
@@ -149,7 +150,6 @@ async def test_context_tool_uses_injected_use_case_and_matches_cli_json_contract
             "project_summary": "Resumo do projeto",
             "universal_preferences": "Preferencias universais",
             "active_rules": "Regras ativas",
-            "context_markdown": "# MEMORY CONTEXT SUMMARY\nResumo do projeto",
             "source_fact_ids": ["fact-1", "fact-2"],
             "truncated": False,
             "token_estimate": 10,
@@ -178,7 +178,7 @@ async def test_mcp_errors_are_sanitized_without_absolute_paths_or_secret_values(
     assert payload is not None
 
     assert payload["ok"] is False
-    assert payload["error"]["code"] == "secret_detected"
+    assert payload["error"]["code"] == JSON_RPC_SECRET_DETECTED
     assert str(tmp_path) not in payload["error"]["detail"]
     assert secret not in payload["error"]["detail"]
 

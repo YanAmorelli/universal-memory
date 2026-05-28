@@ -30,3 +30,9 @@
 - Tool calls catch-all wrapper prevents standard JSON-RPC error signaling: The server catches all exceptions and wraps them in a standard JSON response (`{"ok": False, "error": ...}`) within the success stream, rather than raising exceptions that the JSON-RPC host can catch and mark as failed tool executions. Returning a success status blocks the standard error handling flow of the MCP protocol. [src/universal_memory/interfaces/mcp/server.py:58]
 - Static project root binding prevents dynamic multi-project directory switching: The project root is statically bound at configuration time to `Path.cwd()`. Long-running MCP processes used across different editor windows or workspaces will always query the startup directory instead of dynamically adapting to the client's current file path. [src/universal_memory/bootstrap/mcp.py:26]
 
+## Deferred from: code review of 4-3-implementar-matriz-de-paridade-cli-mcp.md (2026-05-28)
+
+- Localization Bleed (Portuguese in CLI Option Help vs English Codebase): The CLI help texts are written in Portuguese while the entire rest of the codebase (including MCP tools, options, JSON keys, and exception names) is designed in English. [src/universal_memory/interfaces/cli/init_command.py:195]
+- Crude and Hardcoded Token Count Estimation: Both CLI and MCP approximate token counts using a crude, hardcoded divide-by-four logic rather than leveraging a real tokenizer. [src/universal_memory/interfaces/cli/init_command.py:1008]
+- Hardcoded "not-implemented-yet" Placeholders in Production Contracts: The CLI `AUDIT_REFERENCE_PLACEHOLDER` and the MCP `_init_payload` both fallback to the hardcoded string "not-implemented-yet" for the `audit_reference` field, violating production contract readiness. [src/universal_memory/interfaces/cli/init_command.py:64]
+

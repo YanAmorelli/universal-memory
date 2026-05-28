@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+import sys
+import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -14,6 +16,21 @@ from universal_memory.application.memory import (
     AssembleContextSummaryResult,
     GetMemoryStatusCommand,
     GetMemoryStatusResult,
+    ListFactsCommand,
+    ListFactsResult,
+    PurgeFactCommand,
+    PurgeFactResult,
+    RememberFactCommand,
+    RememberFactResult,
+)
+from universal_memory.application.onboarding.setup_project import SetupProjectResult
+from universal_memory.application.security import (
+    ListAuditLogCommand,
+    ListAuditLogResult,
+    ListSnapshotsCommand,
+    ListSnapshotsResult,
+    RollbackCommand,
+    RollbackResult,
 )
 from universal_memory.domain import (
     FactNotFoundError,
@@ -24,33 +41,80 @@ from universal_memory.domain import (
     UniversalMemoryError,
     ValidationFailedError,
 )
-from universal_memory.domain.entities import ContextSummaryScope
+from universal_memory.domain.entities import (
+    AuditEventScope,
+    ContextSummaryScope,
+    FactScope,
+    FactStatus,
+    SnapshotScope,
+    SnapshotStatus,
+)
 from universal_memory.domain.entities.base import format_utc_iso
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 TOKEN_ESTIMATE_CHARS = 4
+JSON_RPC_SECRET_DETECTED = -32010
+JSON_RPC_SNAPSHOT_FAILED = -32020
+JSON_RPC_VALIDATION_FAILED = -32602
+JSON_RPC_FACT_NOT_FOUND = -32040
+JSON_RPC_INVALID_CONFIG = -32050
+JSON_RPC_STORAGE_ERROR = -32060
+JSON_RPC_UNEXPECTED_ERROR = -32603
 
+SetupProjectCommandHandler = Callable[[Path], SetupProjectResult]
 StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
 ContextCommandHandler = Callable[[AssembleContextSummaryCommand], AssembleContextSummaryResult]
+RememberCommandHandler = Callable[[RememberFactCommand], RememberFactResult]
+ListFactsCommandHandler = Callable[[ListFactsCommand], ListFactsResult]
+PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
+ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
+ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
+RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
+
+
+def _missing_use_case(_command: Any) -> Any:
+    msg = "MCP use case dependency was not configured."
+    raise RuntimeError(msg)
 
 
 @dataclass(frozen=True, slots=True)
 class MCPUseCases:
     status: StatusCommandHandler
     context: ContextCommandHandler
+    initialize_project: SetupProjectCommandHandler = _missing_use_case
+    remember: RememberCommandHandler = _missing_use_case
+    list_facts: ListFactsCommandHandler = _missing_use_case
+    purge_fact: PurgeFactCommandHandler = _missing_use_case
+    list_audit_events: ListAuditLogCommandHandler = _missing_use_case
+    list_snapshots: ListSnapshotsCommandHandler = _missing_use_case
+    rollback_scope: RollbackCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
     return FastMCP(name)
 
 
-def configure_server(
+def configure_server(  # noqa: PLR0915
     server: FastMCP,
     use_cases: MCPUseCases,
     *,
     project_root: Path | None = None,
 ) -> FastMCP:
     root = project_root or Path.cwd()
+
+    @server.tool(name="initialize_project")
+    def initialize_project() -> dict[str, Any]:
+        """Initialize the local Universal Memory project layout."""
+        try:
+            result = use_cases.initialize_project(root)
+            return _success_envelope(
+                operation="init",
+                scope="project",
+                data=_init_payload(result, root),
+            )
+        except Exception as error:
+            traceback.print_exc(file=sys.stderr)
+            return _error_envelope(error)
 
     @server.tool(name="status")
     def status() -> dict[str, Any]:
@@ -67,6 +131,7 @@ def configure_server(
                 data=_status_payload(result),
             )
         except Exception as error:
+            traceback.print_exc(file=sys.stderr)
             return _error_envelope(error)
 
     @server.tool(name="context")
@@ -95,6 +160,139 @@ def configure_server(
                 data=_context_payload(result, max_size_chars=max_size_chars),
             )
         except Exception as error:
+            traceback.print_exc(file=sys.stderr)
+            return _error_envelope(error)
+
+    @server.tool(name="remember_fact")
+    def remember_fact(
+        content: str,
+        scope: Literal["project", "global"] = "project",
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Persist a memory fact through the shared safe mutation pipeline."""
+        try:
+            fact_scope = _fact_scope(scope)
+            result = use_cases.remember(
+                RememberFactCommand(
+                    content=content,
+                    scope=fact_scope,
+                    source="mcp",
+                    tags=tags or [],
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="remember",
+                scope=fact_scope.value,
+                data=_remember_payload(result),
+            )
+        except Exception as error:
+            traceback.print_exc(file=sys.stderr)
+            return _error_envelope(error)
+
+    @server.tool(name="list_facts")
+    def list_facts(
+        scope: Literal["project", "global"] | None = None,
+        status: Literal["active", "stale", "archived", "purged"] = "active",
+    ) -> dict[str, Any]:
+        """List memory facts with optional scope and status filters."""
+        try:
+            fact_scope = _fact_scope_optional(scope)
+            result = use_cases.list_facts(
+                ListFactsCommand(scope=fact_scope, status=FactStatus(status))
+            )
+            return _success_envelope(
+                operation="facts.list",
+                scope=fact_scope.value if fact_scope is not None else "all",
+                data={"facts": [_fact_payload(fact) for fact in result.facts]},
+            )
+        except Exception as error:
+            traceback.print_exc(file=sys.stderr)
+            return _error_envelope(error)
+
+    @server.tool(name="purge_fact")
+    def purge_fact(
+        id: str | None = None,
+        scope: Literal["project", "global"] | None = None,
+        confirm: bool = False,
+    ) -> dict[str, Any]:
+        """Purge one fact by id or all facts in a scope through the shared use case.
+
+        Requires `confirm=True` to execute.
+        """
+        try:
+            if not confirm:
+                raise ValidationFailedError(
+                    "Purging facts is destructive and requires explicit confirmation. "
+                    "Please call this tool with confirm=True."
+                )
+            fact_scope = _fact_scope_optional(scope)
+            result = use_cases.purge_fact(PurgeFactCommand(id=id, scope=fact_scope, origin="mcp"))
+            return _success_envelope(
+                operation="facts.purge",
+                scope=fact_scope.value if fact_scope is not None else "fact",
+                data=_purge_payload(result),
+            )
+        except Exception as error:
+            traceback.print_exc(file=sys.stderr)
+            return _error_envelope(error)
+
+    @server.tool(name="list_audit_events")
+    def list_audit_events(scope: Literal["project", "global"] = "project") -> dict[str, Any]:
+        """List audit events for a scope."""
+        try:
+            audit_scope = _audit_scope(scope)
+            result = use_cases.list_audit_events(ListAuditLogCommand(scope=audit_scope))
+            return _success_envelope(
+                operation="audit.list",
+                scope=audit_scope.value,
+                data={"events": [_entry_dict(event) for event in result.events]},
+            )
+        except Exception as error:
+            traceback.print_exc(file=sys.stderr)
+            return _error_envelope(error)
+
+    @server.tool(name="list_snapshots")
+    def list_snapshots(scope: Literal["project", "global"] = "project") -> dict[str, Any]:
+        """List created snapshots for a scope."""
+        try:
+            snapshot_scope = _snapshot_scope(scope)
+            result = use_cases.list_snapshots(
+                ListSnapshotsCommand(scope=snapshot_scope, status=SnapshotStatus.created)
+            )
+            return _success_envelope(
+                operation="snapshots.list",
+                scope=snapshot_scope.value,
+                data={"snapshots": [_entry_dict(snapshot) for snapshot in result.snapshots]},
+            )
+        except Exception as error:
+            traceback.print_exc(file=sys.stderr)
+            return _error_envelope(error)
+
+    @server.tool(name="rollback_scope")
+    def rollback_scope(
+        scope: Literal["project", "global"] = "project",
+        confirm: bool = False,
+    ) -> dict[str, Any]:
+        """Rollback the latest created snapshot for a scope.
+
+        Requires `confirm=True` to execute.
+        """
+        try:
+            if not confirm:
+                raise ValidationFailedError(
+                    "Rolling back a scope is destructive and requires explicit confirmation. "
+                    "Please call this tool with confirm=True."
+                )
+            snapshot_scope = _snapshot_scope(scope)
+            result = use_cases.rollback_scope(RollbackCommand(scope=snapshot_scope, origin="mcp"))
+            return _success_envelope(
+                operation="rollback",
+                scope=snapshot_scope.value,
+                data=_rollback_payload(result),
+            )
+        except Exception as error:
+            traceback.print_exc(file=sys.stderr)
             return _error_envelope(error)
 
     return server
@@ -141,7 +339,6 @@ def _context_payload(
         "project_summary": summary.project_summary,
         "universal_preferences": summary.universal_preferences,
         "active_rules": summary.active_rules,
-        "context_markdown": result.context_markdown,
         "source_fact_ids": result.included_fact_ids,
         "truncated": markdown_size >= max_size_chars,
         "token_estimate": max(1, round(markdown_size / TOKEN_ESTIMATE_CHARS)),
@@ -149,12 +346,115 @@ def _context_payload(
     }
 
 
+def _init_payload(result: SetupProjectResult, project_root: Path) -> dict[str, Any]:
+    return {
+        "project_path": _relative_path(result.project_path, project_root),
+        "config_path": _relative_path(result.config_path, project_root),
+        "memory_path": _relative_path(result.memory_path, project_root),
+        "audit_path": _relative_path(result.audit_path, project_root),
+        "snapshots_path": _relative_path(result.snapshots_path, project_root),
+        "created": result.created_paths,
+        "already_initialized": result.already_initialized,
+        "audit_reference": "not-implemented-yet",
+    }
+
+
+def _remember_payload(result: RememberFactResult) -> dict[str, Any]:
+    fact = result.fact
+    return {
+        "fact_id": fact.id,
+        "scope": fact.scope.value,
+        "status": fact.status.value,
+        "tags": fact.tags,
+        "created_at": format_utc_iso(fact.created_at),
+        "audit_reference": result.audit_reference,
+    }
+
+
+def _fact_payload(fact: Any) -> dict[str, Any]:
+    return {
+        "id": fact.id,
+        "content": fact.content,
+        "scope": fact.scope.value,
+        "source": fact.source,
+        "status": fact.status.value,
+        "recurrence_count": fact.recurrence_count,
+        "tags": fact.tags,
+        "metadata": fact.metadata,
+        "created_at": format_utc_iso(fact.created_at),
+        "updated_at": format_utc_iso(fact.updated_at),
+    }
+
+
+def _purge_payload(result: PurgeFactResult) -> dict[str, Any]:
+    return {
+        "purged_count": result.purged_count,
+        "affected_ids": result.affected_ids,
+        "audit_reference": result.audit_reference,
+    }
+
+
+def _rollback_payload(result: RollbackResult) -> dict[str, Any]:
+    return {
+        "scope": result.scope.value,
+        "snapshot_reference": result.snapshot_reference,
+        "restored_paths": result.restored_paths,
+        "audit_reference": result.audit_reference,
+    }
+
+
+def _entry_dict(entry: Any) -> dict[str, Any]:
+    if hasattr(entry, "model_dump"):
+        return entry.model_dump()
+    return asdict(entry)
+
+
+def _relative_path(path: Path, project_root: Path) -> str:
+    try:
+        return path.resolve().relative_to(project_root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def _context_scope(value: Literal["project", "global"]) -> ContextSummaryScope:
-    normalized = value.lower()
+    normalized = str(value).lower()
     if normalized == "global":
         return ContextSummaryScope.global_
     if normalized == "project":
         return ContextSummaryScope.project
+    raise ValidationFailedError("scope must be 'project' or 'global'.")
+
+
+def _fact_scope(value: Literal["project", "global"]) -> FactScope:
+    normalized = str(value).lower()
+    if normalized == "global":
+        return FactScope.global_
+    if normalized == "project":
+        return FactScope.project
+    raise ValidationFailedError("scope must be 'project' or 'global'.")
+
+
+def _fact_scope_optional(value: Literal["project", "global"] | None) -> FactScope | None:
+    if value is None:
+        return None
+    return _fact_scope(value)
+
+
+def _audit_scope(value: Literal["project", "global"]) -> AuditEventScope:
+    normalized = str(value).lower()
+    if normalized == "global":
+        return AuditEventScope.global_
+    if normalized == "project":
+        return AuditEventScope.project
+    raise ValidationFailedError("scope must be 'project' or 'global'.")
+
+
+def _snapshot_scope(value: Literal["project", "global"]) -> SnapshotScope:
+    normalized = str(value).lower()
+    if normalized == "global":
+        return SnapshotScope.global_
+    if normalized == "project":
+        return SnapshotScope.project
     raise ValidationFailedError("scope must be 'project' or 'global'.")
 
 
@@ -167,34 +467,36 @@ def _error_envelope(error: Exception) -> dict[str, Any]:
             "code": _error_code(error),
             "message": _error_message(error),
             "detail": _sanitize_error_detail(error),
+            "recovery_hint": getattr(error, "recovery_hint", None),
+            "audit_reference": getattr(error, "audit_reference", None),
         },
         "warnings": [],
     }
 
 
-def _error_code(error: Exception) -> str:
-    mappings: tuple[tuple[type[Exception] | tuple[type[Exception], ...], str], ...] = (
-        (SecretDetectedError, "secret_detected"),
-        ((ValidationError, ValidationFailedError), "validation_failed"),
-        (InvalidConfigError, "invalid_config"),
-        (FactNotFoundError, "fact_not_found"),
-        (SnapshotFailedError, "snapshot_failed"),
-        (StorageError, "storage_error"),
+def _error_code(error: Exception) -> int:
+    mappings: tuple[tuple[type[Exception] | tuple[type[Exception], ...], int], ...] = (
+        (SecretDetectedError, JSON_RPC_SECRET_DETECTED),
+        (SnapshotFailedError, JSON_RPC_SNAPSHOT_FAILED),
+        ((ValidationError, ValidationFailedError, ValueError), JSON_RPC_VALIDATION_FAILED),
+        (FactNotFoundError, JSON_RPC_FACT_NOT_FOUND),
+        (InvalidConfigError, JSON_RPC_INVALID_CONFIG),
+        ((StorageError, OSError), JSON_RPC_STORAGE_ERROR),
     )
     return next(
         (code for error_type, code in mappings if isinstance(error, error_type)),
-        "unexpected_error",
+        JSON_RPC_UNEXPECTED_ERROR,
     )
 
 
 def _error_message(error: Exception) -> str:
     mappings: tuple[tuple[type[Exception] | tuple[type[Exception], ...], str], ...] = (
         (SecretDetectedError, "Sensitive content blocked."),
-        ((ValidationError, ValidationFailedError), "Validation failed."),
+        ((ValidationError, ValidationFailedError, ValueError), "Validation failed."),
         (InvalidConfigError, "Invalid configuration."),
         (FactNotFoundError, "Fact not found."),
         (SnapshotFailedError, "Snapshot failed."),
-        (StorageError, "Storage error."),
+        ((StorageError, OSError), "Storage error."),
     )
     return next(
         (message for error_type, message in mappings if isinstance(error, error_type)),
@@ -205,7 +507,11 @@ def _error_message(error: Exception) -> str:
 def _sanitize_error_detail(error: Exception) -> str:
     if isinstance(error, SecretDetectedError):
         return "Sensitive content was detected and blocked."
-    detail = getattr(error, "message", str(error)) if isinstance(error, UniversalMemoryError) else str(error)
+    detail = (
+        getattr(error, "message", str(error))
+        if isinstance(error, UniversalMemoryError)
+        else str(error)
+    )
     # Scrub Unix absolute paths
     detail = re.sub(r"/(?:[^/\s:]+/)+[^/\s:]+", "<path>", detail)
     # Scrub Windows absolute and UNC paths

@@ -7,10 +7,19 @@ from fastmcp import FastMCP
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     GetMemoryStatusUseCase,
+    ListFactsUseCase,
+    PurgeFactUseCase,
+    RememberFactUseCase,
 )
-from universal_memory.application.security import SafeWriteUseCase
+from universal_memory.application.onboarding.setup_project import setup_project
+from universal_memory.application.security import (
+    ListAuditLogUseCase,
+    ListSnapshotsUseCase,
+    RollbackUseCase,
+    SafeWriteUseCase,
+)
 from universal_memory.bootstrap.cli import EmptyLatentSkillRepository, EmptyRuleRepository
-from universal_memory.infrastructure.config import LocalProjectLayoutPort
+from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
     LocalAuditLogRepository,
@@ -62,9 +71,48 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             data_root=data_root,
         ),
     )
+    remember_use_case = RememberFactUseCase(
+        fact_repository=fact_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
+    facts_list_use_case = ListFactsUseCase(fact_repository=fact_repository)
+    facts_purge_use_case = PurgeFactUseCase(fact_repository=fact_repository)
+    audit_list_use_case = ListAuditLogUseCase(audit_log_repository=audit_log_repository)
+    manifest_file = data_root / "snapshots" / "manifest.json"
+    try:
+        manifest_rel_path = str(manifest_file.relative_to(root))
+    except ValueError:
+        manifest_rel_path = manifest_file.as_posix()
+    snapshots_list_use_case = ListSnapshotsUseCase(
+        snapshot_repository=snapshot_repository,
+        manifest_path=manifest_rel_path,
+    )
+    rollback_use_case = RollbackUseCase(
+        project_root=root,
+        snapshot_repository=snapshot_repository,
+        audit_log_repository=audit_log_repository,
+    )
+
+    def initialize_project(project_root: Path):
+        return setup_project(
+            project_root,
+            layout_port=layout_port,
+            config_validation_port=LocalConfigValidationPort(),
+        )
+
     return configure_server(
         create_mcp_server(),
-        MCPUseCases(status=status_use_case.execute, context=context_use_case.execute),
+        MCPUseCases(
+            initialize_project=initialize_project,
+            status=status_use_case.execute,
+            context=context_use_case.execute,
+            remember=remember_use_case.execute,
+            list_facts=facts_list_use_case.execute,
+            purge_fact=facts_purge_use_case.execute,
+            list_audit_events=audit_list_use_case.execute,
+            list_snapshots=snapshots_list_use_case.execute,
+            rollback_scope=rollback_use_case.execute,
+        ),
         project_root=root,
     )
 
