@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastmcp import FastMCP
-from mcp.types import CallToolResult, TextContent
+from mcp.types import TextContent
 
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
@@ -68,7 +68,7 @@ PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
-ToolResponse = dict[str, Any] | CallToolResult
+ToolResponse = dict[str, Any]
 
 
 def _missing_use_case(_command: Any) -> Any:
@@ -462,18 +462,17 @@ def _error_envelope(error: Exception) -> dict[str, Any]:
     }
 
 
-def _mcp_tool_error(error: Exception) -> CallToolResult:
+def _mcp_tool_error(error: Exception) -> dict[str, Any]:
     if _error_code(error) == JSON_RPC_UNEXPECTED_ERROR:
         traceback.print_exc(file=sys.stderr)
     else:
         print(f"{type(error).__name__}: {_sanitize_error_detail(error)}", file=sys.stderr)
 
     payload = json_rpc_error_payload(error)
-    return CallToolResult(
-        content=[TextContent(type="text", text=payload["message"])],
-        structuredContent={"ok": False, "error": payload},
-        isError=True,
-    )
+    return {
+        "ok": False,
+        "error": payload,
+    }
 
 
 def _error_code(error: Exception) -> int:
