@@ -1,12 +1,17 @@
-import argparse
 import json
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
+import click
+import typer
 from pydantic import ValidationError
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from universal_memory.application.memory import (
     ContextHygieneCommand,
@@ -35,6 +40,7 @@ from universal_memory.domain import (
     FactNotFoundError,
     InvalidConfigError,
     ProjectLayoutPort,
+    SecretDetectedError,
     SnapshotFailedError,
     StorageError,
     ValidationFailedError,
@@ -59,9 +65,20 @@ StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
 ListFactsCommandHandler = Callable[[ListFactsCommand], ListFactsResult]
 PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneResult]
+OutputFormatOption = Annotated[
+    str | None,
+    typer.Option(
+        "--format",
+        "-f",
+        help="Formato de saida.",
+        case_sensitive=False,
+        click_type=click.Choice(["human", "json"], case_sensitive=False),
+    ),
+]
+YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Ignorar confirmacao interativa.")]
 
 
-def main(  # noqa: PLR0911, PLR0912, PLR0913
+def main(  # noqa: PLR0913
     argv: Sequence[str] | None = None,
     *,
     setup_project_command: SetupProjectCommand | None = None,
@@ -74,88 +91,255 @@ def main(  # noqa: PLR0911, PLR0912, PLR0913
     facts_purge_command: PurgeFactCommandHandler | None = None,
     facts_hygiene_command: ContextHygieneCommandHandler | None = None,
 ) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
+    app = create_typer_app(
+        setup_project_command=setup_project_command,
+        audit_list_command=audit_list_command,
+        snapshots_list_command=snapshots_list_command,
+        rollback_command=rollback_command,
+        rollback_preview_command=rollback_preview_command,
+        status_command=status_command,
+        facts_list_command=facts_list_command,
+        facts_purge_command=facts_purge_command,
+        facts_hygiene_command=facts_hygiene_command,
+    )
+    try:
+        result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
+    except click.exceptions.ClickException as e:
+        _stderr_console().print(f"[bold red]Erro:[/bold red] {e.format_message()}")
+        return e.exit_code
+    except click.exceptions.Exit as exit_error:
+        code = exit_error.exit_code
+        return int(code) if code is not None else 0
+    except RuntimeError:
+        raise
+    except Exception as e:
+        _stderr_console().print(f"[bold red]Erro inesperado:[/bold red] {e}")
+        return 1
+    if isinstance(result, int):
+        return result
+    return 0
 
-    if args.command == "init":
+
+def create_typer_app(  # noqa: PLR0913, PLR0915
+    *,
+    setup_project_command: SetupProjectCommand | None = None,
+    audit_list_command: ListAuditLogCommandHandler | None = None,
+    snapshots_list_command: ListSnapshotsCommandHandler | None = None,
+    rollback_command: RollbackCommandHandler | None = None,
+    rollback_preview_command: RollbackPreviewHandler | None = None,
+    status_command: StatusCommandHandler | None = None,
+    facts_list_command: ListFactsCommandHandler | None = None,
+    facts_purge_command: PurgeFactCommandHandler | None = None,
+    facts_hygiene_command: ContextHygieneCommandHandler | None = None,
+) -> typer.Typer:
+    app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
+    facts_app = typer.Typer(help="Gerenciar fatos de memoria")
+    audit_app = typer.Typer(help="Inspecionar eventos de auditoria")
+    snapshots_app = typer.Typer(help="Inspecionar snapshots")
+
+    app.add_typer(facts_app, name="facts")
+    app.add_typer(audit_app, name="audit")
+    app.add_typer(snapshots_app, name="snapshots")
+
+    @app.callback()
+    def callback(
+        ctx: typer.Context,
+        output_format: Annotated[
+            str,
+            typer.Option(
+                "--format",
+                "-f",
+                help="Formato global de saida.",
+                case_sensitive=False,
+                click_type=click.Choice(["human", "json"], case_sensitive=False),
+            ),
+        ] = "human",
+    ) -> None:
+        ctx.obj = {"output_format": output_format.lower()}
+
+    @app.command("init")
+    def init_command(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
         if setup_project_command is None:
             msg = "CLI setup_project_command dependency was not configured."
             raise RuntimeError(msg)
-        command = setup_project_command
-        return _run_init(command, output_format=args.output_format)
+        raise typer.Exit(
+            code=_run_init(setup_project_command, _effective_format(ctx, output_format))
+        )
 
-    if args.command == "status":
+    @app.command("status")
+    def status(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
         if status_command is None:
             msg = "CLI status_command dependency was not configured."
             raise RuntimeError(msg)
-        return _run_status(status_command, output_format=args.output_format)
+        raise typer.Exit(
+            code=_run_status(status_command, output_format=_effective_format(ctx, output_format))
+        )
 
-    if args.command == "facts" and args.facts_command == "list":
+    @facts_app.command("list")
+    def facts_list(
+        ctx: typer.Context,
+        scope: Annotated[
+            str | None,
+            typer.Option(
+                "--scope",
+                help="Filtro de escopo.",
+                click_type=click.Choice(["project", "global"], case_sensitive=False),
+            ),
+        ] = None,
+        status: Annotated[
+            str | None,
+            typer.Option(
+                "--status",
+                help="Filtro de status.",
+                click_type=click.Choice(
+                    ["active", "stale", "archived", "purged"], case_sensitive=False
+                ),
+            ),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
         if facts_list_command is None:
             msg = "CLI facts_list_command dependency was not configured."
             raise RuntimeError(msg)
-        return _run_facts_list(
-            facts_list_command,
-            output_format=args.output_format,
-            scope=_fact_scope(args.scope),
-            status=_fact_status(args.status) if args.status is not None else FactStatus.active,
+        raise typer.Exit(
+            code=_run_facts_list(
+                facts_list_command,
+                output_format=_effective_format(ctx, output_format),
+                scope=_fact_scope(scope),
+                status=_fact_status(status) if status is not None else FactStatus.active,
+            )
         )
 
-    if args.command == "facts" and args.facts_command == "purge":
+    @facts_app.command("purge")
+    def facts_purge(
+        ctx: typer.Context,
+        id: Annotated[str | None, typer.Option("--id", help="ID do fato para purgar.")] = None,
+        scope: Annotated[
+            str | None,
+            typer.Option(
+                "--scope",
+                help="Escopo para purgar.",
+                click_type=click.Choice(["project", "global"], case_sensitive=False),
+            ),
+        ] = None,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
         if facts_purge_command is None:
             msg = "CLI facts_purge_command dependency was not configured."
             raise RuntimeError(msg)
-        return _run_facts_purge(
-            facts_purge_command,
-            output_format=args.output_format,
-            id=args.id,
-            scope=_fact_scope(args.scope),
-            yes=args.yes,
+        if (id is None and scope is None) or (id is not None and scope is not None):
+            _print_expected_error(
+                ValidationFailedError("Informe exatamente uma opcao: --id ou --scope."),
+                output_format=_effective_format(ctx, output_format),
+            )
+            raise typer.Exit(code=1)
+        raise typer.Exit(
+            code=_run_facts_purge(
+                facts_purge_command,
+                output_format=_effective_format(ctx, output_format),
+                id=id,
+                scope=_fact_scope(scope),
+                yes=yes,
+            )
         )
 
-    if args.command == "facts" and args.facts_command == "hygiene":
+    @facts_app.command("hygiene")
+    def facts_hygiene(
+        ctx: typer.Context,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
         if facts_hygiene_command is None:
             msg = "CLI facts_hygiene_command dependency was not configured."
             raise RuntimeError(msg)
-        return _run_facts_hygiene(facts_hygiene_command, output_format=args.output_format)
+        raise typer.Exit(
+            code=_run_facts_hygiene(
+                facts_hygiene_command,
+                output_format=_effective_format(ctx, output_format),
+                yes=yes,
+            )
+        )
 
-    if args.command == "audit" and args.audit_command == "list":
+    @audit_app.command("list")
+    def audit_list(
+        ctx: typer.Context,
+        scope: Annotated[
+            str,
+            typer.Option(
+                "--scope",
+                help="Filtro de escopo.",
+                click_type=click.Choice(["project", "global"], case_sensitive=False),
+            ),
+        ] = "project",
+        output_format: OutputFormatOption = None,
+    ) -> None:
         if audit_list_command is None:
             msg = "CLI audit_list_command dependency was not configured."
             raise RuntimeError(msg)
-        return _run_audit_list(
-            audit_list_command,
-            output_format=args.output_format,
-            scope=_audit_scope(args.scope),
+        raise typer.Exit(
+            code=_run_audit_list(
+                audit_list_command,
+                output_format=_effective_format(ctx, output_format),
+                scope=_audit_scope(scope),
+            )
         )
 
-    if args.command == "snapshots" and args.snapshots_command == "list":
+    @snapshots_app.command("list")
+    def snapshots_list(
+        ctx: typer.Context,
+        scope: Annotated[
+            str,
+            typer.Option(
+                "--scope",
+                help="Filtro de escopo.",
+                click_type=click.Choice(["project", "global"], case_sensitive=False),
+            ),
+        ] = "project",
+        output_format: OutputFormatOption = None,
+    ) -> None:
         if snapshots_list_command is None:
             msg = "CLI snapshots_list_command dependency was not configured."
             raise RuntimeError(msg)
-        return _run_snapshots_list(
-            snapshots_list_command,
-            output_format=args.output_format,
-            scope=_snapshot_scope(args.scope),
+        raise typer.Exit(
+            code=_run_snapshots_list(
+                snapshots_list_command,
+                output_format=_effective_format(ctx, output_format),
+                scope=_snapshot_scope(scope),
+            )
         )
 
-    if args.command == "rollback":
+    @app.command("rollback")
+    def rollback(
+        ctx: typer.Context,
+        scope: Annotated[
+            str,
+            typer.Option(
+                "--scope",
+                help="Escopo para rollback.",
+                click_type=click.Choice(["project", "global"], case_sensitive=False),
+            ),
+        ] = "project",
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
         if rollback_command is None:
             msg = "CLI rollback_command dependency was not configured."
             raise RuntimeError(msg)
         if rollback_preview_command is None:
             msg = "CLI rollback_preview_command dependency was not configured."
             raise RuntimeError(msg)
-        return _run_rollback(
-            rollback_command,
-            rollback_preview_command=rollback_preview_command,
-            output_format=args.output_format,
-            scope=_snapshot_scope(args.scope),
-            yes=args.yes,
+        raise typer.Exit(
+            code=_run_rollback(
+                rollback_command,
+                rollback_preview_command=rollback_preview_command,
+                output_format=_effective_format(ctx, output_format),
+                scope=_snapshot_scope(scope),
+                yes=yes,
+            )
         )
 
-    parser.print_help()
-    return 0
+    return app
 
 
 def build_main(  # noqa: PLR0913
@@ -193,141 +377,6 @@ def build_main(  # noqa: PLR0913
     return configured_main
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="umem")
-    subparsers = parser.add_subparsers(dest="command")
-
-    init_parser = subparsers.add_parser("init", help="Initialize local universal-memory state")
-    init_parser.add_argument(
-        "--format",
-        choices=["human", "json"],
-        default="human",
-        dest="output_format",
-        help="Output format",
-    )
-
-    status_parser = subparsers.add_parser("status", help="Inspect local memory status")
-    status_parser.add_argument(
-        "--format",
-        choices=["human", "json"],
-        default="human",
-        dest="output_format",
-        help="Output format",
-    )
-
-    facts_parser = subparsers.add_parser("facts", help="Gerenciar fatos de memoria")
-    facts_subparsers = facts_parser.add_subparsers(dest="facts_command")
-    facts_list_parser = facts_subparsers.add_parser("list", help="Listar fatos")
-    facts_list_parser.add_argument(
-        "--scope",
-        choices=["project", "global"],
-        default=None,
-        help="Scope filter",
-    )
-    facts_list_parser.add_argument(
-        "--status",
-        choices=["active", "stale", "archived", "purged"],
-        default=None,
-        help="Status filter",
-    )
-    facts_list_parser.add_argument(
-        "--format",
-        choices=["human", "json"],
-        default="human",
-        dest="output_format",
-        help="Output format",
-    )
-
-    facts_purge_parser = facts_subparsers.add_parser("purge", help="Purgar fatos")
-    facts_purge_target = facts_purge_parser.add_mutually_exclusive_group(required=True)
-    facts_purge_target.add_argument("--id", default=None, help="Fact ID to purge")
-    facts_purge_target.add_argument(
-        "--scope",
-        choices=["project", "global"],
-        default=None,
-        help="Scope to purge",
-    )
-    facts_purge_parser.add_argument(
-        "--format",
-        choices=["human", "json"],
-        default="human",
-        dest="output_format",
-        help="Output format",
-    )
-    facts_purge_parser.add_argument(
-        "--yes",
-        "-y",
-        action="store_true",
-        help="Skip interactive confirmation",
-    )
-
-    facts_hygiene_parser = facts_subparsers.add_parser("hygiene", help="Executar higiene")
-    facts_hygiene_parser.add_argument(
-        "--format",
-        choices=["human", "json"],
-        default="human",
-        dest="output_format",
-        help="Output format",
-    )
-
-    audit_parser = subparsers.add_parser("audit", help="Inspect audit events")
-    audit_subparsers = audit_parser.add_subparsers(dest="audit_command")
-    audit_list_parser = audit_subparsers.add_parser("list", help="List audit events")
-    audit_list_parser.add_argument(
-        "--format",
-        choices=["human", "json"],
-        default="human",
-        dest="output_format",
-        help="Output format",
-    )
-    audit_list_parser.add_argument(
-        "--scope",
-        choices=["project", "global"],
-        default="project",
-        help="Scope filter",
-    )
-
-    snapshots_parser = subparsers.add_parser("snapshots", help="Inspect snapshots")
-    snapshots_subparsers = snapshots_parser.add_subparsers(dest="snapshots_command")
-    snapshots_list_parser = snapshots_subparsers.add_parser("list", help="List snapshots")
-    snapshots_list_parser.add_argument(
-        "--format",
-        choices=["human", "json"],
-        default="human",
-        dest="output_format",
-        help="Output format",
-    )
-    snapshots_list_parser.add_argument(
-        "--scope",
-        choices=["project", "global"],
-        default="project",
-        help="Scope filter",
-    )
-
-    rollback_parser = subparsers.add_parser("rollback", help="Restore latest snapshot")
-    rollback_parser.add_argument(
-        "--format",
-        choices=["human", "json"],
-        default="human",
-        dest="output_format",
-        help="Output format",
-    )
-    rollback_parser.add_argument(
-        "--scope",
-        choices=["project", "global"],
-        default="project",
-        help="Scope to roll back",
-    )
-    rollback_parser.add_argument(
-        "--yes",
-        "-y",
-        action="store_true",
-        help="Skip interactive confirmation",
-    )
-
-    return parser
-
-
 def _build_setup_project_command(
     *,
     layout_port: ProjectLayoutPort,
@@ -343,20 +392,58 @@ def _build_setup_project_command(
     return command
 
 
+def _effective_format(ctx: typer.Context | None, output_format: str | None) -> str:
+    if output_format is not None:
+        return output_format.lower()
+    if ctx is None:
+        return "human"
+    if isinstance(ctx.obj, dict):
+        return str(ctx.obj.get("output_format", "human")).lower()
+    parent = ctx.parent
+    while parent is not None:
+        if isinstance(parent.obj, dict):
+            return str(parent.obj.get("output_format", "human")).lower()
+        parent = parent.parent
+    return "human"
+
+
+def _stdout_console() -> Console:
+    return Console(file=sys.stdout, width=200)
+
+
+def _stderr_console() -> Console:
+    return Console(file=sys.stderr, width=200)
+
+
+def _confirm(prompt: str, default: bool = False) -> bool:
+    try:
+        answer = input(prompt)
+    except (EOFError, KeyboardInterrupt):
+        return False
+    val = answer.strip().lower()
+    if not val:
+        return default
+    return val in {"s", "sim", "y", "yes"}
+
+
 def _run_init(command: SetupProjectCommand, output_format: str) -> int:
     try:
-        result = command(Path.cwd())
+        if output_format == "json":
+            result = command(Path.cwd())
+        else:
+            with _stderr_console().status("Inicializando scaffold do projeto...", spinner="dots"):
+                result = command(Path.cwd())
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (InvalidConfigError, StorageError, ValidationFailedError) as error:
+    except (InvalidConfigError, SecretDetectedError, StorageError, ValidationFailedError) as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
     if output_format == "json":
         print(json.dumps(_success_envelope(result), sort_keys=True))
     else:
-        print(_format_human_init_output(result))
+        _stdout_console().print(_format_human_init_output(result))
 
     return 0
 
@@ -367,7 +454,7 @@ def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except StorageError as error:
+    except (SecretDetectedError, StorageError, InvalidConfigError) as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -382,7 +469,7 @@ def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
     if output_format == "json":
         print(json.dumps(_status_success_envelope(result), sort_keys=True))
     else:
-        print(_format_human_status_output(result))
+        _stdout_console().print(_format_human_status_output(result))
 
     return 0
 
@@ -399,7 +486,7 @@ def _run_facts_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except StorageError as error:
+    except (SecretDetectedError, StorageError) as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -409,7 +496,7 @@ def _run_facts_list(
     if output_format == "json":
         print(json.dumps(_facts_list_success_envelope(result, scope=scope), sort_keys=True))
     else:
-        print(_format_human_facts_list_output(result))
+        _stdout_console().print(_format_human_facts_list_output(result))
 
     return 0
 
@@ -428,48 +515,62 @@ def _run_facts_purge(
                 "A flag --yes / -y e obrigatoria para executar purge com saida JSON."
             )
         if output_format != "json":
-            print(_format_human_purge_preview(id=id, scope=scope))
+            _stdout_console().print(_format_human_purge_preview(id=id, scope=scope))
             if not yes:
-                try:
-                    answer = input("Confirmar purga permanente? [y/N]: ")
-                except (EOFError, KeyboardInterrupt):
-                    print("\nPurga cancelada.")
-                    return 1
-                if answer.strip().lower() not in {"s", "sim", "y", "yes"}:
-                    print("Purga cancelada.")
+                if not _confirm("Confirmar purga permanente? [y/N]: ", default=False):
+                    _stdout_console().print("Purga cancelada.")
                     return 1
 
         result = command(PurgeFactCommand(id=id, scope=scope, origin="cli"))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (FactNotFoundError, StorageError, ValidationFailedError) as error:
+    except (FactNotFoundError, SecretDetectedError, StorageError, ValidationFailedError) as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
     if output_format == "json":
         print(json.dumps(_facts_purge_success_envelope(result, scope=scope), sort_keys=True))
     else:
-        print(_format_human_purge_success(result))
+        _stdout_console().print(_format_human_purge_success(result))
 
     return 0
 
 
-def _run_facts_hygiene(command: ContextHygieneCommandHandler, *, output_format: str) -> int:
+def _run_facts_hygiene(
+    command: ContextHygieneCommandHandler,
+    *,
+    output_format: str,
+    yes: bool,
+) -> int:
     scope = FactScope.project
     try:
-        result = command(ContextHygieneCommand(scope=scope))
+        if output_format != "json":
+            _stdout_console().print(
+                "[yellow]Aviso: A execucao de fatos higiene ira otimizar e limpar "
+                "o contexto de memoria, podendo arquivar fatos obsoletos.[/yellow]"
+            )
+            if not yes:
+                if not _confirm("Deseja prosseguir com a higiene? [s/N]: ", default=False):
+                    _stdout_console().print("Higiene cancelada.")
+                    return 1
+
+        if output_format == "json":
+            result = command(ContextHygieneCommand(scope=scope))
+        else:
+            with _stderr_console().status("Executando higiene de contexto...", spinner="dots"):
+                result = command(ContextHygieneCommand(scope=scope))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except StorageError as error:
+    except (SecretDetectedError, StorageError, ValidationFailedError, InvalidConfigError) as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
     if output_format == "json":
         print(json.dumps(_facts_hygiene_success_envelope(result, scope=scope), sort_keys=True))
     else:
-        print(_format_human_hygiene_success(result))
+        _stdout_console().print(_format_human_hygiene_success(result))
 
     return 0
 
@@ -485,7 +586,7 @@ def _run_audit_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except StorageError as error:
+    except (SecretDetectedError, StorageError) as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -495,7 +596,7 @@ def _run_audit_list(
     if output_format == "json":
         print(json.dumps(_audit_success_envelope(result, scope=scope), sort_keys=True))
     else:
-        print(_format_human_audit_output(result))
+        _stdout_console().print(_format_human_audit_output(result))
 
     return 0
 
@@ -511,7 +612,7 @@ def _run_snapshots_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except StorageError as error:
+    except (SecretDetectedError, StorageError) as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -521,7 +622,7 @@ def _run_snapshots_list(
     if output_format == "json":
         print(json.dumps(_snapshots_success_envelope(result, scope=scope), sort_keys=True))
     else:
-        print(_format_human_snapshots_output(result))
+        _stdout_console().print(_format_human_snapshots_output(result))
 
     return 0
 
@@ -541,29 +642,35 @@ def _run_rollback(
             )
         preview = rollback_preview_command(scope)
         if output_format != "json":
-            print(_format_human_rollback_preview(preview))
+            _stdout_console().print(_format_human_rollback_preview(preview))
             if not yes:
-                try:
-                    answer = input("Deseja prosseguir com o rollback? [s/N]: ")
-                except (EOFError, KeyboardInterrupt):
-                    print("\nRollback cancelado.")
-                    return 1
-                if answer.strip().lower() not in {"s", "sim", "y", "yes"}:
-                    print("Rollback cancelado.")
+                if not _confirm("Deseja prosseguir com o rollback? [s/N]: ", default=False):
+                    _stdout_console().print("Rollback cancelado.")
                     return 1
 
-        result = command(RollbackCommand(scope=scope, origin="cli"))
+        if output_format == "json":
+            result = command(RollbackCommand(scope=scope, origin="cli"))
+        else:
+            with _stderr_console().status("Restaurando snapshot (rollback)...", spinner="dots"):
+                result = command(RollbackCommand(scope=scope, origin="cli"))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SnapshotFailedError, StorageError, ValidationFailedError) as error:
+    except (
+        SecretDetectedError,
+        SnapshotFailedError,
+        StorageError,
+        ValidationFailedError,
+        FactNotFoundError,
+        InvalidConfigError,
+    ) as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
     if output_format == "json":
         print(json.dumps(_rollback_success_envelope(result), sort_keys=True))
     else:
-        print(_format_human_rollback_success(result))
+        _stdout_console().print(_format_human_rollback_success(result))
 
     return 0
 
@@ -766,24 +873,25 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
     return "\n".join(lines)
 
 
-def _format_human_facts_list_output(result: ListFactsResult) -> str:
+def _format_human_facts_list_output(result: ListFactsResult) -> Table | str:
     if not result.facts:
         return "Nenhum fato encontrado."
 
-    lines = ["Fatos:"]
+    table = Table(title="Fatos:", show_header=True)
+    table.add_column("ID")
+    table.add_column("Escopo")
+    table.add_column("Status")
+    table.add_column("Fonte")
+    table.add_column("Conteudo")
     for fact in result.facts:
-        lines.append(
-            " | ".join(
-                [
-                    fact.id,
-                    fact.scope.value,
-                    fact.status.value,
-                    fact.source,
-                    fact.content,
-                ]
-            )
+        table.add_row(
+            fact.id,
+            fact.scope.value,
+            fact.status.value,
+            fact.source,
+            fact.content,
         )
-    return "\n".join(lines)
+    return table
 
 
 def _format_human_purge_preview(*, id: str | None, scope: FactScope | None) -> str:
@@ -822,48 +930,54 @@ def _format_human_hygiene_success(result: ContextHygieneResult) -> str:
     )
 
 
-def _format_human_audit_output(result: ListAuditLogResult) -> str:
+def _format_human_audit_output(result: ListAuditLogResult) -> Table | str:
     if not result.events:
         return "Nenhum evento de auditoria encontrado."
 
-    lines = ["Eventos de auditoria:"]
+    table = Table(title="Eventos de auditoria:", show_header=True)
+    table.add_column("Timestamp")
+    table.add_column("Escopo")
+    table.add_column("Origem")
+    table.add_column("Acao")
+    table.add_column("Resultado")
+    table.add_column("Auditoria")
+    table.add_column("Snapshot")
     for event in result.events:
-        lines.append(
-            " | ".join(
-                [
-                    event.timestamp,
-                    event.scope,
-                    event.origin,
-                    event.action,
-                    event.result,
-                    f"audit={event.audit_reference}",
-                    f"snapshot={event.snapshot_reference}",
-                ]
-            )
+        table.add_row(
+            event.timestamp,
+            event.scope,
+            event.origin,
+            event.action,
+            event.result,
+            f"audit={event.audit_reference}",
+            f"snapshot={event.snapshot_reference}",
         )
-    return "\n".join(lines)
+    return table
 
 
-def _format_human_snapshots_output(result: ListSnapshotsResult) -> str:
+def _format_human_snapshots_output(result: ListSnapshotsResult) -> Table | str:
     if not result.snapshots:
         return "Nenhum snapshot encontrado."
 
-    lines = ["Snapshots:"]
+    table = Table(title="Snapshots:", show_header=True)
+    table.add_column("Timestamp")
+    table.add_column("Escopo")
+    table.add_column("Origem")
+    table.add_column("Acao")
+    table.add_column("Arquivo")
+    table.add_column("Hash")
+    table.add_column("Manifesto")
     for snapshot in result.snapshots:
-        lines.append(
-            " | ".join(
-                [
-                    snapshot.timestamp,
-                    snapshot.scope,
-                    snapshot.origin,
-                    snapshot.action,
-                    snapshot.relative_path,
-                    snapshot.hash,
-                    snapshot.manifest_path,
-                ]
-            )
+        table.add_row(
+            snapshot.timestamp,
+            snapshot.scope,
+            snapshot.origin,
+            snapshot.action,
+            snapshot.relative_path,
+            snapshot.hash,
+            snapshot.manifest_path,
         )
-    return "\n".join(lines)
+    return table
 
 
 def _format_human_rollback_preview(snapshot: Snapshot) -> str:
@@ -895,14 +1009,18 @@ def _recovery_hint(error: Exception) -> str:
     msg = str(error)
     if "Hint: " in msg:
         return msg.split("Hint: ", 1)[1]
-    if isinstance(error, SnapshotFailedError):
-        return "Execute uma mutacao segura antes de tentar rollback ou verifique o escopo."
-    if isinstance(error, InvalidConfigError):
-        return "Verifique as configuracoes no arquivo config.toml."
-    if isinstance(error, ValidationFailedError):
-        return "Corrija os dados invalidos informados."
-    if isinstance(error, FactNotFoundError):
-        return "Verifique o identificador ou escopo informado."
+    hints = {
+        SnapshotFailedError: (
+            "Execute uma mutacao segura antes de tentar rollback ou verifique o escopo."
+        ),
+        SecretDetectedError: "Remova ou mascare valores sensiveis antes de repetir a operacao.",
+        InvalidConfigError: "Verifique as configuracoes no arquivo config.toml.",
+        ValidationFailedError: "Corrija os dados invalidos informados.",
+        FactNotFoundError: "Verifique o identificador ou escopo informado.",
+    }
+    for error_type, hint in hints.items():
+        if isinstance(error, error_type):
+            return hint
     return "Verifique o layout local e execute umem init na raiz do projeto."
 
 
@@ -924,16 +1042,20 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
         print(json.dumps(payload, sort_keys=True))
         return
 
-    print(
-        "\n".join(
-            [
-                f"Falha: {payload['error']['message']}",
-                f"Detalhe: {detail}",
-                f"Recuperacao: {payload['error']['recovery_hint']}",
-            ]
+    panel = Panel(
+        Text.from_markup(
+            "\n".join(
+                [
+                    f"[bold]Falha:[/bold] {payload['error']['message']}",
+                    f"[bold]Detalhe:[/bold] {detail}",
+                    f"[bold]Recuperacao:[/bold] {payload['error']['recovery_hint']}",
+                ]
+            )
         ),
-        file=sys.stderr,
+        title="Erro",
+        border_style="red",
     )
+    _stderr_console().print(panel)
 
 
 def _error_code(error: Exception) -> str:
@@ -945,6 +1067,8 @@ def _error_code(error: Exception) -> str:
         return "validation_failed"
     if isinstance(error, FactNotFoundError):
         return "fact_not_found"
+    if isinstance(error, SecretDetectedError):
+        return "secret_detected"
     return "storage_error"
 
 
@@ -957,6 +1081,8 @@ def _error_message(error: Exception) -> str:
         return "Validacao falhou."
     if isinstance(error, FactNotFoundError):
         return "Fato nao encontrado."
+    if isinstance(error, SecretDetectedError):
+        return "Conteudo sensivel bloqueado."
     return "Falha de armazenamento."
 
 
