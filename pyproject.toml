@@ -23,6 +23,7 @@ Repository = "https://github.com/YanAmorelli/universal-memory"
 [project.scripts]
 umem = "universal_memory.bootstrap.cli:main"
 universal-memory = "universal_memory.bootstrap.cli:main"
+umem-mcp = "universal_memory.bootstrap.mcp:main"
 
 [dependency-groups]
 dev = [

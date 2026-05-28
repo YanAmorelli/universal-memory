@@ -3,10 +3,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from universal_memory.application.memory import (
+    AssembleContextSummaryUseCase,
     ContextHygieneUseCase,
     GetMemoryStatusUseCase,
     ListFactsUseCase,
     PurgeFactUseCase,
+    RememberFactUseCase,
 )
 from universal_memory.application.security import (
     ListAuditLogUseCase,
@@ -36,7 +38,10 @@ from universal_memory.infrastructure.security import (
     LocalAuditLogRepository,
     LocalSnapshotRepository,
 )
-from universal_memory.infrastructure.storage import LocalFactRepository
+from universal_memory.infrastructure.storage import (
+    LocalContextSummaryRepository,
+    LocalFactRepository,
+)
 from universal_memory.interfaces.cli import build_main
 
 
@@ -118,6 +123,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     facts_list_use_case = ListFactsUseCase(fact_repository=fact_repository)
     facts_purge_use_case = PurgeFactUseCase(fact_repository=fact_repository)
     facts_hygiene_use_case = ContextHygieneUseCase(fact_repository=fact_repository)
+    context_use_case = AssembleContextSummaryUseCase(
+        fact_repository=fact_repository,
+        rule_repository=EmptyRuleRepository(),
+        secret_scanner=EntropySecretScanner(),
+        audit_log_repository=audit_log_repository,
+        context_summary_repository=LocalContextSummaryRepository(
+            project_root=project_root,
+            data_root=data_root,
+        ),
+    )
+    remember_use_case = RememberFactUseCase(
+        fact_repository=fact_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
 
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
         snapshots = snapshot_repository.list(scope=scope, status=SnapshotStatus.created)
@@ -142,6 +161,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         rollback_command=rollback_use_case.execute,
         rollback_preview_command=rollback_preview,
         status_command=status_use_case.execute,
+        context_command=context_use_case.execute,
+        remember_command=remember_use_case.execute,
         facts_list_command=facts_list_use_case.execute,
         facts_purge_command=facts_purge_use_case.execute,
         facts_hygiene_command=facts_hygiene_use_case.execute,

@@ -1,5 +1,7 @@
 import json
+import os
 import sys
+import traceback
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
@@ -14,6 +16,8 @@ from rich.table import Table
 from rich.text import Text
 
 from universal_memory.application.memory import (
+    AssembleContextSummaryCommand,
+    AssembleContextSummaryResult,
     ContextHygieneCommand,
     ContextHygieneResult,
     GetMemoryStatusCommand,
@@ -22,6 +26,8 @@ from universal_memory.application.memory import (
     ListFactsResult,
     PurgeFactCommand,
     PurgeFactResult,
+    RememberFactCommand,
+    RememberFactResult,
 )
 from universal_memory.application.onboarding.setup_project import (
     SetupProjectResult,
@@ -37,16 +43,14 @@ from universal_memory.application.security import (
 )
 from universal_memory.domain import (
     ConfigValidationPort,
-    FactNotFoundError,
-    InvalidConfigError,
     ProjectLayoutPort,
-    SecretDetectedError,
     SnapshotFailedError,
     StorageError,
     ValidationFailedError,
 )
 from universal_memory.domain.entities import (
     AuditEventScope,
+    ContextSummaryScope,
     Fact,
     FactScope,
     FactStatus,
@@ -54,7 +58,15 @@ from universal_memory.domain.entities import (
     SnapshotScope,
     SnapshotStatus,
 )
+from universal_memory.domain.entities.base import format_utc_iso
+from universal_memory.interfaces.errors import (
+    DOMAIN_ERROR_TYPES,
+    error_descriptor,
+    error_payload,
+    recovery_hint,
+)
 
+DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
 SetupProjectCommand = Callable[[Path], SetupProjectResult]
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
@@ -62,6 +74,8 @@ ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResu
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 RollbackPreviewHandler = Callable[[SnapshotScope], Snapshot]
 StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
+ContextCommandHandler = Callable[[AssembleContextSummaryCommand], AssembleContextSummaryResult]
+RememberFactCommandHandler = Callable[[RememberFactCommand], RememberFactResult]
 ListFactsCommandHandler = Callable[[ListFactsCommand], ListFactsResult]
 PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneResult]
@@ -78,6 +92,18 @@ OutputFormatOption = Annotated[
 YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Ignorar confirmacao interativa.")]
 
 
+def _determine_output_format(argv: Sequence[str] | None) -> str:
+    if argv is None:
+        return "human"
+    args = [arg.lower() for arg in argv]
+    for i, arg in enumerate(args):
+        if arg in ("--format", "-f") and i + 1 < len(args):
+            return args[i + 1]
+        if arg.startswith("--format="):
+            return arg.split("=", 1)[1]
+    return "human"
+
+
 def main(  # noqa: PLR0913
     argv: Sequence[str] | None = None,
     *,
@@ -87,6 +113,8 @@ def main(  # noqa: PLR0913
     rollback_command: RollbackCommandHandler | None = None,
     rollback_preview_command: RollbackPreviewHandler | None = None,
     status_command: StatusCommandHandler | None = None,
+    context_command: ContextCommandHandler | None = None,
+    remember_command: RememberFactCommandHandler | None = None,
     facts_list_command: ListFactsCommandHandler | None = None,
     facts_purge_command: PurgeFactCommandHandler | None = None,
     facts_hygiene_command: ContextHygieneCommandHandler | None = None,
@@ -98,6 +126,8 @@ def main(  # noqa: PLR0913
         rollback_command=rollback_command,
         rollback_preview_command=rollback_preview_command,
         status_command=status_command,
+        context_command=context_command,
+        remember_command=remember_command,
         facts_list_command=facts_list_command,
         facts_purge_command=facts_purge_command,
         facts_hygiene_command=facts_hygiene_command,
@@ -113,7 +143,8 @@ def main(  # noqa: PLR0913
     except RuntimeError:
         raise
     except Exception as e:
-        _stderr_console().print(f"[bold red]Erro inesperado:[/bold red] {e}")
+        fmt = _determine_output_format(argv)
+        _print_unexpected_error(e, output_format=fmt)
         return 1
     if isinstance(result, int):
         return result
@@ -128,6 +159,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     rollback_command: RollbackCommandHandler | None = None,
     rollback_preview_command: RollbackPreviewHandler | None = None,
     status_command: StatusCommandHandler | None = None,
+    context_command: ContextCommandHandler | None = None,
+    remember_command: RememberFactCommandHandler | None = None,
     facts_list_command: ListFactsCommandHandler | None = None,
     facts_purge_command: PurgeFactCommandHandler | None = None,
     facts_hygiene_command: ContextHygieneCommandHandler | None = None,
@@ -173,6 +206,71 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             raise RuntimeError(msg)
         raise typer.Exit(
             code=_run_status(status_command, output_format=_effective_format(ctx, output_format))
+        )
+
+    @app.command("context")
+    def context(
+        ctx: typer.Context,
+        scope: Annotated[
+            str,
+            typer.Option(
+                "--scope",
+                help="Escopo de contexto.",
+                click_type=click.Choice(["project", "global"], case_sensitive=False),
+            ),
+        ] = "project",
+        max_size_chars: Annotated[
+            int,
+            typer.Option("--max-size-chars", min=1, help="Limite maximo do contexto em chars."),
+        ] = DEFAULT_CONTEXT_MAX_SIZE_CHARS,
+        agent_session_key: Annotated[
+            str | None,
+            typer.Option("--agent-session-key", help="Chave de sessao do agente."),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if context_command is None:
+            msg = "CLI context_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_context(
+                context_command,
+                output_format=_effective_format(ctx, output_format),
+                scope=_context_scope(scope),
+                max_size_chars=max_size_chars,
+                agent_session_key=agent_session_key,
+            )
+        )
+
+    @app.command("remember")
+    def remember(
+        ctx: typer.Context,
+        content: Annotated[str, typer.Argument(help="Conteudo do fato a gravar.")],
+        scope: Annotated[
+            str,
+            typer.Option(
+                "--scope",
+                help="Escopo do fato.",
+                click_type=click.Choice(["project", "global"], case_sensitive=False),
+            ),
+        ] = "project",
+        tags: Annotated[
+            list[str] | None,
+            typer.Option("--tag", help="Tag do fato. Pode ser usada multiplas vezes."),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if remember_command is None:
+            msg = "CLI remember_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_remember(
+                remember_command,
+                output_format=_effective_format(ctx, output_format),
+                content=content,
+                scope=_fact_scope(scope) or FactScope.project,
+                tags=tags or [],
+            )
         )
 
     @facts_app.command("list")
@@ -351,6 +449,8 @@ def build_main(  # noqa: PLR0913
     rollback_command: RollbackCommandHandler,
     rollback_preview_command: RollbackPreviewHandler,
     status_command: StatusCommandHandler,
+    context_command: ContextCommandHandler,
+    remember_command: RememberFactCommandHandler,
     facts_list_command: ListFactsCommandHandler,
     facts_purge_command: PurgeFactCommandHandler,
     facts_hygiene_command: ContextHygieneCommandHandler,
@@ -369,6 +469,8 @@ def build_main(  # noqa: PLR0913
             rollback_command=rollback_command,
             rollback_preview_command=rollback_preview_command,
             status_command=status_command,
+            context_command=context_command,
+            remember_command=remember_command,
             facts_list_command=facts_list_command,
             facts_purge_command=facts_purge_command,
             facts_hygiene_command=facts_hygiene_command,
@@ -436,7 +538,7 @@ def _run_init(command: SetupProjectCommand, output_format: str) -> int:
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (InvalidConfigError, SecretDetectedError, StorageError, ValidationFailedError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
@@ -454,22 +556,101 @@ def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError, InvalidConfigError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
         _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
         return 1
     except Exception as error:
-        _print_expected_error(
-            StorageError(f"Erro inesperado: {error}"), output_format=output_format
-        )
+        _print_unexpected_error(error, output_format=output_format)
         return 1
 
     if output_format == "json":
         print(json.dumps(_status_success_envelope(result), sort_keys=True))
     else:
         _stdout_console().print(_format_human_status_output(result))
+
+    return 0
+
+
+def _run_context(
+    command: ContextCommandHandler,
+    *,
+    output_format: str,
+    scope: ContextSummaryScope,
+    max_size_chars: int,
+    agent_session_key: str | None = None,
+) -> int:
+    try:
+        result = command(
+            AssembleContextSummaryCommand(
+                scope=scope,
+                max_size_chars=max_size_chars,
+                agent_session_key=agent_session_key,
+            )
+        )
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except ValueError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        payload = _context_success_envelope(
+            result,
+            scope=scope,
+            max_size_chars=max_size_chars,
+        )
+        print(json.dumps(payload, sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_context_output(result))
+
+    return 0
+
+
+def _run_remember(
+    command: RememberFactCommandHandler,
+    *,
+    output_format: str,
+    content: str,
+    scope: FactScope,
+    tags: list[str],
+) -> int:
+    try:
+        result = command(
+            RememberFactCommand(
+                content=content,
+                scope=scope,
+                source="cli",
+                tags=tags,
+                origin="cli",
+            )
+        )
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except ValueError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_remember_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_remember_output(result))
 
     return 0
 
@@ -486,7 +667,7 @@ def _run_facts_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -525,7 +706,7 @@ def _run_facts_purge(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (FactNotFoundError, SecretDetectedError, StorageError, ValidationFailedError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
@@ -563,7 +744,7 @@ def _run_facts_hygiene(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError, ValidationFailedError, InvalidConfigError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
@@ -586,7 +767,7 @@ def _run_audit_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -612,7 +793,7 @@ def _run_snapshots_list(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (SecretDetectedError, StorageError) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
     except ValidationError as error:
@@ -656,14 +837,7 @@ def _run_rollback(
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
-    except (
-        SecretDetectedError,
-        SnapshotFailedError,
-        StorageError,
-        ValidationFailedError,
-        FactNotFoundError,
-        InvalidConfigError,
-    ) as error:
+    except DOMAIN_ERROR_TYPES as error:
         _print_expected_error(error, output_format=output_format)
         return 1
 
@@ -734,6 +908,31 @@ def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
     }
 
 
+def _context_success_envelope(
+    result: AssembleContextSummaryResult,
+    *,
+    scope: ContextSummaryScope,
+    max_size_chars: int,
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "context",
+        "scope": scope.value,
+        "data": _context_payload(result, max_size_chars=max_size_chars),
+        "warnings": [],
+    }
+
+
+def _remember_success_envelope(result: RememberFactResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "remember",
+        "scope": result.fact.scope.value,
+        "data": _remember_payload(result),
+        "warnings": [],
+    }
+
+
 def _facts_list_success_envelope(
     result: ListFactsResult, *, scope: FactScope | None
 ) -> dict[str, Any]:
@@ -779,12 +978,13 @@ def _facts_hygiene_success_envelope(
 
 
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
+    project_root = result.project_path
     return {
-        "project_path": _path_to_posix(result.project_path),
-        "config_path": _path_to_posix(result.config_path),
-        "memory_path": _path_to_posix(result.memory_path),
-        "audit_path": _path_to_posix(result.audit_path),
-        "snapshots_path": _path_to_posix(result.snapshots_path),
+        "project_path": _relative_path(result.project_path, project_root),
+        "config_path": _relative_path(result.config_path, project_root),
+        "memory_path": _relative_path(result.memory_path, project_root),
+        "audit_path": _relative_path(result.audit_path, project_root),
+        "snapshots_path": _relative_path(result.snapshots_path, project_root),
         "created": result.created_paths,
         "already_initialized": result.already_initialized,
         "audit_reference": AUDIT_REFERENCE_PLACEHOLDER,
@@ -801,8 +1001,8 @@ def _fact_payload(fact: Fact) -> dict[str, Any]:
         "recurrence_count": fact.recurrence_count,
         "tags": fact.tags,
         "metadata": fact.metadata,
-        "created_at": fact.created_at.isoformat(),
-        "updated_at": fact.updated_at.isoformat(),
+        "created_at": format_utc_iso(fact.created_at),
+        "updated_at": format_utc_iso(fact.updated_at),
     }
 
 
@@ -823,6 +1023,36 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
         "approximate_size_bytes": result.approximate_size_bytes,
         "last_health_check": result.last_health_check,
         "host_validation": result.host_validation,
+    }
+
+
+def _context_payload(
+    result: AssembleContextSummaryResult,
+    *,
+    max_size_chars: int,
+) -> dict[str, Any]:
+    summary = result.context_summary
+    markdown_size = len(result.context_markdown)
+    return {
+        "project_summary": summary.project_summary,
+        "universal_preferences": summary.universal_preferences,
+        "active_rules": summary.active_rules,
+        "source_fact_ids": result.included_fact_ids,
+        "truncated": markdown_size >= max_size_chars,
+        "token_estimate": max(1, round(markdown_size / 4)),
+        "last_read_at": format_utc_iso(summary.created_at),
+    }
+
+
+def _remember_payload(result: RememberFactResult) -> dict[str, Any]:
+    fact = result.fact
+    return {
+        "fact_id": fact.id,
+        "scope": fact.scope.value,
+        "status": fact.status.value,
+        "tags": fact.tags,
+        "created_at": format_utc_iso(fact.created_at),
+        "audit_reference": result.audit_reference,
     }
 
 
@@ -871,6 +1101,33 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
         rendered_counts = ", ".join(f"{status}: {count}" for status, count in counts.items())
         lines.append(f"- {scope} {rendered_counts}")
     return "\n".join(lines)
+
+
+def _format_human_context_output(result: AssembleContextSummaryResult) -> str:
+    summary = result.context_summary
+    lines = [
+        "Contexto montado.",
+        f"Resumo do projeto: {summary.project_summary or '(vazio)'}",
+        f"Preferencias universais: {summary.universal_preferences or '(vazio)'}",
+        f"Regras ativas: {summary.active_rules or '(vazio)'}",
+        "Fontes: "
+        f"{', '.join(result.included_fact_ids) if result.included_fact_ids else '(nenhuma)'}",
+    ]
+    return "\n".join(lines)
+
+
+def _format_human_remember_output(result: RememberFactResult) -> str:
+    fact = result.fact
+    return "\n".join(
+        [
+            "Fato salvo.",
+            f"ID: {fact.id}",
+            f"Escopo: {fact.scope.value}",
+            f"Status: {fact.status.value}",
+            f"Tags: {', '.join(fact.tags) if fact.tags else '(nenhuma)'}",
+            f"Auditoria: {result.audit_reference}",
+        ]
+    )
 
 
 def _format_human_facts_list_output(result: ListFactsResult) -> Table | str:
@@ -1006,36 +1263,13 @@ def _format_human_rollback_success(result: RollbackResult) -> str:
 
 
 def _recovery_hint(error: Exception) -> str:
-    msg = str(error)
-    if "Hint: " in msg:
-        return msg.split("Hint: ", 1)[1]
-    hints = {
-        SnapshotFailedError: (
-            "Execute uma mutacao segura antes de tentar rollback ou verifique o escopo."
-        ),
-        SecretDetectedError: "Remova ou mascare valores sensiveis antes de repetir a operacao.",
-        InvalidConfigError: "Verifique as configuracoes no arquivo config.toml.",
-        ValidationFailedError: "Corrija os dados invalidos informados.",
-        FactNotFoundError: "Verifique o identificador ou escopo informado.",
-    }
-    for error_type, hint in hints.items():
-        if isinstance(error, error_type):
-            return hint
-    return "Verifique o layout local e execute umem init na raiz do projeto."
+    return recovery_hint(error)
 
 
 def _print_expected_error(error: Exception, output_format: str) -> None:
-    code = _error_code(error)
-    detail = str(error)
     payload = {
         "ok": False,
-        "error": {
-            "code": code,
-            "message": _error_message(error),
-            "detail": detail,
-            "recovery_hint": _recovery_hint(error),
-            "audit_reference": None,
-        },
+        "error": error_payload(error, message_locale="pt-BR"),
     }
 
     if output_format == "json":
@@ -1047,7 +1281,7 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
             "\n".join(
                 [
                     f"[bold]Falha:[/bold] {payload['error']['message']}",
-                    f"[bold]Detalhe:[/bold] {detail}",
+                    f"[bold]Detalhe:[/bold] {payload['error']['detail']}",
                     f"[bold]Recuperacao:[/bold] {payload['error']['recovery_hint']}",
                 ]
             )
@@ -1058,36 +1292,25 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
     _stderr_console().print(panel)
 
 
+def _print_unexpected_error(error: Exception, output_format: str) -> None:
+    if os.environ.get("UMEM_DEBUG_ERRORS") == "1":
+        traceback.print_exc(file=sys.stderr)
+    _print_expected_error(error, output_format=output_format)
+
+
 def _error_code(error: Exception) -> str:
-    if isinstance(error, SnapshotFailedError):
-        return "snapshot_failed"
-    if isinstance(error, InvalidConfigError):
-        return "invalid_config"
-    if isinstance(error, ValidationFailedError):
-        return "validation_failed"
-    if isinstance(error, FactNotFoundError):
-        return "fact_not_found"
-    if isinstance(error, SecretDetectedError):
-        return "secret_detected"
-    return "storage_error"
+    return error_descriptor(error).slug
 
 
 def _error_message(error: Exception) -> str:
-    if isinstance(error, SnapshotFailedError):
-        return "Falha de snapshot."
-    if isinstance(error, InvalidConfigError):
-        return "Configuracao invalida."
-    if isinstance(error, ValidationFailedError):
-        return "Validacao falhou."
-    if isinstance(error, FactNotFoundError):
-        return "Fato nao encontrado."
-    if isinstance(error, SecretDetectedError):
-        return "Conteudo sensivel bloqueado."
-    return "Falha de armazenamento."
+    return error_descriptor(error).cli_message
 
 
-def _path_to_posix(path: Path) -> str:
-    return path.as_posix()
+def _relative_path(path: Path, project_root: Path) -> str:
+    try:
+        return path.resolve().relative_to(project_root.resolve()).as_posix()
+    except (ValueError, OSError, RuntimeError):
+        return path.as_posix()
 
 
 def _audit_scope(value: str) -> AuditEventScope:
@@ -1102,6 +1325,10 @@ def _fact_scope(value: str | None) -> FactScope | None:
     if value is None:
         return None
     return FactScope.global_ if value == "global" else FactScope.project
+
+
+def _context_scope(value: str) -> ContextSummaryScope:
+    return ContextSummaryScope.global_ if value == "global" else ContextSummaryScope.project
 
 
 def _fact_status(value: str) -> FactStatus:
