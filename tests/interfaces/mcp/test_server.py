@@ -22,9 +22,14 @@ from universal_memory.application.memory import (
 from universal_memory.application.skills import (
     GenerateSkillCommand,
     GenerateSkillResult,
+    GetSkillDetailCommand,
+    GetSkillDetailResult,
+    ListSkillsCommand,
+    ListSkillsResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    SkillListItem,
 )
 from universal_memory.bootstrap.mcp import build_server
 from universal_memory.domain import SecretDetectedError
@@ -157,6 +162,35 @@ def generated_skill_result() -> GenerateSkillResult:
         affected_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
+    )
+
+
+def list_skills_result() -> ListSkillsResult:
+    return ListSkillsResult(
+        skills=[
+            SkillListItem(
+                name="TDD recorrente",
+                scope="project",
+                status="active",
+                relative_path=".umem/skills/tdd-recorrente/SKILL.md",
+                created_at="2026-05-29T12:00:00Z",
+                updated_at="2026-05-29T12:05:00Z",
+                origin="cli",
+                audit_reference="audit-1",
+            )
+        ]
+    )
+
+
+def skill_detail_result() -> GetSkillDetailResult:
+    return GetSkillDetailResult(
+        name="TDD recorrente",
+        scope="project",
+        status="active",
+        relative_path=".umem/skills/tdd-recorrente/SKILL.md",
+        triggers=["red green refactor", "implementar story"],
+        audit_reference="audit-1",
+        references_loaded=False,
     )
 
 
@@ -453,6 +487,95 @@ async def test_generate_skill_tool_invokes_use_case_and_matches_cli_json_contrac
             "snapshot_reference": "snapshot-1",
             "collision_detected": False,
             "suggested_slug": None,
+        },
+        "warnings": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_list_skills_tool_invokes_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[ListSkillsCommand] = []
+
+    def list_skills(command: ListSkillsCommand) -> ListSkillsResult:
+        received.append(command)
+        return list_skills_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            list_skills=list_skills,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool("list_skills", {})
+
+    assert "list_skills" in tool_names
+    assert received == [ListSkillsCommand()]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "skills.list",
+        "scope": "all",
+        "data": {
+            "skills": [
+                {
+                    "name": "TDD recorrente",
+                    "scope": "project",
+                    "status": "active",
+                    "relative_path": ".umem/skills/tdd-recorrente/SKILL.md",
+                    "created_at": "2026-05-29T12:00:00Z",
+                    "updated_at": "2026-05-29T12:05:00Z",
+                    "origin": "cli",
+                    "audit_reference": "audit-1",
+                }
+            ]
+        },
+        "warnings": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_get_skill_detail_tool_invokes_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[GetSkillDetailCommand] = []
+
+    def get_skill_detail(command: GetSkillDetailCommand) -> GetSkillDetailResult:
+        received.append(command)
+        return skill_detail_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            get_skill_detail=get_skill_detail,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool("get_skill_detail", {"name_or_id": "TDD recorrente"})
+
+    assert "get_skill_detail" in tool_names
+    assert received == [GetSkillDetailCommand(name_or_id="TDD recorrente")]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "skills.detail",
+        "scope": "project",
+        "data": {
+            "name": "TDD recorrente",
+            "scope": "project",
+            "status": "active",
+            "relative_path": ".umem/skills/tdd-recorrente/SKILL.md",
+            "triggers": ["red green refactor", "implementar story"],
+            "audit_reference": "audit-1",
+            "references_loaded": False,
         },
         "warnings": [],
     }

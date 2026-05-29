@@ -17,7 +17,12 @@ from universal_memory.application.security import (
     RollbackUseCase,
     SafeWriteUseCase,
 )
-from universal_memory.application.skills import GenerateSkillUseCase, ProposeSkillUseCase
+from universal_memory.application.skills import (
+    GenerateSkillUseCase,
+    GetSkillDetailUseCase,
+    ListSkillsUseCase,
+    ProposeSkillUseCase,
+)
 from universal_memory.domain import SnapshotFailedError
 from universal_memory.domain.entities import (
     LatentSkill,
@@ -175,6 +180,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             latent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    list_skills_use_case = ListSkillsUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
+    )
+    get_skill_detail_use_case = GetSkillDetailUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
+    )
 
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
         snapshots = snapshot_repository.list(scope=scope, status=SnapshotStatus.created)
@@ -209,5 +222,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         host_sync_command=host_sync_use_case.execute,
         propose_skill_command=propose_skill_use_case.execute,
         generate_skill_command=generate_skill_use_case.execute,
+        list_skills_command=list_skills_use_case.execute,
+        get_skill_detail_command=get_skill_detail_use_case.execute,
     )
     return configured_main(argv)

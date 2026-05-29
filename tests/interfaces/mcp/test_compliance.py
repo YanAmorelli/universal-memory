@@ -25,8 +25,13 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     GenerateSkillCommand,
     GenerateSkillResult,
+    GetSkillDetailCommand,
+    GetSkillDetailResult,
+    ListSkillsCommand,
+    ListSkillsResult,
     ProposeSkillCommand,
     ProposeSkillResult,
+    SkillListItem,
 )
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import (
@@ -64,6 +69,8 @@ PUBLIC_MCP_TOOLS = {
     "sync_instructions": {"host_ids": ["codex", "claude_code"], "apply": True},
     "propose_skill": {"latent_skill_id": FACT_ID, "decision": "sim"},
     "generate_skill": {"latent_skill_id": FACT_ID},
+    "list_skills": {},
+    "get_skill_detail": {"name_or_id": "TDD recorrente"},
 }
 CONTRACT_KEYS_BY_TOOL = {
     "initialize_project": {
@@ -155,6 +162,16 @@ CONTRACT_KEYS_BY_TOOL = {
         "snapshot_reference",
         "collision_detected",
         "suggested_slug",
+    },
+    "list_skills": {"skills"},
+    "get_skill_detail": {
+        "name",
+        "scope",
+        "status",
+        "relative_path",
+        "triggers",
+        "audit_reference",
+        "references_loaded",
     },
 }
 CONTRACT_TYPES_BY_TOOL = {
@@ -259,6 +276,16 @@ CONTRACT_TYPES_BY_TOOL = {
         "snapshot_reference": str,
         "collision_detected": bool,
         "suggested_slug": (str, type(None)),
+    },
+    "list_skills": {"skills": list},
+    "get_skill_detail": {
+        "name": str,
+        "scope": str,
+        "status": str,
+        "relative_path": (str, type(None)),
+        "triggers": list,
+        "audit_reference": str,
+        "references_loaded": bool,
     },
 }
 
@@ -406,6 +433,37 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         sync_instructions=lambda _command: sync_result(),
         propose_skill=propose_skill_result,
         generate_skill=generate_skill_result,
+        list_skills=list_skills_result,
+        get_skill_detail=get_skill_detail_result,
+    )
+
+
+def list_skills_result(_command: ListSkillsCommand) -> ListSkillsResult:
+    return ListSkillsResult(
+        skills=[
+            SkillListItem(
+                name="TDD recorrente",
+                scope="project",
+                status="active",
+                relative_path=".umem/skills/tdd-recorrente/SKILL.md",
+                created_at="2026-05-28T12:00:00Z",
+                updated_at="2026-05-28T12:00:00Z",
+                origin="cli",
+                audit_reference="audit-1",
+            )
+        ]
+    )
+
+
+def get_skill_detail_result(_command: GetSkillDetailCommand) -> GetSkillDetailResult:
+    return GetSkillDetailResult(
+        name="TDD recorrente",
+        scope="project",
+        status="active",
+        relative_path=".umem/skills/tdd-recorrente/SKILL.md",
+        triggers=["red green refactor"],
+        audit_reference="audit-1",
+        references_loaded=False,
     )
 
 

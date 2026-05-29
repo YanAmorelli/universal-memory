@@ -39,6 +39,10 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     GenerateSkillCommand,
     GenerateSkillResult,
+    GetSkillDetailCommand,
+    GetSkillDetailResult,
+    ListSkillsCommand,
+    ListSkillsResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
@@ -84,6 +88,8 @@ ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResu
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
+ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
+GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
 ToolResponse = dict[str, Any]
 
 
@@ -108,6 +114,8 @@ class MCPUseCases:
     sync_instructions: SyncInstructionsCommandHandler = _missing_use_case
     propose_skill: ProposeSkillCommandHandler = _missing_use_case
     generate_skill: GenerateSkillCommandHandler = _missing_use_case
+    list_skills: ListSkillsCommandHandler = _missing_use_case
+    get_skill_detail: GetSkillDetailCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -432,6 +440,32 @@ def configure_server(  # noqa: PLR0915
                 scope=result.latent_skill.scope.value,
                 data=result.to_payload(),
                 warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="list_skills")
+    def list_skills() -> ToolResponse:
+        """List registered skills and candidates without mutating local state."""
+        try:
+            result = use_cases.list_skills(ListSkillsCommand())
+            return _success_envelope(
+                operation="skills.list",
+                scope="all",
+                data=result.to_payload(),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="get_skill_detail")
+    def get_skill_detail(name_or_id: str) -> ToolResponse:
+        """Inspect metadata and triggers for one registered skill."""
+        try:
+            result = use_cases.get_skill_detail(GetSkillDetailCommand(name_or_id=name_or_id))
+            return _success_envelope(
+                operation="skills.detail",
+                scope=result.scope,
+                data=result.to_payload(),
             )
         except Exception as error:
             return _mcp_tool_error(error)

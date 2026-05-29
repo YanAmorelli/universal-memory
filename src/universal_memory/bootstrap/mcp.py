@@ -19,7 +19,12 @@ from universal_memory.application.security import (
     RollbackUseCase,
     SafeWriteUseCase,
 )
-from universal_memory.application.skills import GenerateSkillUseCase, ProposeSkillUseCase
+from universal_memory.application.skills import (
+    GenerateSkillUseCase,
+    GetSkillDetailUseCase,
+    ListSkillsUseCase,
+    ProposeSkillUseCase,
+)
 from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
@@ -128,6 +133,14 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             latent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    list_skills_use_case = ListSkillsUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+    )
+    get_skill_detail_use_case = GetSkillDetailUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+    )
 
     def initialize_project(project_root: Path):
         return setup_project(
@@ -153,6 +166,8 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             sync_instructions=host_sync_use_case.execute,
             propose_skill=propose_skill_use_case.execute,
             generate_skill=generate_skill_use_case.execute,
+            list_skills=list_skills_use_case.execute,
+            get_skill_detail=get_skill_detail_use_case.execute,
         ),
         project_root=root,
     )

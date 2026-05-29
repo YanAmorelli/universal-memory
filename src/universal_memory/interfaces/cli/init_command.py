@@ -52,6 +52,10 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     GenerateSkillCommand,
     GenerateSkillResult,
+    GetSkillDetailCommand,
+    GetSkillDetailResult,
+    ListSkillsCommand,
+    ListSkillsResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
@@ -100,6 +104,8 @@ ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResu
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
+ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
+GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
@@ -144,6 +150,8 @@ def main(  # noqa: PLR0913
     host_sync_command: SyncInstructionsCommandHandler | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
+    list_skills_command: ListSkillsCommandHandler | None = None,
+    get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -162,6 +170,8 @@ def main(  # noqa: PLR0913
         host_sync_command=host_sync_command,
         propose_skill_command=propose_skill_command,
         generate_skill_command=generate_skill_command,
+        list_skills_command=list_skills_command,
+        get_skill_detail_command=get_skill_detail_command,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
@@ -200,6 +210,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     host_sync_command: SyncInstructionsCommandHandler | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
+    list_skills_command: ListSkillsCommandHandler | None = None,
+    get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
     facts_app = typer.Typer(help="Gerenciar fatos de memoria")
@@ -604,6 +616,35 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
+    @skills_app.command("list")
+    def skills_list(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
+        if list_skills_command is None:
+            msg = "CLI list_skills_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_list(
+                list_skills_command,
+                output_format=_effective_format(ctx, output_format),
+            )
+        )
+
+    @skills_app.command("detail")
+    def skills_detail(
+        ctx: typer.Context,
+        name_or_id: Annotated[str, typer.Argument(help="Nome ou ID da skill.")],
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if get_skill_detail_command is None:
+            msg = "CLI get_skill_detail_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_detail(
+                get_skill_detail_command,
+                output_format=_effective_format(ctx, output_format),
+                name_or_id=name_or_id,
+            )
+        )
+
     @skills_app.command("generate")
     def skills_generate(
         ctx: typer.Context,
@@ -653,6 +694,8 @@ def build_main(  # noqa: PLR0913
     host_sync_command: SyncInstructionsCommandHandler,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
+    list_skills_command: ListSkillsCommandHandler | None = None,
+    get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -678,6 +721,8 @@ def build_main(  # noqa: PLR0913
             host_sync_command=host_sync_command,
             propose_skill_command=propose_skill_command,
             generate_skill_command=generate_skill_command,
+            list_skills_command=list_skills_command,
+            get_skill_detail_command=get_skill_detail_command,
         )
 
     return configured_main
@@ -1334,6 +1379,53 @@ def _run_host_sync(
     return 0
 
 
+def _run_skills_list(
+    command: ListSkillsCommandHandler,
+    *,
+    output_format: str,
+) -> int:
+    try:
+        result = command(ListSkillsCommand())
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_read_error(error), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_list_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_list(result))
+    return 0
+
+
+def _run_skills_detail(
+    command: GetSkillDetailCommandHandler,
+    *,
+    output_format: str,
+    name_or_id: str,
+) -> int:
+    try:
+        result = command(GetSkillDetailCommand(name_or_id=name_or_id))
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_read_error(error), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_detail_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_detail(result))
+    return 0
+
+
+def _map_skill_read_error(error: Exception) -> Exception:
+    if isinstance(error, KeyError):
+        return ValidationFailedError("Skill nao encontrada.")
+    if isinstance(error, (ValidationError, ValueError)):
+        return ValidationFailedError(str(error))
+    if isinstance(error, OSError) and not isinstance(error, DOMAIN_ERROR_TYPES):
+        return StorageError(str(error))
+    return error
+
+
 def _prompt_skills_decision(
     latent_skill_id: str,
     command: ProposeSkillCommandHandler,
@@ -1584,6 +1676,26 @@ def _skill_generate_success_envelope(result: GenerateSkillResult) -> dict[str, A
         "scope": result.latent_skill.scope.value,
         "data": result.to_payload(),
         "warnings": result.warnings,
+    }
+
+
+def _skill_list_success_envelope(result: ListSkillsResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.list",
+        "scope": "all",
+        "data": result.to_payload(),
+        "warnings": [],
+    }
+
+
+def _skill_detail_success_envelope(result: GetSkillDetailResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.detail",
+        "scope": result.scope,
+        "data": result.to_payload(),
+        "warnings": [],
     }
 
 
@@ -2036,6 +2148,58 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
         lines.append(f"Auditoria: {result.audit_reference}")
     if result.snapshot_reference:
         lines.append(f"Snapshot: {result.snapshot_reference}")
+    return "\n".join(lines)
+
+
+def _format_human_skill_list(result: ListSkillsResult) -> Table | str:
+    if not result.skills:
+        lines = ["Nenhuma skill registrada."]
+        if result.recommended_action:
+            lines.append(result.recommended_action)
+        return "\n".join(lines)
+
+    table = Table(title="Skills registradas")
+    table.add_column("Nome")
+    table.add_column("Escopo")
+    table.add_column("Status")
+    table.add_column("Caminho relativo")
+    table.add_column("Origem")
+    table.add_column("Criada em")
+    table.add_column("Atualizada em")
+    status_styles = {
+        "active": "green",
+        "candidate": "yellow",
+        "disabled": "dim",
+    }
+    for skill in result.skills:
+        table.add_row(
+            skill.name,
+            skill.scope,
+            Text(skill.status, style=status_styles.get(skill.status, "")),
+            skill.relative_path or "-",
+            skill.origin,
+            skill.created_at,
+            skill.updated_at,
+        )
+    return table
+
+
+def _format_human_skill_detail(result: GetSkillDetailResult) -> str:
+    lines = [
+        "Operacao: skills.detail",
+        f"Nome: {result.name}",
+        f"Escopo: {result.scope}",
+        f"Status: {result.status}",
+        f"Caminho relativo: {result.relative_path or '-'}",
+        "Gatilhos:",
+    ]
+    lines.extend(f"  - {trigger}" for trigger in result.triggers)
+    lines.extend(
+        [
+            f"Auditoria: {result.audit_reference}",
+            f"References carregadas: {str(result.references_loaded).lower()}",
+        ]
+    )
     return "\n".join(lines)
 
 
