@@ -14,6 +14,7 @@ from universal_memory.domain.entities.latent_skill import (
     LatentSkillStatus,
 )
 from universal_memory.domain.entities.rule import Rule, RuleScope, RuleStatus
+from universal_memory.domain.entities.safe_write_result import SafeWriteResult
 from universal_memory.domain.entities.snapshot import Snapshot, SnapshotScope, SnapshotStatus
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "Rule",
     "RuleScope",
     "RuleStatus",
+    "SafeWriteResult",
     "Snapshot",
     "SnapshotScope",
     "SnapshotStatus",

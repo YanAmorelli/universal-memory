@@ -17,6 +17,15 @@ from universal_memory.application.security import (
     RollbackUseCase,
     SafeWriteUseCase,
 )
+from universal_memory.application.skills import (
+    ActivateSkillUseCase,
+    DeactivateSkillUseCase,
+    GenerateSkillUseCase,
+    GetSkillDetailUseCase,
+    ListSkillsUseCase,
+    ProposeSkillUseCase,
+    UpdateSkillUseCase,
+)
 from universal_memory.domain import SnapshotFailedError
 from universal_memory.domain.entities import (
     LatentSkill,
@@ -42,6 +51,7 @@ from universal_memory.infrastructure.security import (
 from universal_memory.infrastructure.storage import (
     LocalContextSummaryRepository,
     LocalFactRepository,
+    LocalLatentSkillRepository,
     LocalRuleRepository,
 )
 from universal_memory.interfaces.cli import build_main
@@ -73,7 +83,7 @@ class EmptyLatentSkillRepository(LatentSkillRepository):
     ) -> list[LatentSkill]:
         return []
 
-    def write(self, entity: LatentSkill) -> None:
+    def write(self, entity: LatentSkill, *, origin: str = "repository") -> None:
         return None
 
     def delete(self, id: str) -> None:
@@ -120,10 +130,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         data_root=data_root,
         safe_write_use_case=safe_write_use_case,
     )
+    latent_skill_repository = LocalLatentSkillRepository(
+        project_root=project_root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
         rule_repository=rule_repository,
-        latent_skill_repository=EmptyLatentSkillRepository(),
+        latent_skill_repository=latent_skill_repository,
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
         data_root=data_root,
@@ -154,6 +169,42 @@ def main(argv: Sequence[str] | None = None) -> int:
         project_root=project_root,
         safe_write_use_case=safe_write_use_case,
         rule_repository=rule_repository,
+    )
+    propose_skill_use_case = ProposeSkillUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
+    generate_skill_use_case = GenerateSkillUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            latent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    _activate_skill_use_case = ActivateSkillUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
+    )
+    _deactivate_skill_use_case = DeactivateSkillUseCase(
+        repository=latent_skill_repository,
+    )
+    _update_skill_use_case = UpdateSkillUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            latent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    list_skills_use_case = ListSkillsUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
+    )
+    get_skill_detail_use_case = GetSkillDetailUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
     )
 
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
@@ -187,5 +238,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         host_setup_command=host_use_case.execute,
         host_check_command=host_use_case.execute,
         host_sync_command=host_sync_use_case.execute,
+        propose_skill_command=propose_skill_use_case.execute,
+        generate_skill_command=generate_skill_use_case.execute,
+        list_skills_command=list_skills_use_case.execute,
+        get_skill_detail_command=get_skill_detail_use_case.execute,
+        activate_skill_command=_activate_skill_use_case.execute,
+        deactivate_skill_command=_deactivate_skill_use_case.execute,
+        update_skill_command=_update_skill_use_case.execute,
     )
     return configured_main(argv)

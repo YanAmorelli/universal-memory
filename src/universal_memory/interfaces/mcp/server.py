@@ -36,7 +36,24 @@ from universal_memory.application.security import (
     RollbackCommand,
     RollbackResult,
 )
-from universal_memory.domain import ValidationFailedError
+from universal_memory.application.skills import (
+    ActivateSkillCommand,
+    ActivateSkillResult,
+    DeactivateSkillCommand,
+    DeactivateSkillResult,
+    GenerateSkillCommand,
+    GenerateSkillResult,
+    GetSkillDetailCommand,
+    GetSkillDetailResult,
+    ListSkillsCommand,
+    ListSkillsResult,
+    ProposeSkillCommand,
+    ProposeSkillDecision,
+    ProposeSkillResult,
+    UpdateSkillCommand,
+    UpdateSkillResult,
+)
+from universal_memory.domain import StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEventScope,
     ContextSummaryScope,
@@ -75,6 +92,13 @@ ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResu
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
+ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
+GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
+ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
+GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
+ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResult]
+DeactivateSkillCommandHandler = Callable[[DeactivateSkillCommand], DeactivateSkillResult]
+UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
 ToolResponse = dict[str, Any]
 
 
@@ -97,6 +121,13 @@ class MCPUseCases:
     host_setup: ConfigureHostCommandHandler = _missing_use_case
     host_check: ConfigureHostCommandHandler = _missing_use_case
     sync_instructions: SyncInstructionsCommandHandler = _missing_use_case
+    propose_skill: ProposeSkillCommandHandler = _missing_use_case
+    generate_skill: GenerateSkillCommandHandler = _missing_use_case
+    list_skills: ListSkillsCommandHandler = _missing_use_case
+    get_skill_detail: GetSkillDetailCommandHandler = _missing_use_case
+    activate_skill: ActivateSkillCommandHandler = _missing_use_case
+    deactivate_skill: DeactivateSkillCommandHandler = _missing_use_case
+    update_skill: UpdateSkillCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -376,6 +407,139 @@ def configure_server(  # noqa: PLR0915
         except Exception as error:
             return _mcp_tool_error(error)
 
+    @server.tool(name="propose_skill")
+    def propose_skill(
+        latent_skill_id: str,
+        decision: Literal["sim", "s", "sempre", "e", "nao", "não", "n"] | None = None,
+    ) -> ToolResponse:
+        """Review or decide a latent skill proposal.
+
+        If `decision` is omitted, returns the suggested name, scope, purpose,
+        evidence, and explicit choices for a follow-up call.
+        """
+        try:
+            result = use_cases.propose_skill(
+                ProposeSkillCommand(
+                    latent_skill_id=latent_skill_id,
+                    decision=_skill_decision(decision),
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="skills.propose",
+                scope=result.latent_skill.scope.value,
+                data=_skill_proposal_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="generate_skill")
+    def generate_skill(
+        latent_skill_id: str,
+        update_existing: bool = False,
+    ) -> ToolResponse:
+        """Generate the physical Agent Skill structure for an approved latent skill."""
+        try:
+            result = use_cases.generate_skill(
+                GenerateSkillCommand(
+                    latent_skill_id=latent_skill_id,
+                    origin="mcp",
+                    update_existing=update_existing,
+                )
+            )
+            return _success_envelope(
+                operation="skills.generate",
+                scope=result.latent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="list_skills")
+    def list_skills() -> ToolResponse:
+        """List registered skills and candidates without mutating local state."""
+        try:
+            result = use_cases.list_skills(ListSkillsCommand())
+            return _success_envelope(
+                operation="skills.list",
+                scope="all",
+                data=result.to_payload(),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="get_skill_detail")
+    def get_skill_detail(name_or_id: str) -> ToolResponse:
+        """Inspect metadata and triggers for one registered skill."""
+        try:
+            result = use_cases.get_skill_detail(GetSkillDetailCommand(name_or_id=name_or_id))
+            return _success_envelope(
+                operation="skills.detail",
+                scope=result.scope,
+                data=result.to_payload(),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="activate_skill")
+    def activate_skill(latent_skill_id: str) -> ToolResponse:
+        """Reactivate an ignored latent skill through the shared safe mutation pipeline."""
+        try:
+            result = use_cases.activate_skill(
+                ActivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
+            )
+            return _success_envelope(
+                operation="skills.activate",
+                scope=result.latent_skill.scope.value,
+                data=_skill_mutation_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+
+    @server.tool(name="deactivate_skill")
+    def deactivate_skill(latent_skill_id: str) -> ToolResponse:
+        """Deactivate an active latent skill without deleting its physical SKILL.md."""
+        try:
+            result = use_cases.deactivate_skill(
+                DeactivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
+            )
+            return _success_envelope(
+                operation="skills.deactivate",
+                scope=result.latent_skill.scope.value,
+                data=_skill_mutation_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+
+    @server.tool(name="update_skill")
+    def update_skill(
+        latent_skill_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        triggers: list[str] | None = None,
+        raw_markdown: str | None = None,
+    ) -> ToolResponse:
+        """Update skill metadata or markdown through the shared safe mutation pipeline."""
+        try:
+            result = use_cases.update_skill(
+                UpdateSkillCommand(
+                    latent_skill_id=latent_skill_id,
+                    origin="mcp",
+                    name=name.strip() if name is not None else None,
+                    description=description.strip() if description is not None else None,
+                    triggers=_normalize_triggers(triggers),
+                    raw_markdown=raw_markdown,
+                )
+            )
+            return _success_envelope(
+                operation="skills.update",
+                scope=result.latent_skill.scope.value,
+                data=_skill_mutation_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+
     return server
 
 
@@ -490,6 +654,57 @@ def _rollback_payload(result: RollbackResult) -> dict[str, Any]:
     }
 
 
+def _skill_proposal_payload(result: ProposeSkillResult) -> dict[str, Any]:
+    return {
+        "skill_id": result.latent_skill.id,
+        "suggested_name": result.proposal["suggested_name"],
+        "status": result.latent_skill.status.value,
+        "accepted": result.accepted,
+        "auto_approval_recorded": result.auto_approval_recorded,
+        "audit_reference": result.audit_reference,
+        "snapshot_reference": result.snapshot_reference,
+        "choices": result.choices,
+        "requires_decision": result.requires_decision,
+        "evidence": result.proposal["evidence"],
+    }
+
+
+def _skill_mutation_payload(
+    result: ActivateSkillResult | DeactivateSkillResult | UpdateSkillResult,
+) -> dict[str, Any]:
+    skill = result.latent_skill
+    payload: dict[str, Any] = {
+        "latent_skill": {
+            "id": skill.id,
+            "name": skill.name,
+            "description": skill.description,
+            "status": skill.status.value,
+            "scope": skill.scope.value,
+            "triggers": _skill_triggers(skill),
+        },
+        "audit_reference": result.audit_reference,
+        "snapshot_reference": result.snapshot_reference,
+    }
+    skill_file = getattr(result, "skill_file", None)
+    if skill_file is not None:
+        payload["skill_file"] = skill_file
+    return payload
+
+
+def _skill_triggers(skill: Any) -> list[str]:
+    metadata = skill.metadata or {}
+    raw_triggers = metadata.get("triggers") or []
+    if isinstance(raw_triggers, list):
+        return [str(trigger) for trigger in raw_triggers]
+    return [str(raw_triggers)]
+
+
+def _normalize_triggers(triggers: list[str] | None) -> list[str] | None:
+    if triggers is None:
+        return None
+    return [trigger.strip() for trigger in triggers if trigger.strip()]
+
+
 def _entry_dict(entry: Any) -> dict[str, Any]:
     if hasattr(entry, "model_dump"):
         return entry.model_dump()
@@ -545,6 +760,19 @@ def _snapshot_scope(value: Literal["project", "global"]) -> SnapshotScope:
     raise ValidationFailedError("scope must be 'project' or 'global'.")
 
 
+def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
+    if value is None:
+        return None
+    normalized = value.strip().casefold()
+    if normalized in {"s", "sim", "y", "yes"}:
+        return ProposeSkillDecision.sim
+    if normalized in {"e", "sempre", "always"}:
+        return ProposeSkillDecision.sempre
+    if normalized in {"n", "nao", "não", "no"}:
+        return ProposeSkillDecision.nao
+    raise ValidationFailedError("decision must be 'sim', 'sempre' or 'nao'.")
+
+
 def _error_envelope(error: Exception) -> dict[str, Any]:
     return {
         "ok": False,
@@ -566,6 +794,16 @@ def _mcp_tool_error(error: Exception) -> dict[str, Any]:
         "ok": False,
         "error": payload,
     }
+
+
+def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
+    if isinstance(error, StorageError) and str(error) == (
+        f"Latent skill not found: {latent_skill_id}"
+    ):
+        return ValidationFailedError(
+            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+        )
+    return error
 
 
 def _error_code(error: Exception) -> int:

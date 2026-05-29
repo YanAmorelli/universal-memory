@@ -1,6 +1,13 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
-from universal_memory.domain.entities import LatentSkill, LatentSkillScope, LatentSkillStatus
+from universal_memory.domain.entities import (
+    LatentSkill,
+    LatentSkillScope,
+    LatentSkillStatus,
+    SafeWriteResult,
+)
 
 
 class LatentSkillRepository(ABC):
@@ -35,11 +42,12 @@ class LatentSkillRepository(ABC):
         ...
 
     @abstractmethod
-    def write(self, entity: LatentSkill) -> None:
+    def write(self, entity: LatentSkill, *, origin: str = "repository") -> SafeWriteResult | None:
         """Write or update a latent skill in the repository.
 
         Args:
             entity: The LatentSkill entity to write.
+            origin: Origin associated with the audit trail for this write.
         """
         ...
 

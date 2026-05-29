@@ -19,7 +19,15 @@ from universal_memory.application.security import (
     RollbackUseCase,
     SafeWriteUseCase,
 )
-from universal_memory.bootstrap.cli import EmptyLatentSkillRepository
+from universal_memory.application.skills import (
+    ActivateSkillUseCase,
+    DeactivateSkillUseCase,
+    GenerateSkillUseCase,
+    GetSkillDetailUseCase,
+    ListSkillsUseCase,
+    ProposeSkillUseCase,
+    UpdateSkillUseCase,
+)
 from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
@@ -29,6 +37,7 @@ from universal_memory.infrastructure.security import (
 from universal_memory.infrastructure.storage import (
     LocalContextSummaryRepository,
     LocalFactRepository,
+    LocalLatentSkillRepository,
     LocalRuleRepository,
 )
 from universal_memory.interfaces.mcp import MCPUseCases, configure_server, create_mcp_server
@@ -60,10 +69,15 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         data_root=data_root,
         safe_write_use_case=safe_write_use_case,
     )
+    latent_skill_repository = LocalLatentSkillRepository(
+        project_root=root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
         rule_repository=rule_repository,
-        latent_skill_repository=EmptyLatentSkillRepository(),
+        latent_skill_repository=latent_skill_repository,
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
         data_root=data_root,
@@ -109,6 +123,42 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         safe_write_use_case=safe_write_use_case,
         rule_repository=rule_repository,
     )
+    propose_skill_use_case = ProposeSkillUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
+    generate_skill_use_case = GenerateSkillUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            latent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    _activate_skill_use_case = ActivateSkillUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+    )
+    _deactivate_skill_use_case = DeactivateSkillUseCase(
+        repository=latent_skill_repository,
+    )
+    _update_skill_use_case = UpdateSkillUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            latent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    list_skills_use_case = ListSkillsUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+    )
+    get_skill_detail_use_case = GetSkillDetailUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+    )
 
     def initialize_project(project_root: Path):
         return setup_project(
@@ -132,6 +182,13 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             host_setup=host_use_case.execute,
             host_check=host_use_case.execute,
             sync_instructions=host_sync_use_case.execute,
+            propose_skill=propose_skill_use_case.execute,
+            generate_skill=generate_skill_use_case.execute,
+            list_skills=list_skills_use_case.execute,
+            get_skill_detail=get_skill_detail_use_case.execute,
+            activate_skill=_activate_skill_use_case.execute,
+            deactivate_skill=_deactivate_skill_use_case.execute,
+            update_skill=_update_skill_use_case.execute,
         ),
         project_root=root,
     )

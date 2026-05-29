@@ -67,3 +67,15 @@
 - Dependência acoplada do relógio do sistema (datetime.now(UTC)): O caso de uso usa diretamente `datetime.now(UTC)` dentro de sua execução lógica, dificultando testes unitários isolados e determinismo de testes. [src/universal_memory/application/host/sync_instructions_use_case.py:63]
 - Validação de hosts suportados no caso de uso em vez de camada de validação dedicada: A validação estrutural de quais hosts configurados no arquivo TOML são suportados está implementada diretamente no fluxo do caso de uso em vez de uma porta de validação estrutural. [src/universal_memory/application/host/sync_instructions_use_case.py:360]
 - Ausência de teste e especificidade no comportamento de mesclagem de listas de _deep_merge: A função `update_project_config` utiliza `_deep_merge` para fundir dados de configuração sem garantias formais contra duplicação de itens de lista em execuções subsequentes. [src/universal_memory/infrastructure/config/toml_loader.py:174]
+
+## Deferred from: code review of 6-1-registrar-latent-skills-por-recorr-ncia.md (2026-05-29)
+
+- Alta concorrência e redundância de locks (listagens e escritas repetidas): O Caso de Uso faz múltiplas chamadas `list()` e depois `write()`, cada uma disputando e adquirindo individualmente travas exclusivas. Otimizações de I/O em lote ou locks compartilhados para leitura são recomendados no futuro. [src/universal_memory/application/skills/track_latent_skill.py:83-90]
+- Ausência de fluxo interativo de confirmação em ocorrências ambíguas: O Caso de Uso apenas registra candidatos propostos separados para similaridades baixas, sem gancho para confirmação interativa do usuário. [src/universal_memory/application/skills/track_latent_skill.py:81-90]
+
+## Deferred from: code review of 6-3-gerar-estrutura-agent-skills.md (2026-05-29)
+
+- TOCTOU (Time-of-check to time-of-use) na resolução de slugs: Há uma janela de tempo entre a verificação de existência do slug e a criação física, porém é de baixíssimo risco no ecossistema local monoproduto atual. [src/universal_memory/application/skills/generate_skill.py:178-189]
+- Tratamento estético de ValidationError do Pydantic na CLI: A CLI repassa o string do ValidationError cru, que é feio/verboso, mas não quebra funcionalidade. [src/universal_memory/interfaces/cli/init_command.py:501-504]
+- Tratamento de caminhos quando project_root é resolved para /: Se o root do projeto for /, substituições de caminho podem corromper caminhos relativos, mas a raiz nunca será / em ambientes de desenvolvimento reais dos usuários. [src/universal_memory/application/skills/generate_skill.py:249]
+

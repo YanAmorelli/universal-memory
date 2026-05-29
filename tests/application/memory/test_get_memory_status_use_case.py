@@ -123,7 +123,7 @@ class RecordingLatentSkillRepository(LatentSkillRepository):
             skills = [skill for skill in skills if skill.status == status]
         return skills
 
-    def write(self, entity: LatentSkill) -> None:
+    def write(self, entity: LatentSkill, *, origin: str = "repository") -> None:
         self.skills.append(entity)
 
     def delete(self, id: str) -> None:

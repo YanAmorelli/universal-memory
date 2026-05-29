@@ -25,6 +25,17 @@ from universal_memory.application.security import (
     RollbackResult,
     SnapshotEntry,
 )
+from universal_memory.application.skills import (
+    ActivateSkillCommand,
+    ActivateSkillResult,
+    DeactivateSkillCommand,
+    DeactivateSkillResult,
+    ProposeSkillCommand,
+    ProposeSkillDecision,
+    ProposeSkillResult,
+    UpdateSkillCommand,
+    UpdateSkillResult,
+)
 from universal_memory.domain import SecretDetectedError
 from universal_memory.domain.entities import (
     ContextSummary,
@@ -32,6 +43,9 @@ from universal_memory.domain.entities import (
     Fact,
     FactScope,
     FactStatus,
+    LatentSkill,
+    LatentSkillScope,
+    LatentSkillStatus,
 )
 from universal_memory.interfaces.cli.init_command import create_typer_app
 from universal_memory.interfaces.cli.init_command import main as cli_main
@@ -48,8 +62,7 @@ SECRET_SENTINEL = "sk-test-secret-value"  # noqa: S105 - sentinel used to verify
 PARITY_EXCLUSIONS = {
     # Epic 5 backlog: host adapters and host checks are not implemented yet.
     "check_host",
-    # Epic 6 backlog: skill proposal and registry use cases are not implemented yet.
-    "propose_skill",
+    # Epic 6 backlog: skill registry use cases are not implemented yet.
     "list_skills",
     # Future rules capability: no business use case exists in the current implementation.
     "propose_rule",
@@ -69,6 +82,9 @@ PARITY_MATRIX = {
     "host.setup_check": "check_host",
     "skills.propose": "propose_skill",
     "skills.list": "list_skills",
+    "skills.activate": "activate_skill",
+    "skills.deactivate": "deactivate_skill",
+    "skills.update": "update_skill",
     "rules.propose": "propose_rule",
 }
 
@@ -204,6 +220,62 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
         (["audit", "list", "--format", "json"], "list_audit_events", {}),
         (["snapshots", "list", "--format", "json"], "list_snapshots", {}),
         (["rollback", "--yes", "--format", "json"], "rollback_scope", {"confirm": True}),
+        (
+            [
+                "skills",
+                "propose",
+                "11111111-1111-4111-8111-111111111111",
+                "--yes",
+                "--format",
+                "json",
+            ],
+            "propose_skill",
+            {"latent_skill_id": "11111111-1111-4111-8111-111111111111", "decision": "sim"},
+        ),
+        (
+            [
+                "skills",
+                "activate",
+                "11111111-1111-4111-8111-111111111111",
+                "--format",
+                "json",
+            ],
+            "activate_skill",
+            {"latent_skill_id": "11111111-1111-4111-8111-111111111111"},
+        ),
+        (
+            [
+                "skills",
+                "deactivate",
+                "11111111-1111-4111-8111-111111111111",
+                "--format",
+                "json",
+            ],
+            "deactivate_skill",
+            {"latent_skill_id": "11111111-1111-4111-8111-111111111111"},
+        ),
+        (
+            [
+                "skills",
+                "update",
+                "11111111-1111-4111-8111-111111111111",
+                "--name",
+                "TDD recorrente",
+                "--description",
+                "Usuario pede ciclo red green refactor",
+                "--trigger",
+                "red green refactor",
+                "--format",
+                "json",
+            ],
+            "update_skill",
+            {
+                "latent_skill_id": "11111111-1111-4111-8111-111111111111",
+                "name": "TDD recorrente",
+                "description": "Usuario pede ciclo red green refactor",
+                "triggers": ["red green refactor"],
+            },
+        ),
     ],
 )
 async def test_cli_and_mcp_json_data_keys_match_for_public_capabilities(  # noqa: PLR0913
@@ -268,6 +340,10 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
             audit_reference="audit-1",
         ),
         "rollback_preview_command": lambda _scope: object(),
+        "propose_skill_command": propose_skill_result,
+        "activate_skill_command": activate_skill_result,
+        "deactivate_skill_command": deactivate_skill_result,
+        "update_skill_command": update_skill_result,
     }
 
 
@@ -292,6 +368,89 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
             restored_paths=[".umem/memory/facts.jsonl"],
             audit_reference="audit-1",
         ),
+        propose_skill=propose_skill_result,
+        activate_skill=activate_skill_result,
+        deactivate_skill=deactivate_skill_result,
+        update_skill=update_skill_result,
+    )
+
+
+def propose_skill_result(command: ProposeSkillCommand) -> ProposeSkillResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id=command.latent_skill_id,
+        created_at=now,
+        updated_at=now,
+        name="TDD recorrente",
+        description="Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.active
+        if command.decision != ProposeSkillDecision.nao
+        else LatentSkillStatus.ignored,
+        recurrence_count=3,
+        metadata={},
+    )
+    return ProposeSkillResult(
+        latent_skill=skill,
+        proposal={
+            "suggested_name": skill.name,
+            "purpose": skill.description,
+            "scope": skill.scope.value,
+            "evidence": ["Pedido em story anterior"],
+        },
+        accepted=command.decision in {ProposeSkillDecision.sim, ProposeSkillDecision.sempre},
+        auto_approval_recorded=command.decision == ProposeSkillDecision.sempre,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def mutation_skill(
+    command: ActivateSkillCommand | DeactivateSkillCommand | UpdateSkillCommand,
+) -> LatentSkill:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    status = (
+        LatentSkillStatus.ignored
+        if isinstance(command, DeactivateSkillCommand)
+        else LatentSkillStatus.active
+    )
+    return LatentSkill(
+        id=command.latent_skill_id,
+        created_at=now,
+        updated_at=now,
+        name=getattr(command, "name", None) or "TDD recorrente",
+        description=getattr(command, "description", None)
+        or "Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=status,
+        recurrence_count=3,
+        metadata={"triggers": getattr(command, "triggers", None) or ["red green refactor"]},
+    )
+
+
+def activate_skill_result(command: ActivateSkillCommand) -> ActivateSkillResult:
+    return ActivateSkillResult(
+        latent_skill=mutation_skill(command),
+        skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def deactivate_skill_result(command: DeactivateSkillCommand) -> DeactivateSkillResult:
+    return DeactivateSkillResult(
+        latent_skill=mutation_skill(command),
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def update_skill_result(command: UpdateSkillCommand) -> UpdateSkillResult:
+    return UpdateSkillResult(
+        latent_skill=mutation_skill(command),
+        skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
     )
 
 
