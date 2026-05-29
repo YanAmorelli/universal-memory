@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from universal_memory.domain.entities import LatentSkill, LatentSkillScope, LatentSkillStatus
+
+if TYPE_CHECKING:
+    from universal_memory.application.security import SafeWriteResult
 
 
 class LatentSkillRepository(ABC):
@@ -35,7 +41,7 @@ class LatentSkillRepository(ABC):
         ...
 
     @abstractmethod
-    def write(self, entity: LatentSkill) -> None:
+    def write(self, entity: LatentSkill) -> SafeWriteResult | None:
         """Write or update a latent skill in the repository.
 
         Args:
