@@ -11,7 +11,7 @@ def test_merge_managed_block_preserves_user_sections_around_umem_block() -> None
         "<!-- UMEM: END -->\n\n"
         "Tail note.\n"
     )
-    managed = "<!-- UMEM: START -->\n" "# Universal Memory Active Policy\n" "<!-- UMEM: END -->\n"
+    managed = "<!-- UMEM: START -->\n# Universal Memory Active Policy\n<!-- UMEM: END -->\n"
 
     merged = use_case._merge_managed_block(existing, managed)
 

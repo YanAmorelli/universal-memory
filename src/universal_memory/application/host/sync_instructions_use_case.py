@@ -14,7 +14,7 @@ from universal_memory.application.host.setup_host_use_case import (
     _safe_relative_path,
 )
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
-from universal_memory.domain import ValidationFailedError
+from universal_memory.domain import InvalidConfigError, StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEventScope,
     InstructionClassification,
@@ -23,7 +23,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.ports import RuleRepository
-from universal_memory.infrastructure.config.toml_loader import load_config
+from universal_memory.infrastructure.config.toml_loader import load_config, update_project_config
 
 DEFAULT_SYNC_HOSTS = ("codex", "claude_code")
 CLAUDE_SUPPORTED_CLASSIFICATIONS = {
@@ -52,9 +52,6 @@ class SyncInstructionsResult:
     snapshot_reference: str
     timestamp: str
     warnings: list[str] = field(default_factory=list)
-
-
-
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -294,9 +291,7 @@ class SyncInstructionsUseCase:
         classification = self._classification_for(rule)
         metadata = rule.metadata or {}
         relative_path = (
-            metadata.get("relative_path")
-            or metadata.get("canonical_path")
-            or metadata.get("path")
+            metadata.get("relative_path") or metadata.get("canonical_path") or metadata.get("path")
         )
         if relative_path:
             relative_path = _safe_relative_path(str(relative_path))
@@ -354,7 +349,6 @@ class SyncInstructionsUseCase:
                 to_enable.append(host_id)
 
         if to_enable:
-            from universal_memory.infrastructure.config.toml_loader import update_project_config
             new_enabled = list(enabled_hosts)
             for h in to_enable:
                 if h not in new_enabled:

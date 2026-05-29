@@ -260,6 +260,5 @@ def test_sync_explicit_disabled_host_is_allowed_with_warning(
 
     assert result.host_ids == ["claude_code"]
     assert result.warnings == [
-        "Host 'claude_code' nao esta habilitado em .umem/config.toml; "
-        "ativando automaticamente."
+        "Host 'claude_code' nao esta habilitado em .umem/config.toml; ativando automaticamente."
     ]

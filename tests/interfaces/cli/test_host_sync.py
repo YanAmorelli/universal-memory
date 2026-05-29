@@ -115,8 +115,7 @@ def test_host_sync_human_dry_run_displays_plan_and_dry_run_concluido(
     assert "Escopo" in captured.out
     assert "project" in captured.out
     assert (
-        "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos."
-        in captured.out
+        "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos." in captured.out
     )
 
 

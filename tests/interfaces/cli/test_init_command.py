@@ -61,7 +61,7 @@ def test_init_json_outputs_pure_parseable_payload_with_required_keys(
     assert payload["operation"] == "init"
     assert payload["scope"] == "project"
     assert payload["warnings"] == []
-    
+
     data = payload["data"]
     assert data["project_path"] == "."
     assert data["config_path"] == ".umem/config.toml"
@@ -117,8 +117,10 @@ def test_init_json_hosts_option_persists_selection_and_runs_selected_host_setup(
     assert exit_code == 0
     assert captured.err == ""
     assert json.loads(captured.out)["ok"] is True
-    assert (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8").endswith(
-        '[hosts]\nenabled = [\n    "codex",\n]\n'
+    assert (
+        (tmp_path / ".umem" / "config.toml")
+        .read_text(encoding="utf-8")
+        .endswith('[hosts]\nenabled = [\n    "codex",\n]\n')
     )
     assert seen == [
         ConfigureHostCommand(host_id="codex", apply=True, origin="cli_init"),

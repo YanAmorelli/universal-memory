@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from universal_memory.domain import ConfigValidationPort, ProjectLayoutPort
+from universal_memory.domain import ConfigValidationPort, InvalidConfigError, ProjectLayoutPort
 from universal_memory.infrastructure.config.toml_loader import update_project_config
 
 DEFAULT_ENABLED_HOST_IDS = ["codex", "claude_code"]
@@ -34,12 +34,12 @@ def setup_project(
     if enabled_host_ids is not None:
         unsupported = [h for h in enabled_host_ids if h not in DEFAULT_ENABLED_HOST_IDS]
         if unsupported:
-            from universal_memory.domain import InvalidConfigError
             raise InvalidConfigError(f"Hosts nao suportados: {', '.join(unsupported)}")
 
+    hosts_enabled = enabled_host_ids if enabled_host_ids is not None else DEFAULT_ENABLED_HOST_IDS
     update_project_config(
         normalized_project_root,
-        {"hosts": {"enabled": enabled_host_ids if enabled_host_ids is not None else DEFAULT_ENABLED_HOST_IDS}},
+        {"hosts": {"enabled": hosts_enabled}},
         global_config_path=global_config_path,
     )
 

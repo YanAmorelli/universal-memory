@@ -73,8 +73,7 @@ def _detect_always_never_contradictions(
         agents_polarity = _rule_polarity(agents_norm)
         if agents_polarity != claude_polarity:
             warnings.append(
-                "Contradicao explicita entre AGENTS.md e CLAUDE.md: "
-                f"{agents_line} / {claude_line}"
+                f"Contradicao explicita entre AGENTS.md e CLAUDE.md: {agents_line} / {claude_line}"
             )
     return warnings
 

@@ -304,9 +304,9 @@ async def test_mcp_compliance_blocks_destructive_tools_without_confirmation(
 def _assert_contract_types(tool_name: str, data: dict[str, Any]) -> None:
     for key, expected_type in CONTRACT_TYPES_BY_TOOL[tool_name].items():
         assert key in data, f"{tool_name}: missing contract key {key!r}"
-        assert isinstance(
-            data[key], expected_type
-        ), f"{tool_name}.{key}: expected {expected_type}, got {type(data[key]).__name__}"
+        assert isinstance(data[key], expected_type), (
+            f"{tool_name}.{key}: expected {expected_type}, got {type(data[key]).__name__}"
+        )
 
 
 def _mcp_error_payload(structured_content: dict[str, Any] | None) -> dict[str, Any]:

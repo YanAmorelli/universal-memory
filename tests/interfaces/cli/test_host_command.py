@@ -143,9 +143,7 @@ def test_claude_code_host_setup_json_outputs_devex_contract_with_warnings(
         "data": {
             "host_id": "claude_code",
             "instruction_targets": ["claude_md"],
-            "planned_changes": [
-                {"target": "claude_md", "action": "create", "path": "CLAUDE.md"}
-            ],
+            "planned_changes": [{"target": "claude_md", "action": "create", "path": "CLAUDE.md"}],
             "manual_steps": [],
             "validation_status": "success",
             "audit_reference": "uuid-v4-reference",

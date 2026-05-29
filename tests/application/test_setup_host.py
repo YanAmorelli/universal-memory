@@ -376,8 +376,7 @@ def test_claude_code_check_reports_drift_warnings_without_mutation(
     )
 
     assert result.warnings == [
-        "Instrucao duplicada em AGENTS.md e CLAUDE.md: "
-        "Use relative paths in specs, code and docs."
+        "Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths in specs, code and docs."
     ]
     assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8").count("Use relative paths") == 1
 
@@ -442,9 +441,7 @@ def test_host_check_records_failure_for_corrupted_umem_delimiters(
         encoding="utf-8",
     )
 
-    result = use_case.execute(
-        ConfigureHostCommand(host_id="claude_code", check=True, origin="cli")
-    )
+    result = use_case.execute(ConfigureHostCommand(host_id="claude_code", check=True, origin="cli"))
 
     assert result.validation_status == "failure"
     assert any("delimitadores UMEM" in warning for warning in result.warnings)

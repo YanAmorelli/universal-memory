@@ -108,7 +108,6 @@ class ConfigureHostResult:
         }
 
 
-
 @dataclass(frozen=True, slots=True)
 class PreparedInstructionTarget:
     final_content: str
@@ -265,7 +264,6 @@ class ConfigureHostUseCase:
             warnings=warnings,
         )
 
-
     def _validate_host_read(
         self,
         host: Host,
@@ -291,9 +289,7 @@ class ConfigureHostUseCase:
             return self._host_read_validation_result(method, checks, failures)
 
         if not path.exists() or not path.is_file():
-            failures.append(
-                f"Falha de Arquivo de Instrução: {target.relative_path} ausente."
-            )
+            failures.append(f"Falha de Arquivo de Instrução: {target.relative_path} ausente.")
             return self._host_read_validation_result(method, checks, failures)
 
         checks["instruction_file_exists"] = True
@@ -351,13 +347,13 @@ class ConfigureHostUseCase:
             )
 
         result = self._host_read_validation_result(method, checks, failures)
-        
+
         # Combine failures and drift warnings if readable
         all_warnings = failures.copy()
         if checks["instruction_file_readable"] and host.name == HostName.claude_code:
             drift_warnings = self._drift_warnings(host, target, content)
             all_warnings.extend(drift_warnings)
-            
+
         return HostReadValidationResult(
             status=result.status,
             method=result.method,
@@ -365,7 +361,6 @@ class ConfigureHostUseCase:
             failures=result.failures,
             warnings=all_warnings,
         )
-
 
     def _host_read_validation_result(
         self,
@@ -380,7 +375,6 @@ class ConfigureHostUseCase:
             failures=failures,
             warnings=failures.copy(),
         )
-
 
     def _record_host_validation(
         self,
@@ -415,12 +409,10 @@ class ConfigureHostUseCase:
             pass
         return audit_reference
 
-
     def _managed_block_inner_content(self, managed_block: str) -> str:
         start = managed_block.find(UMEM_START) + len(UMEM_START)
         end = managed_block.rfind(UMEM_END)
         return managed_block[start:end]
-
 
     def _has_mcp_reference(self, content: str) -> bool:
         normalized = content.lower()
@@ -432,7 +424,6 @@ class ConfigureHostUseCase:
             "fastmcp",
         )
         return any(reference in normalized for reference in references)
-
 
     def _validate_existing_managed_content(
         self,
@@ -458,7 +449,6 @@ class ConfigureHostUseCase:
             if not command.apply:
                 raise
 
-
     def _instruction_blocks_for(self, command: ConfigureHostCommand) -> list[InstructionBlock]:
         if command.instruction_blocks or self.fact_repository is None:
             return command.instruction_blocks
@@ -481,7 +471,6 @@ class ConfigureHostUseCase:
             )
         return instruction_blocks
 
-
     def _prepare_target_content(
         self,
         target: InstructionTarget,
@@ -491,7 +480,7 @@ class ConfigureHostUseCase:
         command: ConfigureHostCommand,
     ) -> PreparedInstructionTarget:
         partition = partition_instruction_blocks(instruction_blocks)
-        
+
         supported = set(getattr(c, "value", c) for c in target.supported_classifications)
         warnings = []
         for block in instruction_blocks:
@@ -514,7 +503,6 @@ class ConfigureHostUseCase:
             canonical_documents = partition.canonical_documents
             managed_content = self._render_managed_block(partition)
 
-
         self._validate_compact_manifest(
             managed_content,
             target_path=target.relative_path,
@@ -535,7 +523,6 @@ class ConfigureHostUseCase:
             warnings=warnings,
         )
 
-
     def _drift_content(
         self,
         *,
@@ -546,8 +533,6 @@ class ConfigureHostUseCase:
         if not apply and "- (" not in final_content and existing_content:
             return existing_content
         return final_content
-
-
 
     def _audit_and_snapshot_references(
         self,
@@ -602,7 +587,6 @@ class ConfigureHostUseCase:
         snapshot_refs.append(result.snapshot_reference)
         return ", ".join(audit_refs), ", ".join(snapshot_refs)
 
-
     def _drift_warnings(
         self,
         host: Host,
@@ -622,7 +606,6 @@ class ConfigureHostUseCase:
             agents_content=agents_content,
             claude_content=final_content,
         )
-
 
     def _primary_target_for(self, host: Host) -> InstructionTarget:
         return self._instruction_target_for(host, host.supported_targets[0])
@@ -671,9 +654,7 @@ class ConfigureHostUseCase:
         target_type: InstructionTargetType,
     ) -> InstructionTarget:
         if host is not None and target_type not in host.supported_targets:
-            raise ValidationFailedError(
-                f"Host {host.name.value} nao suporta {target_type.value}"
-            )
+            raise ValidationFailedError(f"Host {host.name.value} nao suporta {target_type.value}")
         timestamp = datetime.now(UTC)
         if target_type == InstructionTargetType.claude_md:
             return InstructionTarget(
@@ -705,7 +686,6 @@ class ConfigureHostUseCase:
             )
         else:
             raise ValidationFailedError(f"Target nao suportado: {target_type.value}")
-
 
     def _read_existing(self, relative_path: str) -> str:
         path = (self.project_root / relative_path).resolve()
@@ -772,16 +752,13 @@ class ConfigureHostUseCase:
         lines.append(UMEM_END)
         return "\n".join(lines) + "\n"
 
-
     def _target_manifest_blocks(
         self,
         partition: InstructionPartition,
         target: InstructionTarget,
     ) -> list[ManifestInstruction]:
         supported = set(target.supported_classifications)
-        return [
-            block for block in partition.manifest_blocks if block.classification in supported
-        ]
+        return [block for block in partition.manifest_blocks if block.classification in supported]
 
     def _render_canonical_document(self, document: CanonicalDocument) -> str:
         return f"# {document.title}\n\n{document.content}\n"
@@ -848,7 +825,6 @@ class ConfigureHostUseCase:
                 "de fatos ou memorias."
             )
 
-
     def _planned_changes(
         self,
         target: InstructionTarget,
@@ -897,8 +873,6 @@ class ConfigureHostUseCase:
     def read_existing(self, relative_path: str) -> str:
         return self._read_existing(relative_path)
 
-
-
     def validate_existing_managed_content(
         self, content: str, target_path: str, command: ConfigureHostCommand
     ) -> None:
@@ -939,8 +913,6 @@ class ConfigureHostUseCase:
     def render_canonical_document(self, document: CanonicalDocument) -> str:
         return self._render_canonical_document(document)
 
-
-
     def drift_content(self, existing: str, final: str, apply: bool) -> str | None:
         return self._drift_content(
             existing_content=existing,
@@ -954,10 +926,7 @@ class ConfigureHostUseCase:
         target: InstructionTarget,
         drift_content: str | None,
     ) -> list[str]:
-        return self._drift_warnings(host, target, drift_content)
-
-
-
+        return self._drift_warnings(host, target, drift_content or "")
 
 
 def _canonical_doc_path(title: str, docs_directory: str) -> str:

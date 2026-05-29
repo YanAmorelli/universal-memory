@@ -76,7 +76,9 @@ from universal_memory.interfaces.errors import (
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
-SetupProjectCommand = Callable[[Path, list[str] | None], SetupProjectResult]
+SetupProjectCommand = (
+    Callable[[Path, list[str] | None], SetupProjectResult] | Callable[[Path], SetupProjectResult]
+)
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
@@ -711,8 +713,15 @@ def _execute_setup_project(
         sig = signature(command)
         params = list(sig.parameters.values())
         has_var_args = any(p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD) for p in params)
-        positional_params = [p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
-        if len(positional_params) >= 2 or has_var_args or "enabled_host_ids" in sig.parameters:
+        positional_params = [
+            p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
+        min_positional_args = 2
+        if (
+            len(positional_params) >= min_positional_args
+            or has_var_args
+            or "enabled_host_ids" in sig.parameters
+        ):
             return command(project_root, enabled_host_ids)  # type: ignore
     except (ValueError, TypeError):
         pass
@@ -764,12 +773,16 @@ def _configure_init_hosts(
 ) -> list[ConfigureHostResult]:
     if host_ids and (host_setup_command is None or host_check_command is None):
         _stderr_console().print(
-            "[yellow]Warning: CLI host_setup_command or host_check_command dependency was not configured. "
+            "[yellow]Warning: CLI host_setup_command or "
+            "host_check_command dependency was not configured. "
             "Skipping automatic host setup.[/yellow]"
         )
         return []
     if not host_ids:
         return []
+
+    if host_setup_command is None or host_check_command is None:
+        raise ValidationFailedError("CLI host dependencies were not configured.")
 
     results: list[ConfigureHostResult] = []
     for host_id in host_ids:
@@ -1184,9 +1197,6 @@ def _run_host_check(
     else:
         _stdout_console().print(_format_human_host_success(result, operation="check"))
     return 0
-
-
-
 
 
 def _run_host_sync(
@@ -1748,9 +1758,6 @@ def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -
             f"Auditoria: {result.audit_reference}",
         ]
     )
-
-
-
 
 
 def _format_human_sync_success(result: SyncInstructionsResult) -> str:

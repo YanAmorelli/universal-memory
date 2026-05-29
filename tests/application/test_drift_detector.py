@@ -16,8 +16,7 @@ def test_drift_detector_warns_about_duplicate_instruction_lines() -> None:
     )
 
     assert warnings == [
-        "Instrucao duplicada em AGENTS.md e CLAUDE.md: "
-        "Use relative paths in specs, code and docs."
+        "Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths in specs, code and docs."
     ]
 
 
