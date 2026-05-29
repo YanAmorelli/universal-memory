@@ -1,6 +1,27 @@
 repos:
+  # 1. CODE QUALITY (Ruff)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4  # Replace with your preferred Ruff version
+    hooks:
+      - id: ruff
+        stages: [pre-commit] # Runs fast on commit to fix errors
+      - id: ruff-format
+        stages: [pre-commit] # Ensures code is saved pre-formatted
+
+  # 2. SECURITY (Gitleaks)
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.2
     hooks:
       - id: gitleaks
-        stages: [pre-push]
+        stages: [pre-push] # Runs only on push to avoid false positives during commits
+
+  # 3. UNIT TESTS (Pytest via your local environment controlled by UV)
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push] # Runs only on push to not delay your daily commits

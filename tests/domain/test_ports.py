@@ -130,12 +130,12 @@ def test_ports_expose_abstract_methods_with_typed_signatures(
         assert next(iter(signature.parameters)) == "self"
 
         for parameter_name, expected_type in expected_parameters.items():
-            assert parameter_name in signature.parameters, (
-                f"Missing parameter '{parameter_name}' in method '{method_name}'"
-            )
-            assert parameter_name in hints, (
-                f"Missing type hint for parameter '{parameter_name}' in method '{method_name}'"
-            )
+            assert (
+                parameter_name in signature.parameters
+            ), f"Missing parameter '{parameter_name}' in method '{method_name}'"
+            assert (
+                parameter_name in hints
+            ), f"Missing type hint for parameter '{parameter_name}' in method '{method_name}'"
             parameter = signature.parameters[parameter_name]
             assert parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
             assert hints[parameter_name] == expected_type

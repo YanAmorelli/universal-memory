@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+from universal_memory.application.host import ConfigureHostResult
 from universal_memory.application.memory import (
     AssembleContextSummaryResult,
     GetMemoryStatusResult,
@@ -49,6 +50,8 @@ PUBLIC_MCP_TOOLS = {
     "list_audit_events": {},
     "list_snapshots": {},
     "rollback_scope": {"confirm": True},
+    "host_setup": {"host_id": "codex", "force": True},
+    "host_check": {"host_id": "codex"},
 }
 CONTRACT_KEYS_BY_TOOL = {
     "initialize_project": {
@@ -86,6 +89,22 @@ CONTRACT_KEYS_BY_TOOL = {
     "list_audit_events": {"events"},
     "list_snapshots": {"snapshots"},
     "rollback_scope": {"scope", "snapshot_reference", "restored_paths", "audit_reference"},
+    "host_setup": {
+        "host_id",
+        "instruction_targets",
+        "planned_changes",
+        "manual_steps",
+        "validation_status",
+        "audit_reference",
+    },
+    "host_check": {
+        "host_id",
+        "instruction_targets",
+        "planned_changes",
+        "manual_steps",
+        "validation_status",
+        "audit_reference",
+    },
 }
 CONTRACT_TYPES_BY_TOOL = {
     "initialize_project": {
@@ -133,6 +152,22 @@ CONTRACT_TYPES_BY_TOOL = {
         "scope": str,
         "snapshot_reference": str,
         "restored_paths": list,
+        "audit_reference": str,
+    },
+    "host_setup": {
+        "host_id": str,
+        "instruction_targets": list,
+        "planned_changes": list,
+        "manual_steps": list,
+        "validation_status": str,
+        "audit_reference": str,
+    },
+    "host_check": {
+        "host_id": str,
+        "instruction_targets": list,
+        "planned_changes": list,
+        "manual_steps": list,
+        "validation_status": str,
         "audit_reference": str,
     },
 }
@@ -240,9 +275,9 @@ async def test_mcp_compliance_blocks_destructive_tools_without_confirmation(
 def _assert_contract_types(tool_name: str, data: dict[str, Any]) -> None:
     for key, expected_type in CONTRACT_TYPES_BY_TOOL[tool_name].items():
         assert key in data, f"{tool_name}: missing contract key {key!r}"
-        assert isinstance(data[key], expected_type), (
-            f"{tool_name}.{key}: expected {expected_type}, got {type(data[key]).__name__}"
-        )
+        assert isinstance(
+            data[key], expected_type
+        ), f"{tool_name}.{key}: expected {expected_type}, got {type(data[key]).__name__}"
 
 
 def _mcp_error_payload(structured_content: dict[str, Any] | None) -> dict[str, Any]:
@@ -276,6 +311,8 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
             restored_paths=[".umem/memory/facts.jsonl"],
             audit_reference="audit-1",
         ),
+        host_setup=lambda _command: host_result(),
+        host_check=lambda _command: host_result(planned_changes=[]),
     )
 
 
@@ -340,4 +377,21 @@ def fact_fixture() -> Fact:
         source="test",
         status=FactStatus.active,
         tags=["style"],
+    )
+
+
+def host_result(
+    planned_changes: list[dict[str, str]] | None = None,
+) -> ConfigureHostResult:
+    return ConfigureHostResult(
+        host_id="codex",
+        instruction_targets=["agents_md"],
+        planned_changes=planned_changes
+        if planned_changes is not None
+        else [{"target": "agents_md", "action": "create", "path": "AGENTS.md"}],
+        manual_steps=[],
+        validation_status="success",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+        timestamp="2026-05-28T12:00:00Z",
     )

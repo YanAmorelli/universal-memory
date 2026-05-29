@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from fastmcp import FastMCP
 
+from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -67,6 +68,7 @@ PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
+ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 ToolResponse = dict[str, Any]
 
 
@@ -86,6 +88,8 @@ class MCPUseCases:
     list_audit_events: ListAuditLogCommandHandler = _missing_use_case
     list_snapshots: ListSnapshotsCommandHandler = _missing_use_case
     rollback_scope: RollbackCommandHandler = _missing_use_case
+    host_setup: ConfigureHostCommandHandler = _missing_use_case
+    host_check: ConfigureHostCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -284,6 +288,57 @@ def configure_server(  # noqa: PLR0915
                 operation="rollback",
                 scope=snapshot_scope.value,
                 data=_rollback_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="host_setup")
+    def host_setup(
+        host_id: str,
+        force: bool = False,
+        max_lines: int = 100,
+        max_chars: int = 4000,
+    ) -> ToolResponse:
+        """Configure an agent host manifest through the safe mutation pipeline."""
+        try:
+            result = use_cases.host_setup(
+                ConfigureHostCommand(
+                    host_id=host_id,
+                    apply=force,
+                    max_managed_lines=max_lines,
+                    max_managed_chars=max_chars,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="host_setup",
+                scope="project",
+                data=result.to_payload(),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="host_check")
+    def host_check(
+        host_id: str,
+        max_lines: int = 100,
+        max_chars: int = 4000,
+    ) -> ToolResponse:
+        """Validate an agent host manifest without mutating files."""
+        try:
+            result = use_cases.host_check(
+                ConfigureHostCommand(
+                    host_id=host_id,
+                    apply=False,
+                    max_managed_lines=max_lines,
+                    max_managed_chars=max_chars,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="host_check",
+                scope="project",
+                data=result.to_payload(),
             )
         except Exception as error:
             return _mcp_tool_error(error)

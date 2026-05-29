@@ -334,9 +334,9 @@ def assert_contract_data_equivalent(
 
 
 def _assert_contract_shape(left: Any, right: Any, *, path: str) -> None:
-    assert type(left) is type(right), (
-        f"{path}: type mismatch; CLI={type(left).__name__}, MCP={type(right).__name__}"
-    )
+    assert type(left) is type(
+        right
+    ), f"{path}: type mismatch; CLI={type(left).__name__}, MCP={type(right).__name__}"
     if isinstance(left, dict):
         assert set(left) == set(right), (
             f"{path}: object keys differ; "
@@ -347,9 +347,9 @@ def _assert_contract_shape(left: Any, right: Any, *, path: str) -> None:
             _assert_contract_shape(left[key], right[key], path=f"{path}.{key}")
         return
     if isinstance(left, list):
-        assert len(left) == len(right), (
-            f"{path}: list length differs; CLI={len(left)}, MCP={len(right)}"
-        )
+        assert len(left) == len(
+            right
+        ), f"{path}: list length differs; CLI={len(left)}, MCP={len(right)}"
         for index, (left_item, right_item) in enumerate(zip(left, right, strict=True)):
             _assert_contract_shape(left_item, right_item, path=f"{path}[{index}]")
         return

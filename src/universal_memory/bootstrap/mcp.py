@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
+from universal_memory.application.host import ConfigureHostUseCase
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     GetMemoryStatusUseCase,
@@ -92,6 +93,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         snapshot_repository=snapshot_repository,
         audit_log_repository=audit_log_repository,
     )
+    host_use_case = ConfigureHostUseCase(
+        project_root=root,
+        safe_write_use_case=safe_write_use_case,
+        fact_repository=fact_repository,
+    )
 
     def initialize_project(project_root: Path):
         return setup_project(
@@ -112,6 +118,8 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             list_audit_events=audit_list_use_case.execute,
             list_snapshots=snapshots_list_use_case.execute,
             rollback_scope=rollback_use_case.execute,
+            host_setup=host_use_case.execute,
+            host_check=host_use_case.execute,
         ),
         project_root=root,
     )

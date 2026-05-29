@@ -8,6 +8,7 @@ import pytest
 from fastmcp import FastMCP
 
 from universal_memory.__main__ import main
+from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -156,6 +157,94 @@ async def test_context_tool_uses_injected_use_case_and_matches_cli_json_contract
             "last_read_at": "2026-05-27T20:00:00Z",
         },
     }
+
+
+@pytest.mark.anyio
+async def test_host_setup_tool_uses_injected_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[ConfigureHostCommand] = []
+
+    def host_setup(command: ConfigureHostCommand) -> ConfigureHostResult:
+        received.append(command)
+        return ConfigureHostResult(
+            host_id="codex",
+            instruction_targets=["agents_md"],
+            planned_changes=[{"target": "agents_md", "action": "create", "path": "AGENTS.md"}],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="uuid-v4-reference",
+            snapshot_reference="snapshot-reference",
+            timestamp="2026-05-28T20:00:00Z",
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            host_setup=host_setup,
+            host_check=host_setup,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool("host_setup", {"host_id": "codex", "force": True})
+
+    assert "host_setup" in tool_names
+    assert received == [ConfigureHostCommand(host_id="codex", apply=True, origin="mcp")]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "host_setup",
+        "scope": "project",
+        "data": {
+            "host_id": "codex",
+            "instruction_targets": ["agents_md"],
+            "planned_changes": [{"target": "agents_md", "action": "create", "path": "AGENTS.md"}],
+            "manual_steps": [],
+            "validation_status": "success",
+            "audit_reference": "uuid-v4-reference",
+        },
+        "warnings": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_host_check_tool_uses_same_contract_without_mutation(tmp_path: Path) -> None:
+    received: list[ConfigureHostCommand] = []
+
+    def host_check(command: ConfigureHostCommand) -> ConfigureHostResult:
+        received.append(command)
+        return ConfigureHostResult(
+            host_id="codex",
+            instruction_targets=["agents_md"],
+            planned_changes=[],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="not-applied",
+            snapshot_reference="planned",
+            timestamp="2026-05-28T20:00:00Z",
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            host_setup=host_check,
+            host_check=host_check,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("host_check", {"host_id": "codex"})
+
+    assert received == [ConfigureHostCommand(host_id="codex", apply=False, origin="mcp")]
+    payload = result.structured_content
+    assert payload is not None
+    assert payload["operation"] == "host_check"
+    assert payload["data"]["validation_status"] == "success"
 
 
 @pytest.mark.anyio

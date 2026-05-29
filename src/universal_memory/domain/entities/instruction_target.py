@@ -39,9 +39,7 @@ class InstructionTarget(BaseEntity):
         cls, value: list[InstructionClassification]
     ) -> list[InstructionClassification]:
         if len(value) != len(set(value)):
-            raise ValueError(
-                "supported_classifications must not contain duplicate classifications"
-            )
+            raise ValueError("supported_classifications must not contain duplicate classifications")
         return value
 
     @field_validator("relative_path")
@@ -89,4 +87,3 @@ class InstructionTarget(BaseEntity):
                     )
 
         return self
-

@@ -46,4 +46,3 @@ class Host(BaseEntity):
         if stripped == "":
             raise ValueError(f"{info.field_name} must not be blank")
         return stripped
-
