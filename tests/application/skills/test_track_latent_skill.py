@@ -101,7 +101,7 @@ class RecordingLatentSkillRepository(LatentSkillRepository):
             skills = [skill for skill in skills if skill.status == status]
         return sorted(skills, key=lambda skill: skill.created_at)
 
-    def write(self, entity: LatentSkill):
+    def write(self, entity: LatentSkill, *, origin: str = "repository"):
         self.skills = [skill for skill in self.skills if skill.id != entity.id]
         self.skills.append(entity)
 

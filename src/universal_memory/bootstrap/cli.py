@@ -83,7 +83,7 @@ class EmptyLatentSkillRepository(LatentSkillRepository):
     ) -> list[LatentSkill]:
         return []
 
-    def write(self, entity: LatentSkill) -> None:
+    def write(self, entity: LatentSkill, *, origin: str = "repository") -> None:
         return None
 
     def delete(self, id: str) -> None:
