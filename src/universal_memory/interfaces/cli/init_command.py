@@ -4,6 +4,7 @@ import sys
 import traceback
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
+from inspect import signature
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -15,6 +16,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from universal_memory.application.host import (
+    ConfigureHostCommand,
+    ConfigureHostResult,
+    SyncInstructionsCommand,
+    SyncInstructionsResult,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -30,6 +37,7 @@ from universal_memory.application.memory import (
     RememberFactResult,
 )
 from universal_memory.application.onboarding.setup_project import (
+    DEFAULT_ENABLED_HOST_IDS,
     SetupProjectResult,
     setup_project,
 )
@@ -68,7 +76,9 @@ from universal_memory.interfaces.errors import (
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
-SetupProjectCommand = Callable[[Path], SetupProjectResult]
+SetupProjectCommand = (
+    Callable[[Path, list[str] | None], SetupProjectResult] | Callable[[Path], SetupProjectResult]
+)
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
@@ -79,6 +89,8 @@ RememberFactCommandHandler = Callable[[RememberFactCommand], RememberFactResult]
 ListFactsCommandHandler = Callable[[ListFactsCommand], ListFactsResult]
 PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneResult]
+ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
+SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
@@ -118,6 +130,9 @@ def main(  # noqa: PLR0913
     facts_list_command: ListFactsCommandHandler | None = None,
     facts_purge_command: PurgeFactCommandHandler | None = None,
     facts_hygiene_command: ContextHygieneCommandHandler | None = None,
+    host_setup_command: ConfigureHostCommandHandler | None = None,
+    host_check_command: ConfigureHostCommandHandler | None = None,
+    host_sync_command: SyncInstructionsCommandHandler | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -131,6 +146,9 @@ def main(  # noqa: PLR0913
         facts_list_command=facts_list_command,
         facts_purge_command=facts_purge_command,
         facts_hygiene_command=facts_hygiene_command,
+        host_setup_command=host_setup_command,
+        host_check_command=host_check_command,
+        host_sync_command=host_sync_command,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
@@ -164,15 +182,20 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     facts_list_command: ListFactsCommandHandler | None = None,
     facts_purge_command: PurgeFactCommandHandler | None = None,
     facts_hygiene_command: ContextHygieneCommandHandler | None = None,
+    host_setup_command: ConfigureHostCommandHandler | None = None,
+    host_check_command: ConfigureHostCommandHandler | None = None,
+    host_sync_command: SyncInstructionsCommandHandler | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
     facts_app = typer.Typer(help="Gerenciar fatos de memoria")
     audit_app = typer.Typer(help="Inspecionar eventos de auditoria")
     snapshots_app = typer.Typer(help="Inspecionar snapshots")
+    host_app = typer.Typer(help="Configurar hosts de agente")
 
     app.add_typer(facts_app, name="facts")
     app.add_typer(audit_app, name="audit")
     app.add_typer(snapshots_app, name="snapshots")
+    app.add_typer(host_app, name="host")
 
     @app.callback()
     def callback(
@@ -191,12 +214,27 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         ctx.obj = {"output_format": output_format.lower()}
 
     @app.command("init")
-    def init_command(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
+    def init_command(
+        ctx: typer.Context,
+        hosts: Annotated[
+            list[str] | None,
+            typer.Option("--hosts", help="Host a configurar. Pode ser usado multiplas vezes."),
+        ] = None,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
         if setup_project_command is None:
             msg = "CLI setup_project_command dependency was not configured."
             raise RuntimeError(msg)
         raise typer.Exit(
-            code=_run_init(setup_project_command, _effective_format(ctx, output_format))
+            code=_run_init(
+                setup_project_command,
+                _effective_format(ctx, output_format),
+                selected_hosts=hosts,
+                yes=yes,
+                host_setup_command=host_setup_command,
+                host_check_command=host_check_command,
+            )
         )
 
     @app.command("status")
@@ -437,6 +475,88 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
+    @host_app.command("setup")
+    def host_setup(  # noqa: PLR0913
+        ctx: typer.Context,
+        host_id: Annotated[str, typer.Argument(help="Host a configurar.")],
+        yes: YesOption = False,
+        max_lines: Annotated[
+            int, typer.Option("--max-lines", help="Limite maximo de linhas.")
+        ] = 100,
+        max_chars: Annotated[
+            int, typer.Option("--max-chars", help="Limite maximo de caracteres.")
+        ] = 4000,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if host_setup_command is None:
+            msg = "CLI host_setup_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_host_setup(
+                host_setup_command,
+                output_format=_effective_format(ctx, output_format),
+                host_id=host_id,
+                yes=yes,
+                max_lines=max_lines,
+                max_chars=max_chars,
+            )
+        )
+
+    @host_app.command("check")
+    def host_check(
+        ctx: typer.Context,
+        host_id: Annotated[str, typer.Argument(help="Host a validar.")],
+        max_lines: Annotated[
+            int, typer.Option("--max-lines", help="Limite maximo de linhas.")
+        ] = 100,
+        max_chars: Annotated[
+            int, typer.Option("--max-chars", help="Limite maximo de caracteres.")
+        ] = 4000,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if host_check_command is None:
+            msg = "CLI host_check_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_host_check(
+                host_check_command,
+                output_format=_effective_format(ctx, output_format),
+                host_id=host_id,
+                max_lines=max_lines,
+                max_chars=max_chars,
+            )
+        )
+
+    @host_app.command("sync")
+    def host_sync(
+        ctx: typer.Context,
+        apply: Annotated[
+            bool,
+            typer.Option(
+                "--apply/--no-apply",
+                help="Aplicar a sincronizacao ou apenas exibir preview.",
+            ),
+        ] = False,
+        yes: YesOption = False,
+        host_id: Annotated[
+            list[str] | None,
+            typer.Option("--host", help="Host a sincronizar. Pode ser usado multiplas vezes."),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if host_sync_command is None:
+            msg = "CLI host_sync_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_host_sync(
+                host_sync_command,
+                output_format=_effective_format(ctx, output_format),
+                host_ids=host_id or ["codex", "claude_code"],
+                apply=apply,
+                yes=yes,
+            )
+        )
+
     return app
 
 
@@ -454,6 +574,9 @@ def build_main(  # noqa: PLR0913
     facts_list_command: ListFactsCommandHandler,
     facts_purge_command: PurgeFactCommandHandler,
     facts_hygiene_command: ContextHygieneCommandHandler,
+    host_setup_command: ConfigureHostCommandHandler,
+    host_check_command: ConfigureHostCommandHandler,
+    host_sync_command: SyncInstructionsCommandHandler,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -474,6 +597,9 @@ def build_main(  # noqa: PLR0913
             facts_list_command=facts_list_command,
             facts_purge_command=facts_purge_command,
             facts_hygiene_command=facts_hygiene_command,
+            host_setup_command=host_setup_command,
+            host_check_command=host_check_command,
+            host_sync_command=host_sync_command,
         )
 
     return configured_main
@@ -484,11 +610,15 @@ def _build_setup_project_command(
     layout_port: ProjectLayoutPort,
     config_validation_port: ConfigValidationPort,
 ) -> SetupProjectCommand:
-    def command(project_root: Path) -> SetupProjectResult:
+    def command(
+        project_root: Path,
+        enabled_host_ids: list[str] | None = None,
+    ) -> SetupProjectResult:
         return setup_project(
             project_root,
             layout_port=layout_port,
             config_validation_port=config_validation_port,
+            enabled_host_ids=enabled_host_ids,
         )
 
     return command
@@ -518,23 +648,42 @@ def _stderr_console() -> Console:
 
 
 def _confirm(prompt: str, default: bool = False) -> bool:
-    try:
-        answer = input(prompt)
-    except (EOFError, KeyboardInterrupt):
-        return False
+    answer = input(prompt)
     val = answer.strip().lower()
     if not val:
         return default
     return val in {"s", "sim", "y", "yes"}
 
 
-def _run_init(command: SetupProjectCommand, output_format: str) -> int:
+def _run_init(  # noqa: PLR0913
+    command: SetupProjectCommand,
+    output_format: str,
+    *,
+    selected_hosts: list[str] | None = None,
+    yes: bool = False,
+    host_setup_command: ConfigureHostCommandHandler | None = None,
+    host_check_command: ConfigureHostCommandHandler | None = None,
+) -> int:
     try:
+        host_ids = _selected_init_hosts(
+            selected_hosts,
+            output_format=output_format,
+            yes=yes,
+        )
         if output_format == "json":
-            result = command(Path.cwd())
+            result = _execute_setup_project(command, Path.cwd(), host_ids)
         else:
             with _stderr_console().status("Inicializando scaffold do projeto...", spinner="dots"):
-                result = command(Path.cwd())
+                result = _execute_setup_project(command, Path.cwd(), host_ids)
+        host_results = _configure_init_hosts(
+            host_ids,
+            output_format=output_format,
+            host_setup_command=host_setup_command,
+            host_check_command=host_check_command,
+        )
+    except (KeyboardInterrupt, EOFError):
+        _stdout_console().print("\nOperacao cancelada pelo usuario.")
+        return 1
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
@@ -543,11 +692,114 @@ def _run_init(command: SetupProjectCommand, output_format: str) -> int:
         return 1
 
     if output_format == "json":
-        print(json.dumps(_success_envelope(result), sort_keys=True))
+        payload = _success_envelope(result)
+        if host_results:
+            payload["hosts"] = [asdict(res) for res in host_results]
+        print(json.dumps(payload, sort_keys=True))
     else:
         _stdout_console().print(_format_human_init_output(result))
+        if host_results:
+            _stdout_console().print(_format_human_init_host_results(host_results))
 
     return 0
+
+
+def _execute_setup_project(
+    command: SetupProjectCommand,
+    project_root: Path,
+    enabled_host_ids: list[str],
+) -> SetupProjectResult:
+    try:
+        sig = signature(command)
+        params = list(sig.parameters.values())
+        has_var_args = any(p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD) for p in params)
+        positional_params = [
+            p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        ]
+        min_positional_args = 2
+        if (
+            len(positional_params) >= min_positional_args
+            or has_var_args
+            or "enabled_host_ids" in sig.parameters
+        ):
+            return command(project_root, enabled_host_ids)  # type: ignore
+    except (ValueError, TypeError):
+        pass
+    return command(project_root)  # type: ignore
+
+
+def _selected_init_hosts(
+    hosts: list[str] | None,
+    *,
+    output_format: str,
+    yes: bool,
+) -> list[str]:
+    if hosts:
+        return _normalize_supported_hosts(hosts)
+    if output_format == "json" or yes:
+        return list(DEFAULT_ENABLED_HOST_IDS)
+    if not sys.stdin.isatty():
+        return list(DEFAULT_ENABLED_HOST_IDS)
+
+    selected = []
+    prompts = {
+        "codex": "Deseja configurar o host 'codex' (suporte a AGENTS.md)? [S/n]: ",
+        "claude_code": "Deseja configurar o host 'claude_code' (suporte a CLAUDE.md)? [S/n]: ",
+    }
+    for host_id in DEFAULT_ENABLED_HOST_IDS:
+        if _confirm(prompts[host_id], default=True):
+            selected.append(host_id)
+    return selected
+
+
+def _normalize_supported_hosts(hosts: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for host_id in hosts:
+        cleaned = host_id.strip().lower()
+        if cleaned not in normalized:
+            normalized.append(cleaned)
+    unsupported = [host_id for host_id in normalized if host_id not in DEFAULT_ENABLED_HOST_IDS]
+    if unsupported:
+        raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
+    return normalized
+
+
+def _configure_init_hosts(
+    host_ids: list[str],
+    *,
+    output_format: str,
+    host_setup_command: ConfigureHostCommandHandler | None,
+    host_check_command: ConfigureHostCommandHandler | None,
+) -> list[ConfigureHostResult]:
+    if host_ids and (host_setup_command is None or host_check_command is None):
+        _stderr_console().print(
+            "[yellow]Warning: CLI host_setup_command or "
+            "host_check_command dependency was not configured. "
+            "Skipping automatic host setup.[/yellow]"
+        )
+        return []
+    if not host_ids:
+        return []
+
+    if host_setup_command is None or host_check_command is None:
+        raise ValidationFailedError("CLI host dependencies were not configured.")
+
+    results: list[ConfigureHostResult] = []
+    for host_id in host_ids:
+        try:
+            setup_result = host_setup_command(
+                ConfigureHostCommand(host_id=host_id, apply=True, origin="cli_init")
+            )
+            check_result = host_check_command(
+                ConfigureHostCommand(host_id=host_id, apply=False, check=True, origin="cli_init")
+            )
+            results.extend([setup_result, check_result])
+            if output_format != "json":
+                for step in check_result.manual_steps:
+                    _stdout_console().print(f"Passo manual pendente ({host_id}): {step}")
+        except Exception as error:
+            raise ValidationFailedError(f"Falha ao configurar host '{host_id}': {error}") from error
+    return results
 
 
 def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
@@ -849,6 +1101,161 @@ def _run_rollback(
     return 0
 
 
+def _run_host_setup(  # noqa: PLR0913
+    command: ConfigureHostCommandHandler,
+    *,
+    output_format: str,
+    host_id: str,
+    yes: bool,
+    max_lines: int,
+    max_chars: int,
+) -> int:
+    try:
+        if output_format == "json" and not yes:
+            raise ValidationFailedError(
+                "A flag --yes / -y e obrigatoria para executar host setup com saida JSON."
+            )
+        if output_format != "json":
+            preview = command(
+                ConfigureHostCommand(
+                    host_id=host_id,
+                    apply=False,
+                    max_managed_lines=max_lines,
+                    max_managed_chars=max_chars,
+                    origin="cli",
+                )
+            )
+            _stdout_console().print(_format_human_host_plan(preview, operation="setup"))
+            if not yes:
+                if not _confirm("Aplicar configuracao do host? [s/N]: ", default=False):
+                    _stdout_console().print("Setup de host cancelado.")
+                    return 1
+
+        result = command(
+            ConfigureHostCommand(
+                host_id=host_id,
+                apply=True,
+                max_managed_lines=max_lines,
+                max_managed_chars=max_chars,
+                origin="cli",
+            )
+        )
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except ValueError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_host_success_envelope(result, operation="host_setup"), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_host_success(result, operation="setup"))
+    return 0
+
+
+def _run_host_check(
+    command: ConfigureHostCommandHandler,
+    *,
+    output_format: str,
+    host_id: str,
+    max_lines: int,
+    max_chars: int,
+) -> int:
+    try:
+        result = command(
+            ConfigureHostCommand(
+                host_id=host_id,
+                apply=False,
+                check=True,
+                max_managed_lines=max_lines,
+                max_managed_chars=max_chars,
+                origin="cli",
+            )
+        )
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except ValueError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_host_success_envelope(result, operation="host_check"), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_host_success(result, operation="check"))
+    return 0
+
+
+def _run_host_sync(
+    command: SyncInstructionsCommandHandler,
+    *,
+    output_format: str,
+    host_ids: list[str],
+    apply: bool,
+    yes: bool,
+) -> int:
+    try:
+        if apply and output_format == "json" and not yes:
+            raise ValidationFailedError(
+                "A flag --yes / -y e obrigatoria para executar host sync com saida JSON."
+            )
+        if apply and output_format != "json":
+            preview = command(
+                SyncInstructionsCommand(
+                    host_ids=host_ids,
+                    apply=False,
+                    origin="cli",
+                )
+            )
+            _stdout_console().print(_format_human_sync_plan(preview))
+            if not yes:
+                if not _confirm("Aplicar sincronizacao de instrucoes? [s/N]: ", default=False):
+                    _stdout_console().print("Sincronizacao de instrucoes cancelada.")
+                    return 1
+
+        result = command(
+            SyncInstructionsCommand(
+                host_ids=host_ids,
+                apply=apply,
+                origin="cli",
+            )
+        )
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except ValueError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_host_success_envelope(result, operation="host_sync"), sort_keys=True))
+    else:
+        if not apply:
+            _stdout_console().print(_format_human_sync_plan(result))
+            _stdout_console().print()
+        _stdout_console().print(_format_human_sync_success(result))
+    return 0
+
+
 def _success_envelope(result: SetupProjectResult) -> dict[str, Any]:
     return {
         "ok": True,
@@ -977,6 +1384,20 @@ def _facts_hygiene_success_envelope(
     }
 
 
+def _host_success_envelope(
+    result: ConfigureHostResult | SyncInstructionsResult,
+    *,
+    operation: str,
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": operation,
+        "scope": "project",
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
     project_root = result.project_path
     return {
@@ -1075,6 +1496,17 @@ def _format_human_init_output(result: SetupProjectResult) -> str:
     )
 
 
+def _format_human_init_host_results(results: list[ConfigureHostResult]) -> str:
+    lines = ["Hosts configurados no onboarding:"]
+    for result in results:
+        changes = ", ".join(change["path"] for change in result.planned_changes) or "(validacao)"
+        lines.append(
+            f"- {result.host_id}: {result.validation_status}; arquivos={changes}; "
+            f"snapshot={result.snapshot_reference}; auditoria={result.audit_reference}"
+        )
+    return "\n".join(lines)
+
+
 def _format_human_status_output(result: GetMemoryStatusResult) -> str:
     if not result.initialized:
         return "\n".join(
@@ -1094,8 +1526,17 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
         f"Skills registradas: {result.registered_skills_count}",
         "Hosts:",
     ]
-    for host, status in result.host_validation.items():
-        lines.append(f"- {host}: {status}")
+    for host, validation in result.host_validation.items():
+        status = validation.get("status", "unconfigured")
+        method = validation.get("method")
+        audit_reference = validation.get("audit_reference")
+        suffix_parts = []
+        if method:
+            suffix_parts.append(f"metodo={method}")
+        if audit_reference:
+            suffix_parts.append(f"auditoria={audit_reference}")
+        suffix = f" ({', '.join(suffix_parts)})" if suffix_parts else ""
+        lines.append(f"- {host}: {status}{suffix}")
     lines.append("Fatos por escopo/status:")
     for scope, counts in result.fact_counts.items():
         rendered_counts = ", ".join(f"{status}: {count}" for status, count in counts.items())
@@ -1260,6 +1701,106 @@ def _format_human_rollback_success(result: RollbackResult) -> str:
             f"Auditoria: {result.audit_reference}",
         ]
     )
+
+
+def _format_human_host_plan(result: ConfigureHostResult, *, operation: str) -> Table | str:
+    if not result.planned_changes:
+        return f"Nenhuma alteracao planejada para host {result.host_id}."
+
+    table = Table(title=f"Plano de {operation} do host {result.host_id}", show_header=True)
+    table.add_column("Alvo")
+    table.add_column("Acao")
+    table.add_column("Caminho")
+    table.add_column("Snapshot")
+    table.add_column("Auditoria")
+    for change in result.planned_changes:
+        table.add_row(
+            change["target"],
+            change["action"],
+            change["path"],
+            result.snapshot_reference,
+            "host_setup",
+        )
+    return table
+
+
+def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -> str | Panel:
+    if operation == "check":
+        status_styles = {
+            "success": "green",
+            "failure": "red",
+            "manual_pending": "yellow",
+        }
+        style = status_styles.get(result.validation_status, "white")
+        lines = [
+            "[bold]Host check concluido.[/bold]",
+            f"Host: {result.host_id}",
+            f"Alvos: {', '.join(result.instruction_targets)}",
+            f"Validacao: [{style}]{result.validation_status}[/{style}]",
+            f"Auditoria: {result.audit_reference}",
+        ]
+        if result.warnings:
+            if result.validation_status == "failure":
+                lines.append("Erros de Validação:")
+            else:
+                lines.append("Alertas:")
+            lines.extend(f"- {warning}" for warning in result.warnings)
+        return Panel.fit("\n".join(lines), border_style=style)
+
+    changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
+    return "\n".join(
+        [
+            f"Host {operation} concluido.",
+            f"Host: {result.host_id}",
+            f"Alvos: {', '.join(result.instruction_targets)}",
+            f"Arquivos: {changes}",
+            f"Validacao: {result.validation_status}",
+            f"Auditoria: {result.audit_reference}",
+        ]
+    )
+
+
+def _format_human_sync_success(result: SyncInstructionsResult) -> str:
+    changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
+    msg = (
+        "Host sync concluido."
+        if result.validation_status == "success"
+        else "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos."
+    )
+    return "\n".join(
+        [
+            msg,
+            f"Hosts: {', '.join(result.host_ids)}",
+            f"Alvos: {', '.join(result.instruction_targets)}",
+            f"Arquivos: {changes}",
+            f"Validacao: {result.validation_status}",
+            f"Auditoria: {result.audit_reference}",
+            f"Snapshots: {result.snapshot_reference}",
+        ]
+    )
+
+
+def _format_human_sync_plan(result: SyncInstructionsResult) -> Table | str:
+    if not result.planned_changes:
+        return "Nenhuma alteracao planejada para sincronizacao de instrucoes."
+
+    table = Table(title="Plano de sincronizacao de instrucoes", show_header=True)
+    table.add_column("Alvo")
+    table.add_column("Acao")
+    table.add_column("Caminho")
+    table.add_column("Escopo")
+    table.add_column("Snapshot")
+    table.add_column("Auditoria")
+    for change in result.planned_changes:
+        table.add_row(
+            change["target"],
+            change["action"],
+            change["path"],
+            "project",
+            result.snapshot_reference,
+            "host_sync",
+        )
+    return table
 
 
 def _recovery_hint(error: Exception) -> str:

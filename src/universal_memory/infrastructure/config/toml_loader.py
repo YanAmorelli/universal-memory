@@ -53,6 +53,44 @@ def load_config(project_root: Path, global_config_path: Path | None = None) -> L
     )
 
 
+def update_project_config(
+    project_root: Path,
+    updates: TomlData,
+    global_config_path: Path | None = None,
+) -> LoadedConfig:
+    loaded = load_config(project_root=project_root, global_config_path=global_config_path)
+    project_data = _deep_merge(loaded.project_data, updates)
+    rendered = dump_toml_document(project_data)
+    temp_path = loaded.project_config_path.with_suffix(".tmp")
+    try:
+        loaded.project_config_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path.write_text(rendered, encoding="utf-8")
+        temp_path.replace(loaded.project_config_path)
+    except OSError as error:
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+        except OSError:
+            pass
+        raise StorageError(
+            f"Failed to write config {loaded.project_config_path.name}: {error}"
+        ) from error
+
+    merged = _deep_merge(loaded.global_data, project_data)
+    resolved_paths = _deep_merge(
+        _resolve_config_paths(loaded.global_data, loaded.global_config_path.parent),
+        _resolve_config_paths(project_data, project_root.resolve()),
+    )
+    return LoadedConfig(
+        global_config_path=loaded.global_config_path,
+        project_config_path=loaded.project_config_path,
+        global_data=loaded.global_data,
+        project_data=project_data,
+        merged=merged,
+        resolved_paths=resolved_paths,
+    )
+
+
 def dump_toml_document(document: TomlData) -> str:
     return tomli_w.dumps(document)
 

@@ -9,6 +9,12 @@ from typing import Any, Literal
 
 from fastmcp import FastMCP
 
+from universal_memory.application.host import (
+    ConfigureHostCommand,
+    ConfigureHostResult,
+    SyncInstructionsCommand,
+    SyncInstructionsResult,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -67,6 +73,8 @@ PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
+ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
+SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ToolResponse = dict[str, Any]
 
 
@@ -86,6 +94,9 @@ class MCPUseCases:
     list_audit_events: ListAuditLogCommandHandler = _missing_use_case
     list_snapshots: ListSnapshotsCommandHandler = _missing_use_case
     rollback_scope: RollbackCommandHandler = _missing_use_case
+    host_setup: ConfigureHostCommandHandler = _missing_use_case
+    host_check: ConfigureHostCommandHandler = _missing_use_case
+    sync_instructions: SyncInstructionsCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -288,16 +299,99 @@ def configure_server(  # noqa: PLR0915
         except Exception as error:
             return _mcp_tool_error(error)
 
+    @server.tool(name="host_setup")
+    def host_setup(
+        host_id: str,
+        force: bool = False,
+        max_lines: int = 100,
+        max_chars: int = 4000,
+    ) -> ToolResponse:
+        """Configure an agent host manifest through the safe mutation pipeline."""
+        try:
+            result = use_cases.host_setup(
+                ConfigureHostCommand(
+                    host_id=host_id,
+                    apply=force,
+                    max_managed_lines=max_lines,
+                    max_managed_chars=max_chars,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="host_setup",
+                scope="project",
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="host_check")
+    def host_check(
+        host_id: str,
+        max_lines: int = 100,
+        max_chars: int = 4000,
+    ) -> ToolResponse:
+        """Validate an agent host manifest without mutating files."""
+        try:
+            result = use_cases.host_check(
+                ConfigureHostCommand(
+                    host_id=host_id,
+                    apply=False,
+                    check=True,
+                    max_managed_lines=max_lines,
+                    max_managed_chars=max_chars,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="host_check",
+                scope="project",
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="sync_instructions")
+    def sync_instructions(
+        host_ids: list[str] | None = None,
+        apply: bool = False,
+    ) -> ToolResponse:
+        """Synchronize approved active rules into supported instruction targets."""
+        try:
+            result = use_cases.sync_instructions(
+                SyncInstructionsCommand(
+                    host_ids=host_ids or ["codex", "claude_code"],
+                    apply=apply,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="host_sync",
+                scope="project",
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
     return server
 
 
-def _success_envelope(*, operation: str, scope: str, data: dict[str, Any]) -> dict[str, Any]:
+def _success_envelope(
+    *,
+    operation: str,
+    scope: str,
+    data: dict[str, Any],
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
     return {
         "ok": True,
         "operation": operation,
         "scope": scope,
         "data": data,
-        "warnings": [],
+        "warnings": warnings or [],
     }
 
 

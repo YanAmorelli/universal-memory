@@ -24,7 +24,20 @@ def initialized_result(project_root: Path) -> GetMemoryStatusResult:
         registered_skills_count=3,
         approximate_size_bytes=42,
         last_health_check="2026-05-27T20:00:00Z",
-        host_validation={"claude": "unconfigured", "gemini": "valid"},
+        host_validation={
+            "claude_code": {
+                "status": "unconfigured",
+                "timestamp": None,
+                "method": None,
+                "audit_reference": None,
+            },
+            "codex": {
+                "status": "success",
+                "timestamp": "2026-05-27T20:00:00Z",
+                "method": "agents_md_compact_validator",
+                "audit_reference": "audit-codex",
+            },
+        },
         recommended_action=None,
     )
 
@@ -63,7 +76,20 @@ def test_status_json_outputs_pure_success_envelope(
             "registered_skills_count": 3,
             "approximate_size_bytes": 42,
             "last_health_check": "2026-05-27T20:00:00Z",
-            "host_validation": {"claude": "unconfigured", "gemini": "valid"},
+            "host_validation": {
+                "claude_code": {
+                    "status": "unconfigured",
+                    "timestamp": None,
+                    "method": None,
+                    "audit_reference": None,
+                },
+                "codex": {
+                    "status": "success",
+                    "timestamp": "2026-05-27T20:00:00Z",
+                    "method": "agents_md_compact_validator",
+                    "audit_reference": "audit-codex",
+                },
+            },
         },
     }
 
@@ -112,7 +138,8 @@ def test_status_human_output_summarizes_health(
     assert "Regras ativas: 2" in captured.out
     assert "Skills registradas: 3" in captured.out
     assert "Tamanho aproximado: 42 bytes" in captured.out
-    assert "gemini: valid" in captured.out
+    assert "codex: success" in captured.out
+    assert "metodo=agents_md_compact_validator" in captured.out
 
 
 def test_status_bootstrap_uses_local_data_and_no_network(

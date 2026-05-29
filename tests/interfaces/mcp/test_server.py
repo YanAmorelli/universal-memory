@@ -8,6 +8,11 @@ import pytest
 from fastmcp import FastMCP
 
 from universal_memory.__main__ import main
+from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
+from universal_memory.application.host.sync_instructions_use_case import (
+    SyncInstructionsCommand,
+    SyncInstructionsResult,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -37,7 +42,20 @@ def initialized_status() -> GetMemoryStatusResult:
         registered_skills_count=3,
         approximate_size_bytes=42,
         last_health_check="2026-05-27T20:00:00Z",
-        host_validation={"claude": "unconfigured", "gemini": "valid"},
+        host_validation={
+            "claude_code": {
+                "status": "unconfigured",
+                "timestamp": None,
+                "method": None,
+                "audit_reference": None,
+            },
+            "codex": {
+                "status": "success",
+                "timestamp": "2026-05-27T20:00:00Z",
+                "method": "agents_md_compact_validator",
+                "audit_reference": "audit-codex",
+            },
+        },
         recommended_action=None,
     )
 
@@ -108,7 +126,20 @@ async def test_status_tool_uses_injected_use_case_and_matches_cli_json_contract(
             "registered_skills_count": 3,
             "approximate_size_bytes": 42,
             "last_health_check": "2026-05-27T20:00:00Z",
-            "host_validation": {"claude": "unconfigured", "gemini": "valid"},
+            "host_validation": {
+                "claude_code": {
+                    "status": "unconfigured",
+                    "timestamp": None,
+                    "method": None,
+                    "audit_reference": None,
+                },
+                "codex": {
+                    "status": "success",
+                    "timestamp": "2026-05-27T20:00:00Z",
+                    "method": "agents_md_compact_validator",
+                    "audit_reference": "audit-codex",
+                },
+            },
         },
     }
 
@@ -156,6 +187,256 @@ async def test_context_tool_uses_injected_use_case_and_matches_cli_json_contract
             "last_read_at": "2026-05-27T20:00:00Z",
         },
     }
+
+
+@pytest.mark.anyio
+async def test_host_setup_tool_uses_injected_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[ConfigureHostCommand] = []
+
+    def host_setup(command: ConfigureHostCommand) -> ConfigureHostResult:
+        received.append(command)
+        return ConfigureHostResult(
+            host_id="codex",
+            instruction_targets=["agents_md"],
+            planned_changes=[{"target": "agents_md", "action": "create", "path": "AGENTS.md"}],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="uuid-v4-reference",
+            snapshot_reference="snapshot-reference",
+            timestamp="2026-05-28T20:00:00Z",
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            host_setup=host_setup,
+            host_check=host_setup,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool("host_setup", {"host_id": "codex", "force": True})
+
+    assert "host_setup" in tool_names
+    assert received == [ConfigureHostCommand(host_id="codex", apply=True, origin="mcp")]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "host_setup",
+        "scope": "project",
+        "data": {
+            "host_id": "codex",
+            "instruction_targets": ["agents_md"],
+            "planned_changes": [{"target": "agents_md", "action": "create", "path": "AGENTS.md"}],
+            "manual_steps": [],
+            "validation_status": "success",
+            "audit_reference": "uuid-v4-reference",
+            "snapshot_reference": "snapshot-reference",
+            "timestamp": "2026-05-28T20:00:00Z",
+        },
+        "warnings": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_host_check_tool_uses_same_contract_without_mutation(tmp_path: Path) -> None:
+    received: list[ConfigureHostCommand] = []
+
+    def host_check(command: ConfigureHostCommand) -> ConfigureHostResult:
+        received.append(command)
+        return ConfigureHostResult(
+            host_id="codex",
+            instruction_targets=["agents_md"],
+            planned_changes=[],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="not-applied",
+            snapshot_reference="planned",
+            timestamp="2026-05-28T20:00:00Z",
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            host_setup=host_check,
+            host_check=host_check,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("host_check", {"host_id": "codex"})
+
+    assert received == [
+        ConfigureHostCommand(host_id="codex", apply=False, check=True, origin="mcp")
+    ]
+    payload = result.structured_content
+    assert payload is not None
+    assert payload["operation"] == "host_check"
+    assert payload["data"]["validation_status"] == "success"
+
+
+@pytest.mark.anyio
+async def test_claude_code_host_setup_tool_returns_devex_contract_with_warnings(
+    tmp_path: Path,
+) -> None:
+    def host_setup(command: ConfigureHostCommand) -> ConfigureHostResult:
+        assert command.host_id == "claude_code"
+        return ConfigureHostResult(
+            host_id="claude_code",
+            instruction_targets=["claude_md"],
+            planned_changes=[{"target": "claude_md", "action": "create", "path": "CLAUDE.md"}],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="uuid-v4-reference",
+            snapshot_reference="uuid-v4-snapshot",
+            timestamp="2026-05-29T00:00:00Z",
+            warnings=["Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."],
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            host_setup=host_setup,
+            host_check=host_setup,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("host_setup", {"host_id": "claude_code", "force": True})
+
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "host_setup",
+        "scope": "project",
+        "data": {
+            "host_id": "claude_code",
+            "instruction_targets": ["claude_md"],
+            "planned_changes": [{"target": "claude_md", "action": "create", "path": "CLAUDE.md"}],
+            "manual_steps": [],
+            "validation_status": "success",
+            "audit_reference": "uuid-v4-reference",
+            "snapshot_reference": "uuid-v4-snapshot",
+            "timestamp": "2026-05-29T00:00:00Z",
+        },
+        "warnings": ["Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."],
+    }
+
+
+@pytest.mark.anyio
+async def test_sync_instructions_tool_uses_injected_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[SyncInstructionsCommand] = []
+
+    def sync_instructions(command: SyncInstructionsCommand) -> SyncInstructionsResult:
+        received.append(command)
+        return SyncInstructionsResult(
+            host_ids=["codex", "claude_code"],
+            instruction_targets=["AGENTS.md", "CLAUDE.md"],
+            planned_changes=[
+                {"target": "agents_md", "action": "create", "path": "AGENTS.md"},
+                {"target": "claude_md", "action": "create", "path": "CLAUDE.md"},
+            ],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="audit-1",
+            snapshot_reference="snapshot-1",
+            timestamp="2026-05-29T12:00:00Z",
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            sync_instructions=sync_instructions,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool(
+        "sync_instructions",
+        {"host_ids": ["codex", "claude_code"], "apply": True},
+    )
+
+    assert "sync_instructions" in tool_names
+    assert received == [
+        SyncInstructionsCommand(host_ids=["codex", "claude_code"], apply=True, origin="mcp")
+    ]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "host_sync",
+        "scope": "project",
+        "data": {
+            "host_ids": ["codex", "claude_code"],
+            "instruction_targets": ["AGENTS.md", "CLAUDE.md"],
+            "planned_changes": [
+                {"target": "agents_md", "action": "create", "path": "AGENTS.md"},
+                {"target": "claude_md", "action": "create", "path": "CLAUDE.md"},
+            ],
+            "manual_steps": [],
+            "validation_status": "success",
+            "audit_reference": "audit-1",
+            "snapshot_reference": "snapshot-1",
+            "timestamp": "2026-05-29T12:00:00Z",
+        },
+        "warnings": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_claude_code_host_check_tool_returns_devex_contract_with_warnings(
+    tmp_path: Path,
+) -> None:
+    def host_check(command: ConfigureHostCommand) -> ConfigureHostResult:
+        assert command.host_id == "claude_code"
+        assert command.apply is False
+        return ConfigureHostResult(
+            host_id="claude_code",
+            instruction_targets=["claude_md"],
+            planned_changes=[],
+            manual_steps=["Remova a duplicacao manualmente antes de aplicar setup."],
+            validation_status="warning",
+            audit_reference="not-applied",
+            snapshot_reference="planned",
+            timestamp="2026-05-29T00:00:00Z",
+            warnings=["Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."],
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            host_setup=host_check,
+            host_check=host_check,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("host_check", {"host_id": "claude_code"})
+
+    payload = result.structured_content
+    assert payload is not None
+    assert payload["operation"] == "host_check"
+    assert payload["data"]["host_id"] == "claude_code"
+    assert payload["data"]["instruction_targets"] == ["claude_md"]
+    assert payload["data"]["manual_steps"] == [
+        "Remova a duplicacao manualmente antes de aplicar setup."
+    ]
+    assert payload["data"]["snapshot_reference"] == "planned"
+    assert payload["warnings"] == [
+        "Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."
+    ]
 
 
 @pytest.mark.anyio

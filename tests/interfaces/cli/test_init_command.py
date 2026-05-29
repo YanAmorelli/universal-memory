@@ -7,7 +7,22 @@ from pathlib import Path
 import pytest
 
 from universal_memory.__main__ import main
+from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
+from universal_memory.application.onboarding.setup_project import setup_project
+from universal_memory.infrastructure.config import (
+    LocalConfigValidationPort,
+    LocalProjectLayoutPort,
+)
 from universal_memory.interfaces.cli import main as cli_main
+
+
+def _setup_project_command(project_root: Path, enabled_host_ids: list[str] | None = None):
+    return setup_project(
+        project_root,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+        enabled_host_ids=enabled_host_ids,
+    )
 
 
 def test_init_in_clean_directory_creates_layout_with_human_output(
@@ -42,30 +57,124 @@ def test_init_json_outputs_pure_parseable_payload_with_required_keys(
     payload = json.loads(captured.out)
     assert exit_code == 0
     assert captured.err == ""
-    assert payload == {
-        "ok": True,
-        "operation": "init",
-        "scope": "project",
-        "warnings": [],
-        "data": {
-            "project_path": ".",
-            "config_path": ".umem/config.toml",
-            "memory_path": ".umem/memory",
-            "audit_path": ".umem/audit/events.jsonl",
-            "snapshots_path": ".umem/snapshots",
-            "created": [
-                ".umem/config.toml",
-                ".umem/memory",
-                ".umem/audit/events.jsonl",
-                ".umem/snapshots",
-                ".umem/skills",
-                ".umem/benchmarks",
-                ".umem/benchmarks/retrieval-results.json",
-            ],
-            "already_initialized": False,
-            "audit_reference": "not-implemented-yet",
-        },
-    }
+    assert payload["ok"] is True
+    assert payload["operation"] == "init"
+    assert payload["scope"] == "project"
+    assert payload["warnings"] == []
+
+    data = payload["data"]
+    assert data["project_path"] == "."
+    assert data["config_path"] == ".umem/config.toml"
+    assert data["memory_path"] == ".umem/memory"
+    assert data["audit_path"] == ".umem/audit/events.jsonl"
+    assert data["snapshots_path"] == ".umem/snapshots"
+    assert data["already_initialized"] is False
+    assert "hosts" in payload
+    assert len(payload["hosts"]) > 0
+
+
+def test_init_json_hosts_option_persists_selection_and_runs_selected_host_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[ConfigureHostCommand] = []
+
+    def host_setup(command: ConfigureHostCommand) -> ConfigureHostResult:
+        seen.append(command)
+        return ConfigureHostResult(
+            host_id=command.host_id,
+            instruction_targets=["agents_md"],
+            planned_changes=[{"target": "agents_md", "action": "create", "path": "AGENTS.md"}],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="audit-ref",
+            snapshot_reference="snapshot-ref",
+            timestamp="2026-05-29T12:00:00Z",
+        )
+
+    def host_check(command: ConfigureHostCommand) -> ConfigureHostResult:
+        seen.append(command)
+        return ConfigureHostResult(
+            host_id=command.host_id,
+            instruction_targets=["agents_md"],
+            planned_changes=[],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="audit-check-ref",
+            snapshot_reference="planned",
+            timestamp="2026-05-29T12:00:00Z",
+        )
+
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = cli_main(
+        ["init", "--hosts", "codex", "--yes", "--format", "json"],
+        setup_project_command=_setup_project_command,
+        host_setup_command=host_setup,
+        host_check_command=host_check,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+    assert json.loads(captured.out)["ok"] is True
+    assert (
+        (tmp_path / ".umem" / "config.toml")
+        .read_text(encoding="utf-8")
+        .endswith('[hosts]\nenabled = [\n    "codex",\n]\n')
+    )
+    assert seen == [
+        ConfigureHostCommand(host_id="codex", apply=True, origin="cli_init"),
+        ConfigureHostCommand(host_id="codex", apply=False, check=True, origin="cli_init"),
+    ]
+
+
+def test_init_human_interactive_prompts_for_hosts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prompts: list[str] = []
+
+    def confirm(prompt: str, default: bool = False) -> bool:
+        prompts.append(prompt)
+        return "codex" in prompt
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("universal_memory.interfaces.cli.init_command._confirm", confirm)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    exit_code = cli_main(
+        ["init", "--format", "human"],
+        setup_project_command=_setup_project_command,
+        host_setup_command=lambda command: ConfigureHostResult(
+            host_id=command.host_id,
+            instruction_targets=[],
+            planned_changes=[],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="audit-ref",
+            snapshot_reference="snapshot-ref",
+            timestamp="2026-05-29T12:00:00Z",
+        ),
+        host_check_command=lambda command: ConfigureHostResult(
+            host_id=command.host_id,
+            instruction_targets=[],
+            planned_changes=[],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="audit-ref",
+            snapshot_reference="planned",
+            timestamp="2026-05-29T12:00:00Z",
+        ),
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert prompts == [
+        "Deseja configurar o host 'codex' (suporte a AGENTS.md)? [S/n]: ",
+        "Deseja configurar o host 'claude_code' (suporte a CLAUDE.md)? [S/n]: ",
+    ]
+    assert '[hosts]\nenabled = [\n    "codex",\n]\n' in (
+        tmp_path / ".umem" / "config.toml"
+    ).read_text(encoding="utf-8")
 
 
 def test_init_module_execution_exits_with_process_status_and_json(

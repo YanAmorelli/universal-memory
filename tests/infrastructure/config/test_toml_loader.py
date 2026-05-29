@@ -6,6 +6,7 @@ from universal_memory.domain import InvalidConfigError, StorageError
 from universal_memory.infrastructure.config.toml_loader import (
     dump_toml_document,
     load_config,
+    update_project_config,
 )
 
 
@@ -121,3 +122,20 @@ def test_dump_toml_document_serializes_with_tomli_w_style() -> None:
     rendered = dump_toml_document(document)
 
     assert rendered == ('[project]\nname = "demo"\n\n[paths]\nstorage_root = ".umem/memory"\n')
+
+
+def test_update_project_config_persists_hosts_with_tomli_w_style(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspace"
+    config_path = project_root / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('[project]\nname = "demo"\n', encoding="utf-8")
+
+    updated = update_project_config(
+        project_root,
+        {"hosts": {"enabled": ["codex", "claude_code"]}},
+    )
+
+    assert updated.project_data["hosts"]["enabled"] == ["codex", "claude_code"]
+    assert config_path.read_text(encoding="utf-8") == (
+        '[project]\nname = "demo"\n\n[hosts]\nenabled = [\n    "codex",\n    "claude_code",\n]\n'
+    )

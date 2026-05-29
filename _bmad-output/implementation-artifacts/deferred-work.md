@@ -44,3 +44,26 @@
 - Lógica de internacionalização (locale) hardcoded nos payloads de erro: O método `error_payload` realiza uma verificação binária simples baseada na string `"pt-BR"` para traduzir ou não a mensagem técnica, misturando lógica de localização de interface direto na construção dos dados. [src/universal_memory/interfaces/errors.py:157-165]
 - Acesso direto a variáveis de ambiente (os.environ) em adapters CLI: Chamadas estáticas diretas a `os.environ.get("UMEM_DEBUG_ERRORS")` dificultam o teste unitário isolado e controle programático do comportamento do CLI. [src/universal_memory/interfaces/cli/init_command.py:1282]
 - Violação DRY na repetição de lógica de capturas de exceções OSError na CLI: Repetição de tratamento de `OSError` e mapeamento idêntico de erros em quase todos os comandos da CLI (`_run_init`, `_run_status`, etc.), gerando código boilerplate desnecessário. [src/universal_memory/interfaces/cli/init_command.py]
+
+## Deferred from: code review of 5-1-modelar-hosts-e-alvos-de-instru-o.md (2026-05-28)
+
+- Untyped escape hatch in metadata field: `dict[str, Any]` allows arbitrary data without domain validation. [src/universal_memory/domain/entities/host.py:86]
+- Missing access mode classification (read-only vs write) for Host targets: Adiado para a camada de casos de uso (camada de aplicação) nas próximas stories.
+- Missing Instruction Entity and Serialization Validation: Adiado para as próximas stories (5.2/5.3), mantendo o escopo de 5.1 na infraestrutura básica de hosts e targets.
+- Lack of relationship validation between Host and InstructionTarget ownership: Adiado para a validação na camada de aplicação/serviço onde os repositórios estarão acessíveis.
+
+## Deferred from: code review of 5-3-configurar-host-claude-code-com-claude-md.md (2026-05-28)
+
+- Lack of Transactional Multi-File Rollback: The sequential write loop for canonical documents and target file does not implement rollbacks on intermediate failure, despite the host configuring `rollback_behavior="snapshot_rollback"`. [src/universal_memory/application/host/setup_host_use_case.py:321-344]
+
+## Deferred from: code review of 5-4-validar-leitura-de-contexto-por-host.md (2026-05-29)
+
+- In-memory O(N) linear scan scalability bottleneck in audit log listing: The status use case loads all project-scoped audit events and groups/filters them in memory to find the latest check. As the audit log grows, this will degrade command response time linearly. [src/universal_memory/application/memory/get_memory_status_use_case.py:323-349]
+- Missing implementation of "manual_pending" validation status: AC 1 specifies that validation must return "success", "failure", or "manual_pending". [src/universal_memory/application/host/setup_host_use_case.py:188-194] — Simplificar o MVP com validações 100% automatizadas e binárias, postergando tratamentos de onboarding manual.
+
+## Deferred from: code review of 5-6-fluxo-de-sele-o-de-hosts-no-onboarding.md (2026-05-29)
+
+- Violação de camadas da Clean Architecture (caso de uso importando infraestrutura): O caso de uso `SyncInstructionsUseCase` importa e usa `load_config` diretamente da camada de infraestrutura (`toml_loader.py`), violando a regra de inversão de dependências. [src/universal_memory/application/host/sync_instructions_use_case.py:27]
+- Dependência acoplada do relógio do sistema (datetime.now(UTC)): O caso de uso usa diretamente `datetime.now(UTC)` dentro de sua execução lógica, dificultando testes unitários isolados e determinismo de testes. [src/universal_memory/application/host/sync_instructions_use_case.py:63]
+- Validação de hosts suportados no caso de uso em vez de camada de validação dedicada: A validação estrutural de quais hosts configurados no arquivo TOML são suportados está implementada diretamente no fluxo do caso de uso em vez de uma porta de validação estrutural. [src/universal_memory/application/host/sync_instructions_use_case.py:360]
+- Ausência de teste e especificidade no comportamento de mesclagem de listas de _deep_merge: A função `update_project_config` utiliza `_deep_merge` para fundir dados de configuração sem garantias formais contra duplicação de itens de lista em execuções subsequentes. [src/universal_memory/infrastructure/config/toml_loader.py:174]

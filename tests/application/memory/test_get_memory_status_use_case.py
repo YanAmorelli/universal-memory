@@ -9,6 +9,8 @@ import pytest
 from universal_memory.application.memory import GetMemoryStatusCommand, GetMemoryStatusUseCase
 from universal_memory.domain import ProjectLayoutPort, ProjectLayoutResult
 from universal_memory.domain.entities import (
+    AuditEvent,
+    AuditEventScope,
     Fact,
     FactScope,
     FactStatus,
@@ -19,7 +21,12 @@ from universal_memory.domain.entities import (
     RuleScope,
     RuleStatus,
 )
-from universal_memory.domain.ports import FactRepository, LatentSkillRepository, RuleRepository
+from universal_memory.domain.ports import (
+    AuditLogRepository,
+    FactRepository,
+    LatentSkillRepository,
+    RuleRepository,
+)
 
 EXPECTED_MIN_SIZE_BYTES = 3
 
@@ -126,6 +133,28 @@ class RecordingLatentSkillRepository(LatentSkillRepository):
         return None
 
 
+class RecordingAuditLogRepository(AuditLogRepository):
+    def __init__(self, events: list[AuditEvent] | None = None, *, fail_list: bool = False) -> None:
+        self.events = events or []
+        self.fail_list = fail_list
+
+    def read(self, id: str) -> AuditEvent:
+        raise KeyError(id)
+
+    def list(self, scope: AuditEventScope | None = None) -> list[AuditEvent]:
+        if self.fail_list:
+            raise OSError("audit unavailable")
+        if scope is None:
+            return self.events
+        return [event for event in self.events if event.scope == scope]
+
+    def write(self, entity: AuditEvent) -> None:
+        self.events.append(entity)
+
+    def migrate(self, target_version: int) -> None:
+        return None
+
+
 def make_fact(*, scope: FactScope, status: FactStatus) -> Fact:
     now = datetime(2026, 5, 27, tzinfo=UTC)
     return Fact(
@@ -165,13 +194,38 @@ def make_skill(*, status: LatentSkillStatus) -> LatentSkill:
     )
 
 
-def build_use_case(
+def make_host_validation_event(
+    *,
+    host_id: str,
+    result: str,
+    method: str,
+    timestamp: datetime,
+) -> AuditEvent:
+    audit_reference = str(uuid4())
+    return AuditEvent(
+        id=audit_reference,
+        created_at=timestamp,
+        updated_at=timestamp,
+        timestamp=timestamp,
+        action=f"host_validation.{host_id}",
+        scope=AuditEventScope.project,
+        origin="cli",
+        result=result,
+        snapshot_reference=str(uuid4()),
+        audit_reference=audit_reference,
+        status="logged",
+        details=f'{{"method":"{method}"}}',
+    )
+
+
+def build_use_case(  # noqa: PLR0913
     *,
     initialized: bool,
     project_root: Path,
     facts: list[Fact] | None = None,
     rules: list[Rule] | None = None,
     skills: list[LatentSkill] | None = None,
+    audit_log_repository: AuditLogRepository | None = None,
 ) -> tuple[
     GetMemoryStatusUseCase,
     RecordingLayoutPort,
@@ -187,6 +241,7 @@ def build_use_case(
             rule_repository=rule_repository,
             latent_skill_repository=skill_repository,
             layout_port=layout_port,
+            audit_log_repository=audit_log_repository,
         ),
         layout_port,
         rule_repository,
@@ -251,6 +306,99 @@ def test_status_counts_initialized_memory_and_detects_hosts(
     assert result.approximate_size_bytes >= EXPECTED_MIN_SIZE_BYTES
     assert result.last_health_check is not None
     assert result.last_health_check.endswith("Z")
-    assert result.host_validation == {"claude": "unconfigured", "gemini": "valid"}
+    assert result.host_validation == {
+        "claude_code": {
+            "status": "unconfigured",
+            "timestamp": None,
+            "method": None,
+            "audit_reference": None,
+        },
+        "codex": {
+            "status": "unconfigured",
+            "timestamp": None,
+            "method": None,
+            "audit_reference": None,
+        },
+    }
     assert rules.filters == [(None, RuleStatus.active)]
     assert skills.filters == [(None, LatentSkillStatus.active)]
+
+
+def test_status_loads_latest_host_validation_from_audit_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".umem").mkdir()
+    older = datetime(2026, 5, 28, 10, tzinfo=UTC)
+    newer = datetime(2026, 5, 29, 10, tzinfo=UTC)
+    codex_event = make_host_validation_event(
+        host_id="codex",
+        result="failure",
+        method="agents_md_compact_validator",
+        timestamp=older,
+    )
+    latest_codex_event = make_host_validation_event(
+        host_id="codex",
+        result="success",
+        method="agents_md_compact_validator",
+        timestamp=newer,
+    )
+    claude_event = make_host_validation_event(
+        host_id="claude_code",
+        result="manual_pending",
+        method="claude_md_delta_validator",
+        timestamp=older,
+    )
+    use_case, _layout, _rules, _skills = build_use_case(
+        initialized=True,
+        project_root=tmp_path,
+        audit_log_repository=RecordingAuditLogRepository(
+            [codex_event, latest_codex_event, claude_event]
+        ),
+    )
+
+    result = use_case.execute(GetMemoryStatusCommand(project_root=tmp_path))
+
+    assert result.host_validation == {
+        "claude_code": {
+            "status": "manual_pending",
+            "timestamp": "2026-05-28T10:00:00Z",
+            "method": "claude_md_delta_validator",
+            "audit_reference": claude_event.audit_reference,
+        },
+        "codex": {
+            "status": "success",
+            "timestamp": "2026-05-29T10:00:00Z",
+            "method": "agents_md_compact_validator",
+            "audit_reference": latest_codex_event.audit_reference,
+        },
+    }
+
+
+def test_status_tolerates_audit_log_read_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".umem").mkdir()
+    use_case, _layout, _rules, _skills = build_use_case(
+        initialized=True,
+        project_root=tmp_path,
+        audit_log_repository=RecordingAuditLogRepository(fail_list=True),
+    )
+
+    result = use_case.execute(GetMemoryStatusCommand(project_root=tmp_path))
+
+    assert result.host_validation == {
+        "claude_code": {
+            "status": "unconfigured",
+            "timestamp": None,
+            "method": None,
+            "audit_reference": None,
+        },
+        "codex": {
+            "status": "unconfigured",
+            "timestamp": None,
+            "method": None,
+            "audit_reference": None,
+        },
+    }

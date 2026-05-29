@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
+from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     GetMemoryStatusUseCase,
@@ -18,7 +19,7 @@ from universal_memory.application.security import (
     RollbackUseCase,
     SafeWriteUseCase,
 )
-from universal_memory.bootstrap.cli import EmptyLatentSkillRepository, EmptyRuleRepository
+from universal_memory.bootstrap.cli import EmptyLatentSkillRepository
 from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
@@ -28,6 +29,7 @@ from universal_memory.infrastructure.security import (
 from universal_memory.infrastructure.storage import (
     LocalContextSummaryRepository,
     LocalFactRepository,
+    LocalRuleRepository,
 )
 from universal_memory.interfaces.mcp import MCPUseCases, configure_server, create_mcp_server
 
@@ -53,12 +55,17 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         data_root=data_root,
         safe_write_use_case=safe_write_use_case,
     )
-    rule_repository = EmptyRuleRepository()
+    rule_repository = LocalRuleRepository(
+        project_root=root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
         rule_repository=rule_repository,
         latent_skill_repository=EmptyLatentSkillRepository(),
         layout_port=layout_port,
+        audit_log_repository=audit_log_repository,
         data_root=data_root,
     )
     context_use_case = AssembleContextSummaryUseCase(
@@ -92,6 +99,16 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         snapshot_repository=snapshot_repository,
         audit_log_repository=audit_log_repository,
     )
+    host_use_case = ConfigureHostUseCase(
+        project_root=root,
+        safe_write_use_case=safe_write_use_case,
+        fact_repository=fact_repository,
+    )
+    host_sync_use_case = SyncInstructionsUseCase(
+        project_root=root,
+        safe_write_use_case=safe_write_use_case,
+        rule_repository=rule_repository,
+    )
 
     def initialize_project(project_root: Path):
         return setup_project(
@@ -112,6 +129,9 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             list_audit_events=audit_list_use_case.execute,
             list_snapshots=snapshots_list_use_case.execute,
             rollback_scope=rollback_use_case.execute,
+            host_setup=host_use_case.execute,
+            host_check=host_use_case.execute,
+            sync_instructions=host_sync_use_case.execute,
         ),
         project_root=root,
     )
