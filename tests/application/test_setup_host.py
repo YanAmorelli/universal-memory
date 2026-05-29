@@ -319,6 +319,30 @@ def test_claude_code_setup_writes_only_delta_blocks_to_claude_md(
     assert "Use relative paths in specs, code and docs." not in claude_content
 
 
+def test_claude_code_setup_without_deltas_passes_own_read_validator(
+    tmp_path: Path,
+    configured_use_case_with_audit: tuple[ConfigureHostUseCase, InMemoryAuditLogRepository],
+) -> None:
+    configured_use_case, audit_log_repository = configured_use_case_with_audit
+
+    configured_use_case.execute(
+        ConfigureHostCommand(host_id="claude_code", apply=True, origin="test")
+    )
+
+    result = configured_use_case.execute(
+        ConfigureHostCommand(host_id="claude_code", check=True, origin="test")
+    )
+    claude_content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+
+    assert result.validation_status == "success"
+    assert result.warnings == []
+    assert "universal-memory" in claude_content
+    assert "umem context" in claude_content
+    assert "umem status" in claude_content
+    details = json.loads(audit_log_repository.events[-1].details or "{}")
+    assert details["checks"]["managed_block_has_mcp_reference"] is True
+
+
 def test_claude_code_setup_preserves_manual_content_outside_managed_block(
     tmp_path: Path,
     configured_use_case: ConfigureHostUseCase,

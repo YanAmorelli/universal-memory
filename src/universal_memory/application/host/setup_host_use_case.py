@@ -736,6 +736,8 @@ class ConfigureHostUseCase:
             "# Claude Delta Instructions",
             "> Leia `AGENTS.md` como manifesto compartilhado quando ele existir; este arquivo "
             "contem apenas deltas especificos para Claude Code.",
+            "> Integracao MCP/FastMCP: contexto universal-memory disponivel via "
+            "`umem context`; valide a configuracao com `umem status`.",
             "",
             "## Deltas do Provedor",
         ]
