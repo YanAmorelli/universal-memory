@@ -61,12 +61,14 @@ def test_skills_list_human_output_shows_table_content(capsys) -> None:
     assert "2026-05-29T12:00:00Z" in output
 
 
-def test_skills_list_empty_human_output_suggests_propose(capsys) -> None:
+def test_skills_list_empty_human_output_suggests_actionable_next_step(capsys) -> None:
     def list_skills(command: ListSkillsCommand) -> ListSkillsResult:
         return ListSkillsResult(
             skills=[],
             recommended_action=(
-                "Execute `umem skills propose <latent_skill_id>` para revisar uma skill candidata."
+                "Latent skills aparecem quando o universal-memory registra padroes recorrentes. "
+                "Continue usando `umem remember \"...\"` para registrar memoria; quando uma "
+                "candidata aparecer, rode `umem skills list` novamente para acompanhar as skills."
             ),
         )
 
@@ -75,7 +77,9 @@ def test_skills_list_empty_human_output_suggests_propose(capsys) -> None:
 
     assert exit_code == 0
     assert "Nenhuma skill registrada" in output
-    assert "umem skills propose" in output
+    assert "umem remember" in output
+    assert "umem skills list" in output
+    assert "umem skills propose" not in output
 
 
 def test_skills_list_json_is_pure_success_envelope(capsys) -> None:

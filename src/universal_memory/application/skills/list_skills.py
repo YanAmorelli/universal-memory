@@ -13,7 +13,9 @@ from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.ports import LatentSkillRepository
 
 RECOMMENDED_SKILL_ACTION = (
-    "Execute `umem skills propose <latent_skill_id>` para revisar uma skill candidata."
+    "Latent skills aparecem quando o universal-memory registra padroes recorrentes. "
+    "Continue usando `umem remember \"...\"` para registrar memoria; quando uma "
+    "candidata aparecer, rode `umem skills list` novamente para acompanhar as skills."
 )
 FRONTMATTER_SPLIT_PARTS = 2
 

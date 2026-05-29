@@ -127,7 +127,7 @@ Uso combinado sugerido:
 
 ## BUG-003 - Mensagem de `umem skills list` sem skills sugere comando pouco acionavel
 
-- Status: open
+- Status: verified
 - Severidade: low
 - Superficie: CLI
 - Encontrado em: 2026-05-29
@@ -160,11 +160,13 @@ Uso combinado sugerido:
 
 ### Correcao
 
-- pendente
+- A recomendacao padrao do estado vazio de `umem skills list` agora explica que latent skills aparecem quando o `universal-memory` registra padroes recorrentes.
+- A mensagem sugere um proximo passo executavel sem exigir ID inexistente: continuar registrando memoria com `umem remember "..."` e rodar `umem skills list` novamente para acompanhar as skills quando uma candidata aparecer.
+- Testes de application e CLI foram atualizados para proteger contra a reintroducao da sugestao direta de `umem skills propose <latent_skill_id>` no estado vazio.
 
 ### Verificacao
 
-- pendente
+- `uv run pytest tests/application/skills/test_list_skills.py tests/interfaces/cli/test_skills_list.py` -> 10 passed
 
 ## BUG-002 - Estrategia de armazenamento global usa caminhos diferentes por tipo de dado
 
