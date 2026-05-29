@@ -15,9 +15,17 @@ repos:
       - id: gitleaks
         stages: [pre-push] # Runs only on push to avoid false positives during commits
 
-  # 3. UNIT TESTS (Pytest via your local environment controlled by UV)
+  # 3. STATIC ANALYSIS & UNIT TESTS (via local environment controlled by UV)
   - repo: local
     hooks:
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: pytest
         name: pytest
         entry: uv run pytest
