@@ -223,9 +223,10 @@ def test_safe_write_pipeline_records_snapshot_and_audit(tmp_path: Path) -> None:
     safe_write, snapshots, audit = build_safe_write(tmp_path)
     repository = LocalLatentSkillRepository(project_root=tmp_path, safe_write_use_case=safe_write)
 
-    result = repository.write(make_skill())
+    result = repository.write(make_skill(), origin="cli")
 
     assert result is not None
     assert result.relative_path == ".umem/memory/latent_skills.jsonl"
     assert snapshots.written
     assert audit.written[0].action == "write_latent_skill"
+    assert audit.written[0].origin == "cli"

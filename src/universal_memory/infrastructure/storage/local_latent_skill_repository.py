@@ -151,19 +151,16 @@ class LocalLatentSkillRepository(LatentSkillRepository):
 
         return sorted(skills, key=lambda skill: self._normalize_datetime(skill.created_at))
 
-    def write(self, entity: LatentSkill) -> SafeWriteResult | None:
+    def write(self, entity: LatentSkill, *, origin: str = "repository") -> SafeWriteResult | None:
         try:
             with self._lock(entity.scope):
                 skills = self._load_latent_skills_unlocked(entity.scope, raise_on_corrupt=True)
                 skills_by_id = {skill.id: skill for skill in skills}
+                previous = skills_by_id.get(entity.id)
                 skills_by_id[entity.id] = entity
-                action = (
-                    "propose_skill_decision"
-                    if "approval" in entity.metadata
-                    else "write_latent_skill"
-                )
+                action = self._audit_action_for(previous, entity)
                 return self._write_latent_skills_unlocked(
-                    list(skills_by_id.values()), entity.scope, action=action
+                    list(skills_by_id.values()), entity.scope, action=action, origin=origin
                 )
         except StorageError:
             raise
@@ -240,7 +237,11 @@ class LocalLatentSkillRepository(LatentSkillRepository):
             raise StorageError("Failed to read latent skills") from exc
 
     def _write_latent_skills_unlocked(
-        self, skills: list[LatentSkill], scope: LatentSkillScope, action: str = "write_latent_skill"
+        self,
+        skills: list[LatentSkill],
+        scope: LatentSkillScope,
+        action: str = "write_latent_skill",
+        origin: str = "repository",
     ) -> SafeWriteResult | None:
         content = self._render_latent_skills(skills)
         is_global = scope == LatentSkillScope.global_
@@ -254,7 +255,7 @@ class LocalLatentSkillRepository(LatentSkillRepository):
                     relative_path=relative_path,
                     content=content,
                     scope=self._audit_scope_for(scope),
-                    origin="repository",
+                    origin=origin,
                     action=action,
                 )
             )
@@ -274,6 +275,23 @@ class LocalLatentSkillRepository(LatentSkillRepository):
         if scope == LatentSkillScope.global_:
             return self.global_latent_skills_path
         return self.latent_skills_path
+
+    @staticmethod
+    def _audit_action_for(previous: LatentSkill | None, entity: LatentSkill) -> str:
+        if previous is not None:
+            if (
+                previous.status == LatentSkillStatus.active
+                and entity.status == LatentSkillStatus.ignored
+            ):
+                return "deactivate_skill"
+            if (
+                previous.status == LatentSkillStatus.ignored
+                and entity.status == LatentSkillStatus.active
+            ):
+                return "activate_skill"
+        if "approval" in entity.metadata:
+            return "propose_skill_decision"
+        return "write_latent_skill"
 
     @staticmethod
     def _audit_scope_for(scope: LatentSkillScope) -> AuditEventScope:

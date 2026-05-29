@@ -23,8 +23,25 @@ from universal_memory.application.skills.track_latent_skill import (
     TrackLatentSkillResult,
     TrackLatentSkillUseCase,
 )
+from universal_memory.application.skills.update_skill import (
+    ActivateSkillCommand,
+    ActivateSkillResult,
+    ActivateSkillUseCase,
+    DeactivateSkillCommand,
+    DeactivateSkillResult,
+    DeactivateSkillUseCase,
+    UpdateSkillCommand,
+    UpdateSkillResult,
+    UpdateSkillUseCase,
+)
 
 __all__ = [
+    "ActivateSkillCommand",
+    "ActivateSkillResult",
+    "ActivateSkillUseCase",
+    "DeactivateSkillCommand",
+    "DeactivateSkillResult",
+    "DeactivateSkillUseCase",
     "GenerateSkillCommand",
     "GenerateSkillResult",
     "GenerateSkillUseCase",
@@ -42,4 +59,7 @@ __all__ = [
     "TrackLatentSkillCommand",
     "TrackLatentSkillResult",
     "TrackLatentSkillUseCase",
+    "UpdateSkillCommand",
+    "UpdateSkillResult",
+    "UpdateSkillUseCase",
 ]

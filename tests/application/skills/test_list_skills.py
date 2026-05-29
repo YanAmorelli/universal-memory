@@ -205,14 +205,18 @@ def test_list_skills_resolves_materialized_skill_file_with_alternate_slug(tmp_pa
     skill_file = tmp_path / ".umem" / "skills" / "tdd-recorrente-2" / "SKILL.md"
     skill_file.parent.mkdir(parents=True)
     skill_file.write_text(
-        "---\nname: \"TDD Recorrente\"\ntriggers:\n  - tdd\n---\n",
+        '---\nname: "TDD Recorrente"\ntriggers:\n  - tdd\n---\n',
         encoding="utf-8",
     )
 
-    payload = ListSkillsUseCase(
-        project_root=tmp_path,
-        repository=InMemoryLatentSkillRepository([skill]),
-    ).execute(ListSkillsCommand()).to_payload()
+    payload = (
+        ListSkillsUseCase(
+            project_root=tmp_path,
+            repository=InMemoryLatentSkillRepository([skill]),
+        )
+        .execute(ListSkillsCommand())
+        .to_payload()
+    )
 
     assert payload["skills"][0]["relative_path"] == ".umem/skills/tdd-recorrente-2/SKILL.md"
 
@@ -261,11 +265,11 @@ def test_get_skill_detail_reads_triggers_from_bom_crlf_and_escaped_yaml(tmp_path
     (skill_dir / "SKILL.md").write_text(
         "\ufeff---\r\n"
         'name: "TDD Recorrente"\r\n'
-        'triggers:\r\n'
-        '  - "red \\\"green\\\" refactor"\r\n'
+        "triggers:\r\n"
+        '  - "red \\"green\\" refactor"\r\n'
         '  - "linha 1\\nlinha 2"\r\n'
-        '---\r\n'
-        '# TDD Recorrente\r\n',
+        "---\r\n"
+        "# TDD Recorrente\r\n",
         encoding="utf-8",
     )
 

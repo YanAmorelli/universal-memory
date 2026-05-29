@@ -42,11 +42,12 @@ class LatentSkillRepository(ABC):
         ...
 
     @abstractmethod
-    def write(self, entity: LatentSkill) -> SafeWriteResult | None:
+    def write(self, entity: LatentSkill, *, origin: str = "repository") -> SafeWriteResult | None:
         """Write or update a latent skill in the repository.
 
         Args:
             entity: The LatentSkill entity to write.
+            origin: Origin associated with the audit trail for this write.
         """
         ...
 

@@ -20,10 +20,13 @@ from universal_memory.application.security import (
     SafeWriteUseCase,
 )
 from universal_memory.application.skills import (
+    ActivateSkillUseCase,
+    DeactivateSkillUseCase,
     GenerateSkillUseCase,
     GetSkillDetailUseCase,
     ListSkillsUseCase,
     ProposeSkillUseCase,
+    UpdateSkillUseCase,
 )
 from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
 from universal_memory.infrastructure.security import (
@@ -126,6 +129,21 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         safe_write_use_case=safe_write_use_case,
     )
     generate_skill_use_case = GenerateSkillUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            latent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    _activate_skill_use_case = ActivateSkillUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+    )
+    _deactivate_skill_use_case = DeactivateSkillUseCase(
+        repository=latent_skill_repository,
+    )
+    _update_skill_use_case = UpdateSkillUseCase(
         project_root=root,
         repository=latent_skill_repository,
         safe_write_use_case=safe_write_use_case,
