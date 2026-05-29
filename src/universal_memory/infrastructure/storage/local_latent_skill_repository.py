@@ -157,7 +157,14 @@ class LocalLatentSkillRepository(LatentSkillRepository):
                 skills = self._load_latent_skills_unlocked(entity.scope, raise_on_corrupt=True)
                 skills_by_id = {skill.id: skill for skill in skills}
                 skills_by_id[entity.id] = entity
-                return self._write_latent_skills_unlocked(list(skills_by_id.values()), entity.scope)
+                action = (
+                    "propose_skill_decision"
+                    if "approval" in entity.metadata
+                    else "write_latent_skill"
+                )
+                return self._write_latent_skills_unlocked(
+                    list(skills_by_id.values()), entity.scope, action=action
+                )
         except StorageError:
             raise
         except OSError as exc:

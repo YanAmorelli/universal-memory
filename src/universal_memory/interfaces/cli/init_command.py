@@ -49,6 +49,11 @@ from universal_memory.application.security import (
     RollbackCommand,
     RollbackResult,
 )
+from universal_memory.application.skills import (
+    ProposeSkillCommand,
+    ProposeSkillDecision,
+    ProposeSkillResult,
+)
 from universal_memory.domain import (
     ConfigValidationPort,
     ProjectLayoutPort,
@@ -91,6 +96,7 @@ PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneResult]
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
+ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
@@ -133,6 +139,7 @@ def main(  # noqa: PLR0913
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
     host_sync_command: SyncInstructionsCommandHandler | None = None,
+    propose_skill_command: ProposeSkillCommandHandler | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -149,6 +156,7 @@ def main(  # noqa: PLR0913
         host_setup_command=host_setup_command,
         host_check_command=host_check_command,
         host_sync_command=host_sync_command,
+        propose_skill_command=propose_skill_command,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
@@ -185,17 +193,20 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
     host_sync_command: SyncInstructionsCommandHandler | None = None,
+    propose_skill_command: ProposeSkillCommandHandler | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
     facts_app = typer.Typer(help="Gerenciar fatos de memoria")
     audit_app = typer.Typer(help="Inspecionar eventos de auditoria")
     snapshots_app = typer.Typer(help="Inspecionar snapshots")
     host_app = typer.Typer(help="Configurar hosts de agente")
+    skills_app = typer.Typer(help="Gerenciar skills")
 
     app.add_typer(facts_app, name="facts")
     app.add_typer(audit_app, name="audit")
     app.add_typer(snapshots_app, name="snapshots")
     app.add_typer(host_app, name="host")
+    app.add_typer(skills_app, name="skills")
 
     @app.callback()
     def callback(
@@ -557,6 +568,36 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
+    @skills_app.command("propose")
+    def skills_propose(
+        ctx: typer.Context,
+        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        decision: Annotated[
+            str | None,
+            typer.Option(
+                "--decision",
+                help="Decisao explicita: sim, sempre ou nao.",
+                click_type=click.Choice(
+                    ["sim", "s", "sempre", "e", "nao", "não", "n"], case_sensitive=False
+                ),
+            ),
+        ] = None,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if propose_skill_command is None:
+            msg = "CLI propose_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_propose(
+                propose_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                latent_skill_id=latent_skill_id,
+                decision=_skill_decision(decision),
+                yes=yes,
+            )
+        )
+
     return app
 
 
@@ -577,6 +618,7 @@ def build_main(  # noqa: PLR0913
     host_setup_command: ConfigureHostCommandHandler,
     host_check_command: ConfigureHostCommandHandler,
     host_sync_command: SyncInstructionsCommandHandler,
+    propose_skill_command: ProposeSkillCommandHandler | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -600,6 +642,7 @@ def build_main(  # noqa: PLR0913
             host_setup_command=host_setup_command,
             host_check_command=host_check_command,
             host_sync_command=host_sync_command,
+            propose_skill_command=propose_skill_command,
         )
 
     return configured_main
@@ -1256,6 +1299,84 @@ def _run_host_sync(
     return 0
 
 
+def _prompt_skills_decision(
+    latent_skill_id: str,
+    command: ProposeSkillCommandHandler,
+    result: ProposeSkillResult,
+) -> ProposeSkillResult | None:
+    _stdout_console().print(_format_human_skill_proposal(result))
+    try:
+        answer = input("Decisao [Sim/Sempre/Não]: ")
+    except (EOFError, KeyboardInterrupt):
+        _stdout_console().print("\nCancelado.")
+        return None
+    prompted_decision = _skill_decision(answer)
+    if prompted_decision is None:
+        raise ValidationFailedError("Decisao invalida fornecida. Use Sim, Sempre ou Não.")
+    return command(
+        ProposeSkillCommand(
+            latent_skill_id=latent_skill_id,
+            decision=prompted_decision,
+            origin="cli",
+        )
+    )
+
+
+def _map_propose_error(error: Exception, latent_skill_id: str) -> Exception:
+    if isinstance(error, KeyError):
+        return ValidationFailedError(
+            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+        )
+    if isinstance(error, (ValidationError, ValueError)):
+        return ValidationFailedError(str(error))
+    if isinstance(error, OSError) and not isinstance(error, DOMAIN_ERROR_TYPES):
+        return StorageError(str(error))
+    return error
+
+
+def _run_skills_propose(
+    command: ProposeSkillCommandHandler,
+    *,
+    output_format: str,
+    latent_skill_id: str,
+    decision: ProposeSkillDecision | None,
+    yes: bool,
+) -> int:
+    try:
+        resolved_decision = ProposeSkillDecision.sim if yes and decision is None else decision
+        if resolved_decision is None and not sys.stdin.isatty():
+            raise ValidationFailedError("Ambiente nao-TTY exige --decision ou --yes.")
+        if output_format == "json" and resolved_decision is None:
+            raise ValidationFailedError(
+                "Informe --decision ou --yes para executar skills propose com saida JSON."
+            )
+        if resolved_decision is not None:
+            result = command(
+                ProposeSkillCommand(
+                    latent_skill_id=latent_skill_id,
+                    decision=resolved_decision,
+                    origin="cli",
+                )
+            )
+        else:
+            result = command(ProposeSkillCommand(latent_skill_id=latent_skill_id, origin="cli"))
+            if output_format != "json" and sys.stdin.isatty():
+                prompted = _prompt_skills_decision(latent_skill_id, command, result)
+                if prompted is None:
+                    return 1
+                result = prompted
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        exc = _map_propose_error(error, latent_skill_id)
+        _print_expected_error(exc, output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_proposal_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_proposal(result))
+    return 0
+
+
 def _success_envelope(result: SetupProjectResult) -> dict[str, Any]:
     return {
         "ok": True,
@@ -1305,6 +1426,16 @@ def _rollback_success_envelope(result: RollbackResult) -> dict[str, Any]:
     }
 
 
+def _skill_proposal_success_envelope(result: ProposeSkillResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.propose",
+        "scope": result.latent_skill.scope.value,
+        "data": _skill_proposal_payload(result),
+        "warnings": [],
+    }
+
+
 def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
     return {
         "ok": True,
@@ -1312,6 +1443,21 @@ def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
         "scope": "project",
         "data": _status_payload(result),
         "warnings": [],
+    }
+
+
+def _skill_proposal_payload(result: ProposeSkillResult) -> dict[str, Any]:
+    return {
+        "skill_id": result.latent_skill.id,
+        "suggested_name": result.proposal["suggested_name"],
+        "status": result.latent_skill.status.value,
+        "accepted": result.accepted,
+        "auto_approval_recorded": result.auto_approval_recorded,
+        "audit_reference": result.audit_reference,
+        "snapshot_reference": result.snapshot_reference,
+        "choices": result.choices,
+        "requires_decision": result.requires_decision,
+        "evidence": result.proposal["evidence"],
     }
 
 
@@ -1703,6 +1849,45 @@ def _format_human_rollback_success(result: RollbackResult) -> str:
     )
 
 
+def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
+    scope = result.proposal["scope"]
+    is_global = scope == "global"
+
+    skill_path = "memory/latent_skills.jsonl" if is_global else ".umem/memory/latent_skills.jsonl"
+    config_path = "~/.config/universal-memory/config.toml" if is_global else ".umem/config.toml"
+
+    lines = [
+        "Operacao: skills.propose",
+        f"Escopo: {scope}",
+        f"Nome sugerido: {result.proposal['suggested_name']}",
+        f"Proposito: {result.proposal['purpose']}",
+        "Evidencias:",
+    ]
+    evidence = result.proposal.get("evidence", [])
+    lines.extend(f"  - {item}" for item in evidence)
+
+    lines.extend(
+        [
+            "",
+            "Caminhos relativos afetados:",
+            f"  - Decisao Sim: {skill_path}",
+            f"  - Decisao Sempre: {skill_path} E {config_path}",
+            f"  - Decisao Nao: {skill_path}",
+            "",
+            "Snapshot: Um snapshot de seguranca sera criado antes de qualquer gravacao.",
+            "Evento de auditoria esperado: propose_skill_decision ou "
+            "update_skill_auto_approval (para Sempre).",
+            "Opcoes: Sim, Sempre, Não",
+        ]
+    )
+
+    if result.audit_reference:
+        lines.append(f"Auditoria: {result.audit_reference}")
+    if result.snapshot_reference:
+        lines.append(f"Snapshot: {result.snapshot_reference}")
+    return "\n".join(lines)
+
+
 def _format_human_host_plan(result: ConfigureHostResult, *, operation: str) -> Table | str:
     if not result.planned_changes:
         return f"Nenhuma alteracao planejada para host {result.host_id}."
@@ -1874,3 +2059,16 @@ def _context_scope(value: str) -> ContextSummaryScope:
 
 def _fact_status(value: str) -> FactStatus:
     return FactStatus(value)
+
+
+def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
+    if value is None:
+        return None
+    normalized = value.strip().casefold()
+    if normalized in {"s", "sim", "y", "yes"}:
+        return ProposeSkillDecision.sim
+    if normalized in {"e", "sempre", "always"}:
+        return ProposeSkillDecision.sempre
+    if normalized in {"n", "nao", "não", "no"}:
+        return ProposeSkillDecision.nao
+    return None

@@ -22,6 +22,7 @@ from universal_memory.application.security import (
     ListSnapshotsResult,
     RollbackResult,
 )
+from universal_memory.application.skills import ProposeSkillCommand, ProposeSkillResult
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import (
     ContextSummary,
@@ -29,6 +30,9 @@ from universal_memory.domain.entities import (
     Fact,
     FactScope,
     FactStatus,
+    LatentSkill,
+    LatentSkillScope,
+    LatentSkillStatus,
 )
 from universal_memory.interfaces.mcp.server import (
     JSON_RPC_STORAGE_ERROR,
@@ -53,6 +57,7 @@ PUBLIC_MCP_TOOLS = {
     "host_setup": {"host_id": "codex", "force": True},
     "host_check": {"host_id": "codex"},
     "sync_instructions": {"host_ids": ["codex", "claude_code"], "apply": True},
+    "propose_skill": {"latent_skill_id": FACT_ID, "decision": "sim"},
 }
 CONTRACT_KEYS_BY_TOOL = {
     "initialize_project": {
@@ -119,6 +124,18 @@ CONTRACT_KEYS_BY_TOOL = {
         "audit_reference",
         "snapshot_reference",
         "timestamp",
+    },
+    "propose_skill": {
+        "skill_id",
+        "suggested_name",
+        "status",
+        "accepted",
+        "auto_approval_recorded",
+        "audit_reference",
+        "snapshot_reference",
+        "choices",
+        "requires_decision",
+        "evidence",
     },
 }
 CONTRACT_TYPES_BY_TOOL = {
@@ -198,6 +215,18 @@ CONTRACT_TYPES_BY_TOOL = {
         "audit_reference": str,
         "snapshot_reference": str,
         "timestamp": str,
+    },
+    "propose_skill": {
+        "skill_id": str,
+        "suggested_name": str,
+        "status": str,
+        "accepted": bool,
+        "auto_approval_recorded": bool,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "choices": list,
+        "requires_decision": bool,
+        "evidence": list,
     },
 }
 
@@ -343,6 +372,34 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         host_setup=lambda _command: host_result(),
         host_check=lambda _command: host_result(planned_changes=[]),
         sync_instructions=lambda _command: sync_result(),
+        propose_skill=propose_skill_result,
+    )
+
+
+def propose_skill_result(command: ProposeSkillCommand) -> ProposeSkillResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id=command.latent_skill_id,
+        created_at=now,
+        updated_at=now,
+        name="TDD recorrente",
+        description="Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.active,
+        recurrence_count=3,
+        metadata={},
+    )
+    return ProposeSkillResult(
+        latent_skill=skill,
+        proposal={
+            "suggested_name": skill.name,
+            "purpose": skill.description,
+            "scope": skill.scope.value,
+            "evidence": ["Pedido em story anterior"],
+        },
+        accepted=True,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
     )
 
 

@@ -19,15 +19,28 @@ from universal_memory.application.memory import (
     GetMemoryStatusCommand,
     GetMemoryStatusResult,
 )
+from universal_memory.application.skills import (
+    ProposeSkillCommand,
+    ProposeSkillDecision,
+    ProposeSkillResult,
+)
 from universal_memory.bootstrap.mcp import build_server
 from universal_memory.domain import SecretDetectedError
-from universal_memory.domain.entities import ContextSummary, ContextSummaryScope
+from universal_memory.domain.entities import (
+    ContextSummary,
+    ContextSummaryScope,
+    LatentSkill,
+    LatentSkillScope,
+    LatentSkillStatus,
+)
 from universal_memory.interfaces.mcp.server import (
     JSON_RPC_SECRET_DETECTED,
     MCPUseCases,
     configure_server,
     create_mcp_server,
 )
+
+SKILL_ID = "11111111-1111-4111-8111-111111111111"
 
 
 def initialized_status() -> GetMemoryStatusResult:
@@ -78,6 +91,45 @@ def context_result() -> AssembleContextSummaryResult:
         context_summary=summary,
         context_markdown="# MEMORY CONTEXT SUMMARY\nResumo do projeto",
         included_fact_ids=["fact-1", "fact-2"],
+    )
+
+
+def skill_result(
+    *,
+    decision: ProposeSkillDecision | None = None,
+    requires_decision: bool = False,
+) -> ProposeSkillResult:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id=SKILL_ID,
+        created_at=now,
+        updated_at=now,
+        name="TDD recorrente",
+        description="Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.proposed
+        if requires_decision
+        else (
+            LatentSkillStatus.ignored
+            if decision == ProposeSkillDecision.nao
+            else LatentSkillStatus.active
+        ),
+        recurrence_count=3,
+        metadata={},
+    )
+    return ProposeSkillResult(
+        latent_skill=skill,
+        proposal={
+            "suggested_name": skill.name,
+            "purpose": skill.description,
+            "scope": "project",
+            "evidence": ["Pedido em story anterior", "Pedido em review"],
+        },
+        requires_decision=requires_decision,
+        accepted=decision in {ProposeSkillDecision.sim, ProposeSkillDecision.sempre},
+        auto_approval_recorded=decision == ProposeSkillDecision.sempre,
+        audit_reference="audit-1" if decision is not None else "",
+        snapshot_reference="snapshot-1" if decision is not None else "",
     )
 
 
@@ -240,6 +292,88 @@ async def test_host_setup_tool_uses_injected_use_case_and_matches_cli_json_contr
         },
         "warnings": [],
     }
+
+
+@pytest.mark.anyio
+async def test_propose_skill_without_decision_returns_proposal_for_follow_up(
+    tmp_path: Path,
+) -> None:
+    received: list[ProposeSkillCommand] = []
+
+    def propose_skill(command: ProposeSkillCommand) -> ProposeSkillResult:
+        received.append(command)
+        return skill_result(requires_decision=True)
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            propose_skill=propose_skill,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool("propose_skill", {"latent_skill_id": SKILL_ID})
+
+    assert "propose_skill" in tool_names
+    assert received == [ProposeSkillCommand(latent_skill_id=SKILL_ID, origin="mcp")]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "skills.propose",
+        "scope": "project",
+        "data": {
+            "skill_id": SKILL_ID,
+            "suggested_name": "TDD recorrente",
+            "status": "proposed",
+            "accepted": False,
+            "auto_approval_recorded": False,
+            "audit_reference": "",
+            "snapshot_reference": "",
+            "choices": ["Sim", "Sempre", "Não"],
+            "requires_decision": True,
+            "evidence": ["Pedido em story anterior", "Pedido em review"],
+        },
+        "warnings": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_propose_skill_with_decision_invokes_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[ProposeSkillCommand] = []
+
+    def propose_skill(command: ProposeSkillCommand) -> ProposeSkillResult:
+        received.append(command)
+        return skill_result(decision=command.decision)
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            propose_skill=propose_skill,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool(
+        "propose_skill",
+        {"latent_skill_id": SKILL_ID, "decision": "sempre"},
+    )
+
+    assert received == [
+        ProposeSkillCommand(
+            latent_skill_id=SKILL_ID,
+            decision=ProposeSkillDecision.sempre,
+            origin="mcp",
+        )
+    ]
+    assert result.structured_content is not None
+    assert result.structured_content["data"]["auto_approval_recorded"] is True
+    assert result.structured_content["data"]["audit_reference"] == "audit-1"
 
 
 @pytest.mark.anyio

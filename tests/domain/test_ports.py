@@ -6,7 +6,6 @@ from typing import get_type_hints
 
 import pytest
 
-from universal_memory.application.security import SafeWriteResult
 from universal_memory.domain.entities import (
     AuditEvent,
     AuditEventScope,
@@ -21,6 +20,7 @@ from universal_memory.domain.entities import (
     Rule,
     RuleScope,
     RuleStatus,
+    SafeWriteResult,
     Snapshot,
     SnapshotScope,
     SnapshotStatus,
@@ -122,10 +122,6 @@ def test_ports_expose_abstract_methods_with_typed_signatures(
         method = getattr(port_type, method_name)
         assert isinstance(method, Callable)
         assert inspect.getattr_static(method, "__isabstractmethod__") is True
-
-        import universal_memory.domain.ports.latent_skill_repository as skill_repo
-        from universal_memory.application.security import SafeWriteResult
-        setattr(skill_repo, "SafeWriteResult", SafeWriteResult)
 
         signature = inspect.signature(method)
         hints = get_type_hints(method)

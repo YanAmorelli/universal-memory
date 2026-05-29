@@ -12,6 +12,7 @@ from universal_memory.domain import SecretDetectedError
 from universal_memory.domain.entities import (
     AuditEvent,
     AuditEventScope,
+    SafeWriteResult,
     Snapshot,
     SnapshotScope,
     SnapshotStatus,
@@ -26,13 +27,6 @@ class SafeWriteCommand:
     scope: AuditEventScope
     origin: str
     action: str
-
-
-@dataclass(frozen=True, slots=True)
-class SafeWriteResult:
-    relative_path: str
-    audit_reference: str
-    snapshot_reference: str
 
 
 class SafeWriteUseCase:

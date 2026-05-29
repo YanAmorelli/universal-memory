@@ -144,8 +144,8 @@ def test_write_uses_project_and_global_jsonl_paths(tmp_path: Path) -> None:
 
     project_path = tmp_path / ".umem" / "memory" / "latent_skills.jsonl"
     global_path = (
-        global_data_root := global_home / ".local" / "share" / "universal-memory"
-    ) / "memory" / "latent_skills.jsonl"
+        global_home / ".local" / "share" / "universal-memory" / "memory" / "latent_skills.jsonl"
+    )
     assert (
         json.loads(project_path.read_text(encoding="utf-8").splitlines()[0])["id"]
         == project_skill.id
@@ -169,7 +169,7 @@ def test_write_updates_existing_latent_skill_in_place(tmp_path: Path) -> None:
 
 
 def test_delete_marks_latent_skill_as_ignored(tmp_path: Path) -> None:
-    safe_write, snapshots, audit = build_safe_write(tmp_path)
+    safe_write, _snapshots, audit = build_safe_write(tmp_path)
     repository = LocalLatentSkillRepository(project_root=tmp_path, safe_write_use_case=safe_write)
     skill = make_skill()
     repository.write(skill)
@@ -193,7 +193,7 @@ def test_migrate_accepts_only_schema_version_one(tmp_path: Path) -> None:
 
 
 def test_corrupt_lines_raise_error_on_read_and_write(tmp_path: Path) -> None:
-    safe_write, snapshots, audit = build_safe_write(tmp_path)
+    safe_write, _snapshots, _audit = build_safe_write(tmp_path)
     repository = LocalLatentSkillRepository(project_root=tmp_path, safe_write_use_case=safe_write)
     skill = make_skill()
     repository.latent_skills_path.parent.mkdir(parents=True)

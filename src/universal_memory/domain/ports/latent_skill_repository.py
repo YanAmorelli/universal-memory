@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
-from universal_memory.domain.entities import LatentSkill, LatentSkillScope, LatentSkillStatus
-
-if TYPE_CHECKING:
-    from universal_memory.application.security import SafeWriteResult
+from universal_memory.domain.entities import (
+    LatentSkill,
+    LatentSkillScope,
+    LatentSkillStatus,
+    SafeWriteResult,
+)
 
 
 class LatentSkillRepository(ABC):

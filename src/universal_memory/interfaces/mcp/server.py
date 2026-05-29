@@ -36,6 +36,11 @@ from universal_memory.application.security import (
     RollbackCommand,
     RollbackResult,
 )
+from universal_memory.application.skills import (
+    ProposeSkillCommand,
+    ProposeSkillDecision,
+    ProposeSkillResult,
+)
 from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEventScope,
@@ -75,6 +80,7 @@ ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResu
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
+ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 ToolResponse = dict[str, Any]
 
 
@@ -97,6 +103,7 @@ class MCPUseCases:
     host_setup: ConfigureHostCommandHandler = _missing_use_case
     host_check: ConfigureHostCommandHandler = _missing_use_case
     sync_instructions: SyncInstructionsCommandHandler = _missing_use_case
+    propose_skill: ProposeSkillCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -376,6 +383,32 @@ def configure_server(  # noqa: PLR0915
         except Exception as error:
             return _mcp_tool_error(error)
 
+    @server.tool(name="propose_skill")
+    def propose_skill(
+        latent_skill_id: str,
+        decision: Literal["sim", "s", "sempre", "e", "nao", "não", "n"] | None = None,
+    ) -> ToolResponse:
+        """Review or decide a latent skill proposal.
+
+        If `decision` is omitted, returns the suggested name, scope, purpose,
+        evidence, and explicit choices for a follow-up call.
+        """
+        try:
+            result = use_cases.propose_skill(
+                ProposeSkillCommand(
+                    latent_skill_id=latent_skill_id,
+                    decision=_skill_decision(decision),
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="skills.propose",
+                scope=result.latent_skill.scope.value,
+                data=_skill_proposal_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
     return server
 
 
@@ -490,6 +523,21 @@ def _rollback_payload(result: RollbackResult) -> dict[str, Any]:
     }
 
 
+def _skill_proposal_payload(result: ProposeSkillResult) -> dict[str, Any]:
+    return {
+        "skill_id": result.latent_skill.id,
+        "suggested_name": result.proposal["suggested_name"],
+        "status": result.latent_skill.status.value,
+        "accepted": result.accepted,
+        "auto_approval_recorded": result.auto_approval_recorded,
+        "audit_reference": result.audit_reference,
+        "snapshot_reference": result.snapshot_reference,
+        "choices": result.choices,
+        "requires_decision": result.requires_decision,
+        "evidence": result.proposal["evidence"],
+    }
+
+
 def _entry_dict(entry: Any) -> dict[str, Any]:
     if hasattr(entry, "model_dump"):
         return entry.model_dump()
@@ -543,6 +591,19 @@ def _snapshot_scope(value: Literal["project", "global"]) -> SnapshotScope:
     if normalized == "project":
         return SnapshotScope.project
     raise ValidationFailedError("scope must be 'project' or 'global'.")
+
+
+def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
+    if value is None:
+        return None
+    normalized = value.strip().casefold()
+    if normalized in {"s", "sim", "y", "yes"}:
+        return ProposeSkillDecision.sim
+    if normalized in {"e", "sempre", "always"}:
+        return ProposeSkillDecision.sempre
+    if normalized in {"n", "nao", "não", "no"}:
+        return ProposeSkillDecision.nao
+    raise ValidationFailedError("decision must be 'sim', 'sempre' or 'nao'.")
 
 
 def _error_envelope(error: Exception) -> dict[str, Any]:

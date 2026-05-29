@@ -17,6 +17,7 @@ from universal_memory.application.security import (
     RollbackUseCase,
     SafeWriteUseCase,
 )
+from universal_memory.application.skills import ProposeSkillUseCase
 from universal_memory.domain import SnapshotFailedError
 from universal_memory.domain.entities import (
     LatentSkill,
@@ -42,6 +43,7 @@ from universal_memory.infrastructure.security import (
 from universal_memory.infrastructure.storage import (
     LocalContextSummaryRepository,
     LocalFactRepository,
+    LocalLatentSkillRepository,
     LocalRuleRepository,
 )
 from universal_memory.interfaces.cli import build_main
@@ -120,10 +122,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         data_root=data_root,
         safe_write_use_case=safe_write_use_case,
     )
+    latent_skill_repository = LocalLatentSkillRepository(
+        project_root=project_root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
         rule_repository=rule_repository,
-        latent_skill_repository=EmptyLatentSkillRepository(),
+        latent_skill_repository=latent_skill_repository,
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
         data_root=data_root,
@@ -154,6 +161,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         project_root=project_root,
         safe_write_use_case=safe_write_use_case,
         rule_repository=rule_repository,
+    )
+    propose_skill_use_case = ProposeSkillUseCase(
+        project_root=project_root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
     )
 
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
@@ -187,5 +199,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         host_setup_command=host_use_case.execute,
         host_check_command=host_use_case.execute,
         host_sync_command=host_sync_use_case.execute,
+        propose_skill_command=propose_skill_use_case.execute,
     )
     return configured_main(argv)

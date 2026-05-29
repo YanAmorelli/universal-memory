@@ -25,6 +25,11 @@ from universal_memory.application.security import (
     RollbackResult,
     SnapshotEntry,
 )
+from universal_memory.application.skills import (
+    ProposeSkillCommand,
+    ProposeSkillDecision,
+    ProposeSkillResult,
+)
 from universal_memory.domain import SecretDetectedError
 from universal_memory.domain.entities import (
     ContextSummary,
@@ -32,6 +37,9 @@ from universal_memory.domain.entities import (
     Fact,
     FactScope,
     FactStatus,
+    LatentSkill,
+    LatentSkillScope,
+    LatentSkillStatus,
 )
 from universal_memory.interfaces.cli.init_command import create_typer_app
 from universal_memory.interfaces.cli.init_command import main as cli_main
@@ -48,8 +56,7 @@ SECRET_SENTINEL = "sk-test-secret-value"  # noqa: S105 - sentinel used to verify
 PARITY_EXCLUSIONS = {
     # Epic 5 backlog: host adapters and host checks are not implemented yet.
     "check_host",
-    # Epic 6 backlog: skill proposal and registry use cases are not implemented yet.
-    "propose_skill",
+    # Epic 6 backlog: skill registry use cases are not implemented yet.
     "list_skills",
     # Future rules capability: no business use case exists in the current implementation.
     "propose_rule",
@@ -204,6 +211,18 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
         (["audit", "list", "--format", "json"], "list_audit_events", {}),
         (["snapshots", "list", "--format", "json"], "list_snapshots", {}),
         (["rollback", "--yes", "--format", "json"], "rollback_scope", {"confirm": True}),
+        (
+            [
+                "skills",
+                "propose",
+                "11111111-1111-4111-8111-111111111111",
+                "--yes",
+                "--format",
+                "json",
+            ],
+            "propose_skill",
+            {"latent_skill_id": "11111111-1111-4111-8111-111111111111", "decision": "sim"},
+        ),
     ],
 )
 async def test_cli_and_mcp_json_data_keys_match_for_public_capabilities(  # noqa: PLR0913
@@ -268,6 +287,7 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
             audit_reference="audit-1",
         ),
         "rollback_preview_command": lambda _scope: object(),
+        "propose_skill_command": propose_skill_result,
     }
 
 
@@ -292,6 +312,37 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
             restored_paths=[".umem/memory/facts.jsonl"],
             audit_reference="audit-1",
         ),
+        propose_skill=propose_skill_result,
+    )
+
+
+def propose_skill_result(command: ProposeSkillCommand) -> ProposeSkillResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id=command.latent_skill_id,
+        created_at=now,
+        updated_at=now,
+        name="TDD recorrente",
+        description="Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.active
+        if command.decision != ProposeSkillDecision.nao
+        else LatentSkillStatus.ignored,
+        recurrence_count=3,
+        metadata={},
+    )
+    return ProposeSkillResult(
+        latent_skill=skill,
+        proposal={
+            "suggested_name": skill.name,
+            "purpose": skill.description,
+            "scope": skill.scope.value,
+            "evidence": ["Pedido em story anterior"],
+        },
+        accepted=command.decision in {ProposeSkillDecision.sim, ProposeSkillDecision.sempre},
+        auto_approval_recorded=command.decision == ProposeSkillDecision.sempre,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
     )
 
 

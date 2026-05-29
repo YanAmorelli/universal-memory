@@ -5,7 +5,13 @@ from typing import Any
 
 import tomli_w
 
+from universal_memory.application.security import (
+    SafeWriteCommand,
+    SafeWriteResult,
+    SafeWriteUseCase,
+)
 from universal_memory.domain import InvalidConfigError, StorageError
+from universal_memory.domain.entities import AuditEventScope
 
 try:
     import tomllib
@@ -24,6 +30,15 @@ class LoadedConfig:
     project_data: TomlData
     merged: TomlData
     resolved_paths: TomlData
+    write_result: SafeWriteResult | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigWriteOptions:
+    safe_write_use_case: SafeWriteUseCase
+    origin: str = "config"
+    action: str = "update_project_config"
+    scope: str = "project"
 
 
 def load_config(project_root: Path, global_config_path: Path | None = None) -> LoadedConfig:
@@ -57,37 +72,81 @@ def update_project_config(
     project_root: Path,
     updates: TomlData,
     global_config_path: Path | None = None,
+    write_options: ConfigWriteOptions | None = None,
 ) -> LoadedConfig:
     loaded = load_config(project_root=project_root, global_config_path=global_config_path)
-    project_data = _deep_merge(loaded.project_data, updates)
-    rendered = dump_toml_document(project_data)
-    temp_path = loaded.project_config_path.with_suffix(".tmp")
-    try:
-        loaded.project_config_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path.write_text(rendered, encoding="utf-8")
-        temp_path.replace(loaded.project_config_path)
-    except OSError as error:
-        try:
-            if temp_path.exists():
-                temp_path.unlink()
-        except OSError:
-            pass
-        raise StorageError(
-            f"Failed to write config {loaded.project_config_path.name}: {error}"
-        ) from error
+    is_global = write_options is not None and write_options.scope == "global"
+    config_path = loaded.global_config_path if is_global else loaded.project_config_path
 
-    merged = _deep_merge(loaded.global_data, project_data)
+    if is_global:
+        global_data = _deep_merge(loaded.global_data, updates)
+        rendered = dump_toml_document(global_data)
+        project_data = loaded.project_data
+    else:
+        project_data = _deep_merge(loaded.project_data, updates)
+        rendered = dump_toml_document(project_data)
+        global_data = loaded.global_data
+
+    write_result = None
+    if write_options is None:
+        temp_path = config_path.with_suffix(".tmp")
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path.write_text(rendered, encoding="utf-8")
+            temp_path.replace(config_path)
+        except OSError as error:
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except OSError:
+                pass
+            raise StorageError(f"Failed to write config {config_path.name}: {error}") from error
+    elif is_global:
+        global_config_dir = config_path.parent
+        global_config_dir.mkdir(parents=True, exist_ok=True)
+        use_case = SafeWriteUseCase(
+            project_root=global_config_dir,
+            secret_scanner=write_options.safe_write_use_case.secret_scanner,
+            snapshot_repository=write_options.safe_write_use_case.snapshot_repository,
+            audit_log_repository=write_options.safe_write_use_case.audit_log_repository,
+        )
+        write_result = use_case.execute(
+            SafeWriteCommand(
+                relative_path=config_path.name,
+                content=rendered,
+                scope=AuditEventScope.global_,
+                origin=write_options.origin,
+                action=write_options.action,
+            )
+        )
+    else:
+        try:
+            relative_path = str(config_path.relative_to(project_root.resolve()))
+        except ValueError:
+            relative_path = ".umem/config.toml"
+        write_result = write_options.safe_write_use_case.execute(
+            SafeWriteCommand(
+                relative_path=relative_path,
+                content=rendered,
+                scope=AuditEventScope.project,
+                origin=write_options.origin,
+                action=write_options.action,
+            )
+        )
+
+    merged = _deep_merge(global_data, project_data)
     resolved_paths = _deep_merge(
-        _resolve_config_paths(loaded.global_data, loaded.global_config_path.parent),
+        _resolve_config_paths(global_data, loaded.global_config_path.parent),
         _resolve_config_paths(project_data, project_root.resolve()),
     )
     return LoadedConfig(
         global_config_path=loaded.global_config_path,
         project_config_path=loaded.project_config_path,
-        global_data=loaded.global_data,
+        global_data=global_data,
         project_data=project_data,
         merged=merged,
         resolved_paths=resolved_paths,
+        write_result=write_result,
     )
 
 

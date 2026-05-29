@@ -19,7 +19,7 @@ from universal_memory.application.security import (
     RollbackUseCase,
     SafeWriteUseCase,
 )
-from universal_memory.bootstrap.cli import EmptyLatentSkillRepository
+from universal_memory.application.skills import ProposeSkillUseCase
 from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
@@ -29,6 +29,7 @@ from universal_memory.infrastructure.security import (
 from universal_memory.infrastructure.storage import (
     LocalContextSummaryRepository,
     LocalFactRepository,
+    LocalLatentSkillRepository,
     LocalRuleRepository,
 )
 from universal_memory.interfaces.mcp import MCPUseCases, configure_server, create_mcp_server
@@ -60,10 +61,15 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         data_root=data_root,
         safe_write_use_case=safe_write_use_case,
     )
+    latent_skill_repository = LocalLatentSkillRepository(
+        project_root=root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
         rule_repository=rule_repository,
-        latent_skill_repository=EmptyLatentSkillRepository(),
+        latent_skill_repository=latent_skill_repository,
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
         data_root=data_root,
@@ -109,6 +115,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         safe_write_use_case=safe_write_use_case,
         rule_repository=rule_repository,
     )
+    propose_skill_use_case = ProposeSkillUseCase(
+        project_root=root,
+        repository=latent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
 
     def initialize_project(project_root: Path):
         return setup_project(
@@ -132,6 +143,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             host_setup=host_use_case.execute,
             host_check=host_use_case.execute,
             sync_instructions=host_sync_use_case.execute,
+            propose_skill=propose_skill_use_case.execute,
         ),
         project_root=root,
     )
