@@ -9,7 +9,12 @@ from typing import Any, Literal
 
 from fastmcp import FastMCP
 
-from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
+from universal_memory.application.host import (
+    ConfigureHostCommand,
+    ConfigureHostResult,
+    SyncInstructionsCommand,
+    SyncInstructionsResult,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -69,6 +74,7 @@ ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
+SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ToolResponse = dict[str, Any]
 
 
@@ -90,6 +96,7 @@ class MCPUseCases:
     rollback_scope: RollbackCommandHandler = _missing_use_case
     host_setup: ConfigureHostCommandHandler = _missing_use_case
     host_check: ConfigureHostCommandHandler = _missing_use_case
+    sync_instructions: SyncInstructionsCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -339,6 +346,29 @@ def configure_server(  # noqa: PLR0915
             )
             return _success_envelope(
                 operation="host_check",
+                scope="project",
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="sync_instructions")
+    def sync_instructions(
+        host_ids: list[str] | None = None,
+        apply: bool = False,
+    ) -> ToolResponse:
+        """Synchronize approved active rules into supported instruction targets."""
+        try:
+            result = use_cases.sync_instructions(
+                SyncInstructionsCommand(
+                    host_ids=host_ids or ["codex", "claude_code"],
+                    apply=apply,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="host_sync",
                 scope="project",
                 data=result.to_payload(),
                 warnings=result.warnings,

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
-from universal_memory.application.host import ConfigureHostUseCase
+from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     GetMemoryStatusUseCase,
@@ -29,6 +29,7 @@ from universal_memory.infrastructure.security import (
 from universal_memory.infrastructure.storage import (
     LocalContextSummaryRepository,
     LocalFactRepository,
+    LocalRuleRepository,
 )
 from universal_memory.interfaces.mcp import MCPUseCases, configure_server, create_mcp_server
 
@@ -54,7 +55,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         data_root=data_root,
         safe_write_use_case=safe_write_use_case,
     )
-    rule_repository = EmptyRuleRepository()
+    rule_repository = LocalRuleRepository(
+        project_root=root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
         rule_repository=rule_repository,
@@ -99,6 +104,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         safe_write_use_case=safe_write_use_case,
         fact_repository=fact_repository,
     )
+    host_sync_use_case = SyncInstructionsUseCase(
+        project_root=root,
+        safe_write_use_case=safe_write_use_case,
+        rule_repository=rule_repository,
+    )
 
     def initialize_project(project_root: Path):
         return setup_project(
@@ -121,6 +131,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             rollback_scope=rollback_use_case.execute,
             host_setup=host_use_case.execute,
             host_check=host_use_case.execute,
+            sync_instructions=host_sync_use_case.execute,
         ),
         project_root=root,
     )

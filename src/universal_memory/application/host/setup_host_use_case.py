@@ -887,6 +887,72 @@ class ConfigureHostUseCase:
             )
         return changes
 
+    # --- Public API wrappers to avoid private coupling ---
+    def host_for(self, host_id: str) -> Host:
+        return self._host_for(host_id)
+
+    def primary_target_for(self, host: Host) -> InstructionTarget:
+        return self._primary_target_for(host)
+
+    def read_existing(self, relative_path: str) -> str:
+        return self._read_existing(relative_path)
+
+
+
+    def validate_existing_managed_content(
+        self, content: str, target_path: str, command: ConfigureHostCommand
+    ) -> None:
+        return self._validate_existing_managed_content(
+            content,
+            target_path=target_path,
+            command=command,
+        )
+
+    def prepare_target_content(
+        self,
+        target: InstructionTarget,
+        existing_content: str,
+        instruction_blocks: list[InstructionBlock],
+        command: ConfigureHostCommand,
+    ) -> PreparedInstructionTarget:
+        return self._prepare_target_content(
+            target,
+            existing_content=existing_content,
+            instruction_blocks=instruction_blocks,
+            command=command,
+        )
+
+    def planned_changes(
+        self,
+        target: InstructionTarget,
+        existing_content: str,
+        final_content: str,
+        canonical_documents: list[CanonicalDocument],
+    ) -> list[dict[str, str]]:
+        return self._planned_changes(
+            target,
+            existing_content=existing_content,
+            final_content=final_content,
+            canonical_documents=canonical_documents,
+        )
+
+    def render_canonical_document(self, document: CanonicalDocument) -> str:
+        return self._render_canonical_document(document)
+
+
+
+    def drift_content(self, existing: str, final: str, apply: bool) -> str | None:
+        return self._drift_content(
+            existing_content=existing,
+            final_content=final,
+            apply=apply,
+        )
+
+    def drift_warnings(self, host: Host, target: InstructionTarget, drift_content: str | None) -> list[str]:
+        return self._drift_warnings(host, target, drift_content)
+
+
+
 
 
 def _canonical_doc_path(title: str, docs_directory: str) -> str:

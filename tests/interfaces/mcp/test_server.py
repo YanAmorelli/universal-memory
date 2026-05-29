@@ -9,6 +9,10 @@ from fastmcp import FastMCP
 
 from universal_memory.__main__ import main
 from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
+from universal_memory.application.host.sync_instructions_use_case import (
+    SyncInstructionsCommand,
+    SyncInstructionsResult,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -325,6 +329,69 @@ async def test_claude_code_host_setup_tool_returns_devex_contract_with_warnings(
             "timestamp": "2026-05-29T00:00:00Z",
         },
         "warnings": ["Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."],
+    }
+
+
+@pytest.mark.anyio
+async def test_sync_instructions_tool_uses_injected_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[SyncInstructionsCommand] = []
+
+    def sync_instructions(command: SyncInstructionsCommand) -> SyncInstructionsResult:
+        received.append(command)
+        return SyncInstructionsResult(
+            host_ids=["codex", "claude_code"],
+            instruction_targets=["AGENTS.md", "CLAUDE.md"],
+            planned_changes=[
+                {"target": "agents_md", "action": "create", "path": "AGENTS.md"},
+                {"target": "claude_md", "action": "create", "path": "CLAUDE.md"},
+            ],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="audit-1",
+            snapshot_reference="snapshot-1",
+            timestamp="2026-05-29T12:00:00Z",
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            sync_instructions=sync_instructions,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool(
+        "sync_instructions",
+        {"host_ids": ["codex", "claude_code"], "apply": True},
+    )
+
+    assert "sync_instructions" in tool_names
+    assert received == [
+        SyncInstructionsCommand(host_ids=["codex", "claude_code"], apply=True, origin="mcp")
+    ]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "host_sync",
+        "scope": "project",
+        "data": {
+            "host_ids": ["codex", "claude_code"],
+            "instruction_targets": ["AGENTS.md", "CLAUDE.md"],
+            "planned_changes": [
+                {"target": "agents_md", "action": "create", "path": "AGENTS.md"},
+                {"target": "claude_md", "action": "create", "path": "CLAUDE.md"},
+            ],
+            "manual_steps": [],
+            "validation_status": "success",
+            "audit_reference": "audit-1",
+            "snapshot_reference": "snapshot-1",
+            "timestamp": "2026-05-29T12:00:00Z",
+        },
+        "warnings": [],
     }
 
 

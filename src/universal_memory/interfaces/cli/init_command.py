@@ -15,7 +15,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
+from universal_memory.application.host import (
+    ConfigureHostCommand,
+    ConfigureHostResult,
+    SyncInstructionsCommand,
+    SyncInstructionsResult,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -81,6 +86,7 @@ ListFactsCommandHandler = Callable[[ListFactsCommand], ListFactsResult]
 PurgeFactCommandHandler = Callable[[PurgeFactCommand], PurgeFactResult]
 ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneResult]
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
+SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
@@ -122,6 +128,7 @@ def main(  # noqa: PLR0913
     facts_hygiene_command: ContextHygieneCommandHandler | None = None,
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
+    host_sync_command: SyncInstructionsCommandHandler | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -137,6 +144,7 @@ def main(  # noqa: PLR0913
         facts_hygiene_command=facts_hygiene_command,
         host_setup_command=host_setup_command,
         host_check_command=host_check_command,
+        host_sync_command=host_sync_command,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
@@ -172,6 +180,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     facts_hygiene_command: ContextHygieneCommandHandler | None = None,
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
+    host_sync_command: SyncInstructionsCommandHandler | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
     facts_app = typer.Typer(help="Gerenciar fatos de memoria")
@@ -499,6 +508,36 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
+    @host_app.command("sync")
+    def host_sync(
+        ctx: typer.Context,
+        apply: Annotated[
+            bool,
+            typer.Option(
+                "--apply/--no-apply",
+                help="Aplicar a sincronizacao ou apenas exibir preview.",
+            ),
+        ] = False,
+        yes: YesOption = False,
+        host_id: Annotated[
+            list[str] | None,
+            typer.Option("--host", help="Host a sincronizar. Pode ser usado multiplas vezes."),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if host_sync_command is None:
+            msg = "CLI host_sync_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_host_sync(
+                host_sync_command,
+                output_format=_effective_format(ctx, output_format),
+                host_ids=host_id or ["codex", "claude_code"],
+                apply=apply,
+                yes=yes,
+            )
+        )
+
     return app
 
 
@@ -518,6 +557,7 @@ def build_main(  # noqa: PLR0913
     facts_hygiene_command: ContextHygieneCommandHandler,
     host_setup_command: ConfigureHostCommandHandler,
     host_check_command: ConfigureHostCommandHandler,
+    host_sync_command: SyncInstructionsCommandHandler,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -540,6 +580,7 @@ def build_main(  # noqa: PLR0913
             facts_hygiene_command=facts_hygiene_command,
             host_setup_command=host_setup_command,
             host_check_command=host_check_command,
+            host_sync_command=host_sync_command,
         )
 
     return configured_main
@@ -1013,6 +1054,66 @@ def _run_host_check(
     return 0
 
 
+
+
+
+def _run_host_sync(
+    command: SyncInstructionsCommandHandler,
+    *,
+    output_format: str,
+    host_ids: list[str],
+    apply: bool,
+    yes: bool,
+) -> int:
+    try:
+        if apply and output_format == "json" and not yes:
+            raise ValidationFailedError(
+                "A flag --yes / -y e obrigatoria para executar host sync com saida JSON."
+            )
+        if apply and output_format != "json":
+            preview = command(
+                SyncInstructionsCommand(
+                    host_ids=host_ids,
+                    apply=False,
+                    origin="cli",
+                )
+            )
+            _stdout_console().print(_format_human_sync_plan(preview))
+            if not yes:
+                if not _confirm("Aplicar sincronizacao de instrucoes? [s/N]: ", default=False):
+                    _stdout_console().print("Sincronizacao de instrucoes cancelada.")
+                    return 1
+
+        result = command(
+            SyncInstructionsCommand(
+                host_ids=host_ids,
+                apply=apply,
+                origin="cli",
+            )
+        )
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except ValueError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_host_success_envelope(result, operation="host_sync"), sort_keys=True))
+    else:
+        if not apply:
+            _stdout_console().print(_format_human_sync_plan(result))
+            _stdout_console().print()
+        _stdout_console().print(_format_human_sync_success(result))
+    return 0
+
+
 def _success_envelope(result: SetupProjectResult) -> dict[str, Any]:
     return {
         "ok": True,
@@ -1141,7 +1242,11 @@ def _facts_hygiene_success_envelope(
     }
 
 
-def _host_success_envelope(result: ConfigureHostResult, *, operation: str) -> dict[str, Any]:
+def _host_success_envelope(
+    result: ConfigureHostResult | SyncInstructionsResult,
+    *,
+    operation: str,
+) -> dict[str, Any]:
     return {
         "ok": True,
         "operation": operation,
@@ -1500,6 +1605,48 @@ def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -
             f"Auditoria: {result.audit_reference}",
         ]
     )
+
+
+
+
+
+def _format_human_sync_success(result: SyncInstructionsResult) -> str:
+    changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
+    msg = "Host sync concluido." if result.validation_status == "success" else "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos."
+    return "\n".join(
+        [
+            msg,
+            f"Hosts: {', '.join(result.host_ids)}",
+            f"Alvos: {', '.join(result.instruction_targets)}",
+            f"Arquivos: {changes}",
+            f"Validacao: {result.validation_status}",
+            f"Auditoria: {result.audit_reference}",
+            f"Snapshots: {result.snapshot_reference}",
+        ]
+    )
+
+
+def _format_human_sync_plan(result: SyncInstructionsResult) -> Table | str:
+    if not result.planned_changes:
+        return "Nenhuma alteracao planejada para sincronizacao de instrucoes."
+
+    table = Table(title="Plano de sincronizacao de instrucoes", show_header=True)
+    table.add_column("Alvo")
+    table.add_column("Acao")
+    table.add_column("Caminho")
+    table.add_column("Escopo")
+    table.add_column("Snapshot")
+    table.add_column("Auditoria")
+    for change in result.planned_changes:
+        table.add_row(
+            change["target"],
+            change["action"],
+            change["path"],
+            "project",
+            result.snapshot_reference,
+            "host_sync",
+        )
+    return table
 
 
 def _recovery_hint(error: Exception) -> str:

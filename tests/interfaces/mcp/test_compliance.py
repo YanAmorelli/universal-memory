@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from universal_memory.application.host import ConfigureHostResult
+from universal_memory.application.host import ConfigureHostResult, SyncInstructionsResult
 from universal_memory.application.memory import (
     AssembleContextSummaryResult,
     GetMemoryStatusResult,
@@ -52,6 +52,7 @@ PUBLIC_MCP_TOOLS = {
     "rollback_scope": {"confirm": True},
     "host_setup": {"host_id": "codex", "force": True},
     "host_check": {"host_id": "codex"},
+    "sync_instructions": {"host_ids": ["codex", "claude_code"], "apply": True},
 }
 CONTRACT_KEYS_BY_TOOL = {
     "initialize_project": {
@@ -101,6 +102,16 @@ CONTRACT_KEYS_BY_TOOL = {
     },
     "host_check": {
         "host_id",
+        "instruction_targets",
+        "planned_changes",
+        "manual_steps",
+        "validation_status",
+        "audit_reference",
+        "snapshot_reference",
+        "timestamp",
+    },
+    "sync_instructions": {
+        "host_ids",
         "instruction_targets",
         "planned_changes",
         "manual_steps",
@@ -170,6 +181,16 @@ CONTRACT_TYPES_BY_TOOL = {
     },
     "host_check": {
         "host_id": str,
+        "instruction_targets": list,
+        "planned_changes": list,
+        "manual_steps": list,
+        "validation_status": str,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "timestamp": str,
+    },
+    "sync_instructions": {
+        "host_ids": list,
         "instruction_targets": list,
         "planned_changes": list,
         "manual_steps": list,
@@ -321,6 +342,7 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         ),
         host_setup=lambda _command: host_result(),
         host_check=lambda _command: host_result(planned_changes=[]),
+        sync_instructions=lambda _command: sync_result(),
     )
 
 
@@ -397,6 +419,22 @@ def host_result(
         planned_changes=planned_changes
         if planned_changes is not None
         else [{"target": "agents_md", "action": "create", "path": "AGENTS.md"}],
+        manual_steps=[],
+        validation_status="success",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+        timestamp="2026-05-28T12:00:00Z",
+    )
+
+
+def sync_result() -> SyncInstructionsResult:
+    return SyncInstructionsResult(
+        host_ids=["codex", "claude_code"],
+        instruction_targets=["AGENTS.md", "CLAUDE.md"],
+        planned_changes=[
+            {"target": "agents_md", "action": "create", "path": "AGENTS.md"},
+            {"target": "claude_md", "action": "create", "path": "CLAUDE.md"},
+        ],
         manual_steps=[],
         validation_status="success",
         audit_reference="audit-1",

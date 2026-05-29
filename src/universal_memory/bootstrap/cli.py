@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from universal_memory.application.host import ConfigureHostUseCase
+from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     ContextHygieneUseCase,
@@ -42,6 +42,7 @@ from universal_memory.infrastructure.security import (
 from universal_memory.infrastructure.storage import (
     LocalContextSummaryRepository,
     LocalFactRepository,
+    LocalRuleRepository,
 )
 from universal_memory.interfaces.cli import build_main
 
@@ -114,9 +115,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         snapshot_repository=snapshot_repository,
         audit_log_repository=audit_log_repository,
     )
+    rule_repository = LocalRuleRepository(
+        project_root=project_root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
-        rule_repository=EmptyRuleRepository(),
+        rule_repository=rule_repository,
         latent_skill_repository=EmptyLatentSkillRepository(),
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
@@ -127,7 +133,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     facts_hygiene_use_case = ContextHygieneUseCase(fact_repository=fact_repository)
     context_use_case = AssembleContextSummaryUseCase(
         fact_repository=fact_repository,
-        rule_repository=EmptyRuleRepository(),
+        rule_repository=rule_repository,
         secret_scanner=EntropySecretScanner(),
         audit_log_repository=audit_log_repository,
         context_summary_repository=LocalContextSummaryRepository(
@@ -143,6 +149,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         project_root=project_root,
         safe_write_use_case=safe_write_use_case,
         fact_repository=fact_repository,
+    )
+    host_sync_use_case = SyncInstructionsUseCase(
+        project_root=project_root,
+        safe_write_use_case=safe_write_use_case,
+        rule_repository=rule_repository,
     )
 
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
@@ -175,5 +186,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         facts_hygiene_command=facts_hygiene_use_case.execute,
         host_setup_command=host_use_case.execute,
         host_check_command=host_use_case.execute,
+        host_sync_command=host_sync_use_case.execute,
     )
     return configured_main(argv)
