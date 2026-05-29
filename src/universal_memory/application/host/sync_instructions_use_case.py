@@ -23,6 +23,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.ports import RuleRepository
+from universal_memory.infrastructure.config.toml_loader import load_config
 
 DEFAULT_SYNC_HOSTS = ("codex", "claude_code")
 CLAUDE_SUPPORTED_CLASSIFICATIONS = {
@@ -84,7 +85,7 @@ class SyncInstructionsUseCase:
         )
 
     def execute(self, command: SyncInstructionsCommand) -> SyncInstructionsResult:
-        host_ids = self._normalized_host_ids(command.host_ids)
+        host_ids, config_warnings = self._host_ids_for_command(command.host_ids)
         all_blocks = self._active_rule_blocks()
         plans = self._plan_commands(host_ids, all_blocks, command)
 
@@ -96,7 +97,7 @@ class SyncInstructionsUseCase:
             change for result in results for change in result.planned_changes
         )
         instruction_targets = self._instruction_targets(planned_changes)
-        warnings = [warning for result in results for warning in result.warnings]
+        warnings = config_warnings + [warning for result in results for warning in result.warnings]
         manual_steps = self._manual_steps(results, command.apply)
         return SyncInstructionsResult(
             host_ids=host_ids,
@@ -104,8 +105,14 @@ class SyncInstructionsUseCase:
             planned_changes=planned_changes,
             manual_steps=manual_steps,
             validation_status="success" if command.apply else "planned",
-            audit_reference=self._join_refs([result.audit_reference for result in results], default_val="not-applied"),
-            snapshot_reference=self._join_refs([result.snapshot_reference for result in results], default_val="planned"),
+            audit_reference=self._join_refs(
+                [result.audit_reference for result in results],
+                default_val="not-applied",
+            ),
+            snapshot_reference=self._join_refs(
+                [result.snapshot_reference for result in results],
+                default_val="planned",
+            ),
             timestamp=format_utc_iso(datetime.now(UTC)),
             warnings=warnings,
         )
@@ -327,6 +334,57 @@ class SyncInstructionsUseCase:
             raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
         return normalized
 
+    def _host_ids_for_command(self, host_ids: list[str] | None) -> tuple[list[str], list[str]]:
+        normalized = self._normalized_host_ids(host_ids)
+        enabled_hosts = self._enabled_hosts_from_config()
+        if enabled_hosts is None:
+            return normalized, []
+
+        if not host_ids or set(normalized) == set(DEFAULT_SYNC_HOSTS):
+            return [host_id for host_id in DEFAULT_SYNC_HOSTS if host_id in enabled_hosts], []
+
+        warnings = []
+        to_enable = []
+        for host_id in normalized:
+            if host_id not in enabled_hosts:
+                warnings.append(
+                    f"Host '{host_id}' nao esta habilitado em .umem/config.toml; "
+                    "ativando automaticamente."
+                )
+                to_enable.append(host_id)
+
+        if to_enable:
+            from universal_memory.infrastructure.config.toml_loader import update_project_config
+            new_enabled = list(enabled_hosts)
+            for h in to_enable:
+                if h not in new_enabled:
+                    new_enabled.append(h)
+            update_project_config(self.project_root, {"hosts": {"enabled": new_enabled}})
+
+        return normalized, warnings
+
+    def _enabled_hosts_from_config(self) -> list[str] | None:
+        try:
+            loaded = load_config(self.project_root)
+        except (OSError, InvalidConfigError, StorageError) as exc:
+            raise ValidationFailedError(f"Falha ao ler configuracao do projeto: {exc}") from exc
+
+        raw_hosts = loaded.merged.get("hosts")
+        if raw_hosts is None:
+            return None
+        if not isinstance(raw_hosts, dict):
+            raise ValidationFailedError("Configuracao invalida: hosts deve ser uma tabela.")
+        raw_enabled = raw_hosts.get("enabled")
+        if raw_enabled is None:
+            return None
+        if not isinstance(raw_enabled, list):
+            raise ValidationFailedError("Configuracao invalida: hosts.enabled deve ser uma lista.")
+        enabled = [str(host_id) for host_id in raw_enabled]
+        unsupported = [host_id for host_id in enabled if host_id not in DEFAULT_SYNC_HOSTS]
+        if unsupported:
+            raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
+        return enabled
+
     def _instruction_targets(self, planned_changes: list[dict[str, str]]) -> list[str]:
         targets: list[str] = []
         for change in planned_changes:
@@ -366,6 +424,10 @@ class SyncInstructionsUseCase:
         for ref in refs:
             for part in ref.split(", "):
                 part_clean = part.strip()
-                if part_clean and part_clean not in ("not-applied", "planned") and part_clean not in unique:
+                if (
+                    part_clean
+                    and part_clean not in ("not-applied", "planned")
+                    and part_clean not in unique
+                ):
                     unique.append(part_clean)
         return ", ".join(unique) if unique else default_val

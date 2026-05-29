@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-22T21:17:01.194515Z"
-last_updated: "2026-05-29T11:32:00Z"
+last_updated: "2026-05-29T15:12:00Z"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -78,7 +78,7 @@ development_status:
   5-3-configurar-host-claude-code-com-claude-md: done
   5-4-validar-leitura-de-contexto-por-host: done
   5-5-sincronizar-regras-consolidadas-para-instru-es: done
-  5-6-fluxo-de-sele-o-de-hosts-no-onboarding: backlog
+  5-6-fluxo-de-sele-o-de-hosts-no-onboarding: done
   epic-5-retrospective: optional
   epic-6: backlog
   6-1-registrar-latent-skills-por-recorr-ncia: backlog

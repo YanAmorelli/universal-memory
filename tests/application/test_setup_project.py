@@ -37,6 +37,23 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
     ]
+    assert (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8") == (
+        '[project]\nname = ""\ncreated_by = "universal-memory"\n\n'
+        '[hosts]\nenabled = [\n    "codex",\n    "claude_code",\n]\n'
+    )
+
+
+def test_setup_project_persists_selected_hosts(tmp_path: Path) -> None:
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+        enabled_host_ids=["codex"],
+    )
+
+    assert '[hosts]\nenabled = [\n    "codex",\n]\n' in (
+        tmp_path / ".umem" / "config.toml"
+    ).read_text(encoding="utf-8")
 
 
 def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path) -> None:

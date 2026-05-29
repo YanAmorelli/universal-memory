@@ -114,7 +114,10 @@ def test_host_sync_human_dry_run_displays_plan_and_dry_run_concluido(
     assert "Plano de sincronizacao de instrucoes" in captured.out
     assert "Escopo" in captured.out
     assert "project" in captured.out
-    assert "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos." in captured.out
+    assert (
+        "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos."
+        in captured.out
+    )
 
 
 def test_host_sync_human_apply_interactive_confirmation_no(
@@ -139,7 +142,10 @@ def test_host_sync_human_apply_interactive_confirmation_no(
         )
 
     # Mock interactive prompt to return False (No)
-    monkeypatch.setattr("universal_memory.interfaces.cli.init_command._confirm", lambda _prompt, **kwargs: False)
+    monkeypatch.setattr(
+        "universal_memory.interfaces.cli.init_command._confirm",
+        lambda _prompt, **kwargs: False,
+    )
     monkeypatch.chdir(tmp_path)
 
     exit_code = cli_main(
@@ -153,4 +159,3 @@ def test_host_sync_human_apply_interactive_confirmation_no(
     assert "Sincronizacao de instrucoes cancelada." in captured.out
     assert len(calls) == 1
     assert calls[0].apply is False
-

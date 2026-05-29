@@ -4,6 +4,7 @@ import sys
 import traceback
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
+from inspect import signature
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -36,6 +37,7 @@ from universal_memory.application.memory import (
     RememberFactResult,
 )
 from universal_memory.application.onboarding.setup_project import (
+    DEFAULT_ENABLED_HOST_IDS,
     SetupProjectResult,
     setup_project,
 )
@@ -74,7 +76,7 @@ from universal_memory.interfaces.errors import (
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
-SetupProjectCommand = Callable[[Path], SetupProjectResult]
+SetupProjectCommand = Callable[[Path, list[str] | None], SetupProjectResult]
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
@@ -210,12 +212,27 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         ctx.obj = {"output_format": output_format.lower()}
 
     @app.command("init")
-    def init_command(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
+    def init_command(
+        ctx: typer.Context,
+        hosts: Annotated[
+            list[str] | None,
+            typer.Option("--hosts", help="Host a configurar. Pode ser usado multiplas vezes."),
+        ] = None,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
         if setup_project_command is None:
             msg = "CLI setup_project_command dependency was not configured."
             raise RuntimeError(msg)
         raise typer.Exit(
-            code=_run_init(setup_project_command, _effective_format(ctx, output_format))
+            code=_run_init(
+                setup_project_command,
+                _effective_format(ctx, output_format),
+                selected_hosts=hosts,
+                yes=yes,
+                host_setup_command=host_setup_command,
+                host_check_command=host_check_command,
+            )
         )
 
     @app.command("status")
@@ -591,11 +608,15 @@ def _build_setup_project_command(
     layout_port: ProjectLayoutPort,
     config_validation_port: ConfigValidationPort,
 ) -> SetupProjectCommand:
-    def command(project_root: Path) -> SetupProjectResult:
+    def command(
+        project_root: Path,
+        enabled_host_ids: list[str] | None = None,
+    ) -> SetupProjectResult:
         return setup_project(
             project_root,
             layout_port=layout_port,
             config_validation_port=config_validation_port,
+            enabled_host_ids=enabled_host_ids,
         )
 
     return command
@@ -625,23 +646,42 @@ def _stderr_console() -> Console:
 
 
 def _confirm(prompt: str, default: bool = False) -> bool:
-    try:
-        answer = input(prompt)
-    except (EOFError, KeyboardInterrupt):
-        return False
+    answer = input(prompt)
     val = answer.strip().lower()
     if not val:
         return default
     return val in {"s", "sim", "y", "yes"}
 
 
-def _run_init(command: SetupProjectCommand, output_format: str) -> int:
+def _run_init(  # noqa: PLR0913
+    command: SetupProjectCommand,
+    output_format: str,
+    *,
+    selected_hosts: list[str] | None = None,
+    yes: bool = False,
+    host_setup_command: ConfigureHostCommandHandler | None = None,
+    host_check_command: ConfigureHostCommandHandler | None = None,
+) -> int:
     try:
+        host_ids = _selected_init_hosts(
+            selected_hosts,
+            output_format=output_format,
+            yes=yes,
+        )
         if output_format == "json":
-            result = command(Path.cwd())
+            result = _execute_setup_project(command, Path.cwd(), host_ids)
         else:
             with _stderr_console().status("Inicializando scaffold do projeto...", spinner="dots"):
-                result = command(Path.cwd())
+                result = _execute_setup_project(command, Path.cwd(), host_ids)
+        host_results = _configure_init_hosts(
+            host_ids,
+            output_format=output_format,
+            host_setup_command=host_setup_command,
+            host_check_command=host_check_command,
+        )
+    except (KeyboardInterrupt, EOFError):
+        _stdout_console().print("\nOperacao cancelada pelo usuario.")
+        return 1
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
@@ -650,11 +690,103 @@ def _run_init(command: SetupProjectCommand, output_format: str) -> int:
         return 1
 
     if output_format == "json":
-        print(json.dumps(_success_envelope(result), sort_keys=True))
+        payload = _success_envelope(result)
+        if host_results:
+            payload["hosts"] = [asdict(res) for res in host_results]
+        print(json.dumps(payload, sort_keys=True))
     else:
         _stdout_console().print(_format_human_init_output(result))
+        if host_results:
+            _stdout_console().print(_format_human_init_host_results(host_results))
 
     return 0
+
+
+def _execute_setup_project(
+    command: SetupProjectCommand,
+    project_root: Path,
+    enabled_host_ids: list[str],
+) -> SetupProjectResult:
+    try:
+        sig = signature(command)
+        params = list(sig.parameters.values())
+        has_var_args = any(p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD) for p in params)
+        positional_params = [p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+        if len(positional_params) >= 2 or has_var_args or "enabled_host_ids" in sig.parameters:
+            return command(project_root, enabled_host_ids)  # type: ignore
+    except (ValueError, TypeError):
+        pass
+    return command(project_root)  # type: ignore
+
+
+def _selected_init_hosts(
+    hosts: list[str] | None,
+    *,
+    output_format: str,
+    yes: bool,
+) -> list[str]:
+    if hosts:
+        return _normalize_supported_hosts(hosts)
+    if output_format == "json" or yes:
+        return list(DEFAULT_ENABLED_HOST_IDS)
+    if not sys.stdin.isatty():
+        return list(DEFAULT_ENABLED_HOST_IDS)
+
+    selected = []
+    prompts = {
+        "codex": "Deseja configurar o host 'codex' (suporte a AGENTS.md)? [S/n]: ",
+        "claude_code": "Deseja configurar o host 'claude_code' (suporte a CLAUDE.md)? [S/n]: ",
+    }
+    for host_id in DEFAULT_ENABLED_HOST_IDS:
+        if _confirm(prompts[host_id], default=True):
+            selected.append(host_id)
+    return selected
+
+
+def _normalize_supported_hosts(hosts: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for host_id in hosts:
+        cleaned = host_id.strip().lower()
+        if cleaned not in normalized:
+            normalized.append(cleaned)
+    unsupported = [host_id for host_id in normalized if host_id not in DEFAULT_ENABLED_HOST_IDS]
+    if unsupported:
+        raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
+    return normalized
+
+
+def _configure_init_hosts(
+    host_ids: list[str],
+    *,
+    output_format: str,
+    host_setup_command: ConfigureHostCommandHandler | None,
+    host_check_command: ConfigureHostCommandHandler | None,
+) -> list[ConfigureHostResult]:
+    if host_ids and (host_setup_command is None or host_check_command is None):
+        _stderr_console().print(
+            "[yellow]Warning: CLI host_setup_command or host_check_command dependency was not configured. "
+            "Skipping automatic host setup.[/yellow]"
+        )
+        return []
+    if not host_ids:
+        return []
+
+    results: list[ConfigureHostResult] = []
+    for host_id in host_ids:
+        try:
+            setup_result = host_setup_command(
+                ConfigureHostCommand(host_id=host_id, apply=True, origin="cli_init")
+            )
+            check_result = host_check_command(
+                ConfigureHostCommand(host_id=host_id, apply=False, check=True, origin="cli_init")
+            )
+            results.extend([setup_result, check_result])
+            if output_format != "json":
+                for step in check_result.manual_steps:
+                    _stdout_console().print(f"Passo manual pendente ({host_id}): {step}")
+        except Exception as error:
+            raise ValidationFailedError(f"Falha ao configurar host '{host_id}': {error}") from error
+    return results
 
 
 def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
@@ -1354,6 +1486,17 @@ def _format_human_init_output(result: SetupProjectResult) -> str:
     )
 
 
+def _format_human_init_host_results(results: list[ConfigureHostResult]) -> str:
+    lines = ["Hosts configurados no onboarding:"]
+    for result in results:
+        changes = ", ".join(change["path"] for change in result.planned_changes) or "(validacao)"
+        lines.append(
+            f"- {result.host_id}: {result.validation_status}; arquivos={changes}; "
+            f"snapshot={result.snapshot_reference}; auditoria={result.audit_reference}"
+        )
+    return "\n".join(lines)
+
+
 def _format_human_status_output(result: GetMemoryStatusResult) -> str:
     if not result.initialized:
         return "\n".join(
@@ -1612,7 +1755,11 @@ def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -
 
 def _format_human_sync_success(result: SyncInstructionsResult) -> str:
     changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
-    msg = "Host sync concluido." if result.validation_status == "success" else "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos."
+    msg = (
+        "Host sync concluido."
+        if result.validation_status == "success"
+        else "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos."
+    )
     return "\n".join(
         [
             msg,

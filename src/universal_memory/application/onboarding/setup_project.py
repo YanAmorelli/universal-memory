@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from universal_memory.domain import ConfigValidationPort, ProjectLayoutPort
+from universal_memory.infrastructure.config.toml_loader import update_project_config
+
+DEFAULT_ENABLED_HOST_IDS = ["codex", "claude_code"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,9 +27,21 @@ def setup_project(
     layout_port: ProjectLayoutPort,
     config_validation_port: ConfigValidationPort,
     global_config_path: Path | None = None,
+    enabled_host_ids: list[str] | None = None,
 ) -> SetupProjectResult:
     normalized_project_root = project_root.resolve()
     layout_result = layout_port.ensure_project_layout(normalized_project_root)
+    if enabled_host_ids is not None:
+        unsupported = [h for h in enabled_host_ids if h not in DEFAULT_ENABLED_HOST_IDS]
+        if unsupported:
+            from universal_memory.domain import InvalidConfigError
+            raise InvalidConfigError(f"Hosts nao suportados: {', '.join(unsupported)}")
+
+    update_project_config(
+        normalized_project_root,
+        {"hosts": {"enabled": enabled_host_ids if enabled_host_ids is not None else DEFAULT_ENABLED_HOST_IDS}},
+        global_config_path=global_config_path,
+    )
 
     # Validate config after materializing defaults so downstream adapters can rely on valid TOML.
     config_validation_port.validate_project_config(

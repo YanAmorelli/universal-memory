@@ -19,7 +19,7 @@ from universal_memory.application.security import (
     RollbackUseCase,
     SafeWriteUseCase,
 )
-from universal_memory.bootstrap.cli import EmptyLatentSkillRepository, EmptyRuleRepository
+from universal_memory.bootstrap.cli import EmptyLatentSkillRepository
 from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,

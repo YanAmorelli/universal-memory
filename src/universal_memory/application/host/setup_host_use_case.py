@@ -948,7 +948,12 @@ class ConfigureHostUseCase:
             apply=apply,
         )
 
-    def drift_warnings(self, host: Host, target: InstructionTarget, drift_content: str | None) -> list[str]:
+    def drift_warnings(
+        self,
+        host: Host,
+        target: InstructionTarget,
+        drift_content: str | None,
+    ) -> list[str]:
         return self._drift_warnings(host, target, drift_content)
 
 

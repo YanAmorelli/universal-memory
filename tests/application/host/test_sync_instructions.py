@@ -218,3 +218,48 @@ def test_sync_preview_returns_paths_without_mutating_files(
     ]
     assert not (tmp_path / "AGENTS.md").exists()
     assert json.dumps(result.to_payload(), sort_keys=True)
+
+
+def test_sync_default_hosts_respects_enabled_hosts_from_project_config(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('[hosts]\nenabled = ["codex"]\n', encoding="utf-8")
+    use_case = _use_case(
+        tmp_path,
+        [
+            _rule("Shared Policy", "Use relative paths in specs, code and docs.", "shared_policy"),
+            _rule("Claude Delta", "Claude-only note.", "provider_delta"),
+        ],
+        repositories,
+    )
+
+    result = use_case.execute(SyncInstructionsCommand(apply=True))
+
+    assert result.host_ids == ["codex"]
+    assert (tmp_path / "AGENTS.md").exists()
+    assert not (tmp_path / "CLAUDE.md").exists()
+
+
+def test_sync_explicit_disabled_host_is_allowed_with_warning(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('[hosts]\nenabled = ["codex"]\n', encoding="utf-8")
+    use_case = _use_case(
+        tmp_path,
+        [_rule("Claude Delta", "Claude-only note.", "provider_delta")],
+        repositories,
+    )
+
+    result = use_case.execute(SyncInstructionsCommand(host_ids=["claude_code"], apply=False))
+
+    assert result.host_ids == ["claude_code"]
+    assert result.warnings == [
+        "Host 'claude_code' nao esta habilitado em .umem/config.toml; "
+        "ativando automaticamente."
+    ]

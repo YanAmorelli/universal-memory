@@ -60,3 +60,10 @@
 
 - In-memory O(N) linear scan scalability bottleneck in audit log listing: The status use case loads all project-scoped audit events and groups/filters them in memory to find the latest check. As the audit log grows, this will degrade command response time linearly. [src/universal_memory/application/memory/get_memory_status_use_case.py:323-349]
 - Missing implementation of "manual_pending" validation status: AC 1 specifies that validation must return "success", "failure", or "manual_pending". [src/universal_memory/application/host/setup_host_use_case.py:188-194] — Simplificar o MVP com validações 100% automatizadas e binárias, postergando tratamentos de onboarding manual.
+
+## Deferred from: code review of 5-6-fluxo-de-sele-o-de-hosts-no-onboarding.md (2026-05-29)
+
+- Violação de camadas da Clean Architecture (caso de uso importando infraestrutura): O caso de uso `SyncInstructionsUseCase` importa e usa `load_config` diretamente da camada de infraestrutura (`toml_loader.py`), violando a regra de inversão de dependências. [src/universal_memory/application/host/sync_instructions_use_case.py:27]
+- Dependência acoplada do relógio do sistema (datetime.now(UTC)): O caso de uso usa diretamente `datetime.now(UTC)` dentro de sua execução lógica, dificultando testes unitários isolados e determinismo de testes. [src/universal_memory/application/host/sync_instructions_use_case.py:63]
+- Validação de hosts suportados no caso de uso em vez de camada de validação dedicada: A validação estrutural de quais hosts configurados no arquivo TOML são suportados está implementada diretamente no fluxo do caso de uso em vez de uma porta de validação estrutural. [src/universal_memory/application/host/sync_instructions_use_case.py:360]
+- Ausência de teste e especificidade no comportamento de mesclagem de listas de _deep_merge: A função `update_project_config` utiliza `_deep_merge` para fundir dados de configuração sem garantias formais contra duplicação de itens de lista em execuções subsequentes. [src/universal_memory/infrastructure/config/toml_loader.py:174]
