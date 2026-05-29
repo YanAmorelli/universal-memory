@@ -1146,7 +1146,7 @@ def _host_success_envelope(result: ConfigureHostResult, *, operation: str) -> di
         "operation": operation,
         "scope": "project",
         "data": result.to_payload(),
-        "warnings": [],
+        "warnings": result.warnings,
     }
 
 

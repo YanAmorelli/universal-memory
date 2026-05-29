@@ -314,6 +314,7 @@ def configure_server(  # noqa: PLR0915
                 operation="host_setup",
                 scope="project",
                 data=result.to_payload(),
+                warnings=result.warnings,
             )
         except Exception as error:
             return _mcp_tool_error(error)
@@ -339,6 +340,7 @@ def configure_server(  # noqa: PLR0915
                 operation="host_check",
                 scope="project",
                 data=result.to_payload(),
+                warnings=result.warnings,
             )
         except Exception as error:
             return _mcp_tool_error(error)
@@ -346,13 +348,19 @@ def configure_server(  # noqa: PLR0915
     return server
 
 
-def _success_envelope(*, operation: str, scope: str, data: dict[str, Any]) -> dict[str, Any]:
+def _success_envelope(
+    *,
+    operation: str,
+    scope: str,
+    data: dict[str, Any],
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
     return {
         "ok": True,
         "operation": operation,
         "scope": scope,
         "data": data,
-        "warnings": [],
+        "warnings": warnings or [],
     }
 
 

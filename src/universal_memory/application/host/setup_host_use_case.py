@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 from uuid import uuid4
 
+from universal_memory.application.host.drift_detector import InstructionDriftDetector
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
 from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import (
@@ -89,6 +90,7 @@ class ConfigureHostResult:
     audit_reference: str
     snapshot_reference: str
     timestamp: str
+    warnings: list[str] = field(default_factory=list)
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -98,7 +100,17 @@ class ConfigureHostResult:
             "manual_steps": self.manual_steps,
             "validation_status": self.validation_status,
             "audit_reference": self.audit_reference,
+            "snapshot_reference": self.snapshot_reference,
+            "timestamp": self.timestamp,
         }
+
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedInstructionTarget:
+    final_content: str
+    canonical_documents: list[CanonicalDocument]
+    warnings: list[str] = field(default_factory=list)
 
 
 def partition_instruction_blocks(
@@ -167,152 +179,334 @@ class ConfigureHostUseCase:
 
     def execute(self, command: ConfigureHostCommand) -> ConfigureHostResult:
         host = self._host_for(command.host_id)
-        target = self._agents_md_target(host)
+        target = self._primary_target_for(host)
         existing_content = self._read_existing(target.relative_path)
-        if existing_content and UMEM_START in existing_content and UMEM_END in existing_content:
+        self._validate_existing_managed_content(
+            existing_content,
+            target_path=target.relative_path,
+            command=command,
+        )
+        prepared = self._prepare_target_content(
+            target,
+            existing_content=existing_content,
+            instruction_blocks=self._instruction_blocks_for(command),
+            command=command,
+        )
+        drift_content = self._drift_content(
+            existing_content=existing_content,
+            final_content=prepared.final_content,
+            apply=command.apply,
+        )
+        drift_warnings = self._drift_warnings(host, target, drift_content)
+        warnings = prepared.warnings + drift_warnings
+
+        include_agents_ref = False
+        instruction_targets = [target.name.value]
+        if host.name == HostName.claude_code and any("AGENTS.md" in w for w in warnings):
+            include_agents_ref = True
+            instruction_targets.append(InstructionTargetType.agents_md.value)
+
+        planned_changes = self._planned_changes(
+            target,
+            existing_content=existing_content,
+            final_content=prepared.final_content,
+            canonical_documents=prepared.canonical_documents,
+            include_agents_ref=include_agents_ref,
+        )
+
+        audit_reference, snapshot_reference = self._audit_and_snapshot_references(
+            command,
+            target=target,
+            prepared=prepared,
+            include_agents_ref=include_agents_ref,
+        )
+
+        manual_steps = []
+        if warnings:
+            manual_steps.append("Remova a duplicacao manualmente antes de aplicar setup.")
+
+        return ConfigureHostResult(
+            host_id=host.name.value,
+            instruction_targets=instruction_targets,
+            planned_changes=planned_changes,
+            manual_steps=manual_steps,
+            validation_status="success",
+            audit_reference=audit_reference,
+            snapshot_reference=snapshot_reference,
+            timestamp=format_utc_iso(datetime.now(UTC)),
+            warnings=warnings,
+        )
+
+
+    def _validate_existing_managed_content(
+        self,
+        existing_content: str,
+        *,
+        target_path: str,
+        command: ConfigureHostCommand,
+    ) -> None:
+        if not existing_content:
+            return
+        has_managed_block = UMEM_START in existing_content and UMEM_END in existing_content
+        if not has_managed_block:
+            return
+        try:
+            self._validate_compact_manifest(
+                self._extract_managed_block(existing_content, target_path=target_path),
+                target_path=target_path,
+                max_lines=command.max_managed_lines,
+                max_chars=command.max_managed_chars,
+            )
+            self._validate_no_raw_memory_dump(existing_content, target_path=target_path)
+        except ValidationFailedError:
             if not command.apply:
-                self._validate_compact_manifest(
-                    self._extract_managed_block(existing_content),
-                    max_lines=command.max_managed_lines,
-                    max_chars=command.max_managed_chars,
-                )
-                self._validate_no_raw_memory_dump(existing_content)
-            else:
-                try:
-                    self._validate_compact_manifest(
-                        self._extract_managed_block(existing_content),
-                        max_lines=command.max_managed_lines,
-                        max_chars=command.max_managed_chars,
-                    )
-                    self._validate_no_raw_memory_dump(existing_content)
-                except ValidationFailedError:
-                    pass
+                raise
 
-        instruction_blocks = command.instruction_blocks
-        if not instruction_blocks and self.fact_repository is not None:
-            active_facts = self.fact_repository.list(status=FactStatus.active)
-            instruction_blocks = []
-            for fact in active_facts:
-                classification = "shared_policy"
-                for c in ["shared_policy", "provider_delta", "scoped_rule", "canonical_doc"]:
-                    if c in fact.tags or c.replace("_", "-") in fact.tags:
-                        classification = c
-                        break
-                title = fact.metadata.get("title") if fact.metadata else None
-                if not title:
-                    title = f"Fato {fact.id[:8]}"
-                instruction_blocks.append(
-                    InstructionBlock(
-                        title=title,
-                        content=fact.content,
-                        classification=classification,
-                    )
-                )
 
+    def _instruction_blocks_for(self, command: ConfigureHostCommand) -> list[InstructionBlock]:
+        if command.instruction_blocks or self.fact_repository is None:
+            return command.instruction_blocks
+
+        instruction_blocks: list[InstructionBlock] = []
+        for fact in self.fact_repository.list(status=FactStatus.active):
+            classification = InstructionClassification.shared_policy
+            tags = fact.tags or []
+            for candidate in InstructionClassification:
+                if candidate.value in tags or candidate.value.replace("_", "-") in tags:
+                    classification = candidate
+                    break
+            title = fact.metadata.get("title") if fact.metadata else None
+            instruction_blocks.append(
+                InstructionBlock(
+                    title=title or f"Fato {fact.id[:8]}",
+                    content=fact.content,
+                    classification=classification,
+                )
+            )
+        return instruction_blocks
+
+
+    def _prepare_target_content(
+        self,
+        target: InstructionTarget,
+        *,
+        existing_content: str,
+        instruction_blocks: list[InstructionBlock],
+        command: ConfigureHostCommand,
+    ) -> PreparedInstructionTarget:
         partition = partition_instruction_blocks(instruction_blocks)
-        managed_content = self._render_managed_block(partition)
+        
+        supported = set(getattr(c, "value", c) for c in target.supported_classifications)
+        warnings = []
+        for block in instruction_blocks:
+            classification_val = getattr(block.classification, "value", block.classification)
+            target_name_val = getattr(target.name, "value", target.name)
+            if classification_val not in supported:
+                warnings.append(
+                    f"Instrucao '{block.title}' com classificacao '{classification_val}' "
+                    f"foi ignorada pois nao e suportada pelo target {target_name_val}."
+                )
+
+        canonical_documents: list[CanonicalDocument] = []
+        if target.name == InstructionTargetType.claude_md:
+            if partition.canonical_documents:
+                raise ValidationFailedError("Host Claude Code nao suporta documentos canonicos.")
+            managed_content = self._render_claude_managed_block(
+                self._target_manifest_blocks(partition, target)
+            )
+        else:
+            canonical_documents = partition.canonical_documents
+            managed_content = self._render_managed_block(partition)
+
+
         self._validate_compact_manifest(
             managed_content,
+            target_path=target.relative_path,
             max_lines=command.max_managed_lines,
             max_chars=command.max_managed_chars,
         )
         final_content = self._merge_managed_block(existing_content, managed_content)
         self._validate_compact_manifest(
-            self._extract_managed_block(final_content),
+            self._extract_managed_block(final_content, target_path=target.relative_path),
+            target_path=target.relative_path,
             max_lines=command.max_managed_lines,
             max_chars=command.max_managed_chars,
         )
-        self._validate_no_raw_memory_dump(final_content)
-
-        planned_changes = self._planned_changes(
-            target.relative_path,
-            existing_content=existing_content,
+        self._validate_no_raw_memory_dump(final_content, target_path=target.relative_path)
+        return PreparedInstructionTarget(
             final_content=final_content,
-            canonical_documents=partition.canonical_documents,
+            canonical_documents=canonical_documents,
+            warnings=warnings,
         )
 
-        audit_reference = "not-applied"
-        snapshot_reference = "planned"
-        if command.apply:
-            audit_refs = []
-            snapshot_refs = []
-            for document in partition.canonical_documents:
-                result = self.safe_write_use_case.execute(
-                    SafeWriteCommand(
-                        relative_path=document.relative_path,
-                        content=self._render_canonical_document(document),
-                        scope=AuditEventScope.project,
-                        origin=command.origin,
-                        action="host_setup.canonical_doc",
-                    )
-                )
-                audit_refs.append(result.audit_reference)
-                snapshot_refs.append(result.snapshot_reference)
 
+    def _drift_content(
+        self,
+        *,
+        existing_content: str,
+        final_content: str,
+        apply: bool,
+    ) -> str:
+        if not apply and "- (" not in final_content and existing_content:
+            return existing_content
+        return final_content
+
+
+
+    def _audit_and_snapshot_references(
+        self,
+        command: ConfigureHostCommand,
+        *,
+        target: InstructionTarget,
+        prepared: PreparedInstructionTarget,
+        include_agents_ref: bool = False,
+    ) -> tuple[str, str]:
+        if not command.apply:
+            return "not-applied", "planned"
+
+        audit_refs: list[str] = []
+        snapshot_refs: list[str] = []
+        for document in prepared.canonical_documents:
             result = self.safe_write_use_case.execute(
                 SafeWriteCommand(
-                    relative_path=target.relative_path,
-                    content=final_content,
+                    relative_path=document.relative_path,
+                    content=self._render_canonical_document(document),
                     scope=AuditEventScope.project,
                     origin=command.origin,
-                    action="host_setup.agents_md",
+                    action="host_setup.canonical_doc",
                 )
             )
             audit_refs.append(result.audit_reference)
             snapshot_refs.append(result.snapshot_reference)
-            audit_reference = ", ".join(audit_refs)
-            snapshot_reference = ", ".join(snapshot_refs)
 
-        return ConfigureHostResult(
-            host_id=host.name.value,
-            instruction_targets=[target.name.value],
-            planned_changes=planned_changes,
-            manual_steps=[],
-            validation_status="success",
-            audit_reference=audit_reference,
-            snapshot_reference=snapshot_reference,
-            timestamp=format_utc_iso(datetime.now(UTC)),
+        if include_agents_ref:
+            agents_target = self._instruction_target_for(None, InstructionTargetType.agents_md)
+            result = self.safe_write_use_case.execute(
+                SafeWriteCommand(
+                    relative_path=agents_target.relative_path,
+                    content=self._read_existing(agents_target.relative_path),
+                    scope=AuditEventScope.project,
+                    origin=command.origin,
+                    action="host_setup.agents_md_reference",
+                )
+            )
+            audit_refs.append(result.audit_reference)
+            snapshot_refs.append(result.snapshot_reference)
+
+        result = self.safe_write_use_case.execute(
+            SafeWriteCommand(
+                relative_path=target.relative_path,
+                content=prepared.final_content,
+                scope=AuditEventScope.project,
+                origin=command.origin,
+                action=f"host_setup.{target.name.value}",
+            )
         )
+        audit_refs.append(result.audit_reference)
+        snapshot_refs.append(result.snapshot_reference)
+        return ", ".join(audit_refs), ", ".join(snapshot_refs)
+
+
+    def _drift_warnings(
+        self,
+        host: Host,
+        target: InstructionTarget,
+        final_content: str,
+    ) -> list[str]:
+        if host.name != HostName.claude_code or target.name != InstructionTargetType.claude_md:
+            return []
+        agents_target = self._instruction_target_for(None, InstructionTargetType.agents_md)
+        agents_content = self._read_existing(agents_target.relative_path)
+        if not agents_content:
+            return []
+        return InstructionDriftDetector().detect(
+            agents_content=agents_content,
+            claude_content=final_content,
+        )
+
+
+    def _primary_target_for(self, host: Host) -> InstructionTarget:
+        return self._instruction_target_for(host, host.supported_targets[0])
 
     def _host_for(self, host_id: str) -> Host:
         try:
             host_name = HostName(host_id)
         except ValueError as exc:
             raise ValidationFailedError(f"Host nao suportado: {host_id}") from exc
-        if host_name != HostName.codex:
-            raise ValidationFailedError(f"Host ainda nao suportado para setup: {host_id}")
         timestamp = datetime.now(UTC)
-        return Host(
-            id=str(uuid4()),
-            created_at=timestamp,
-            updated_at=timestamp,
-            name=HostName.codex,
-            supported_targets=[InstructionTargetType.agents_md],
-            mcp_config_method="fastmcp",
-            read_validation_method="agents_md_compact_validator",
-            write_validation_method="safe_write_use_case",
-            rollback_behavior="snapshot_rollback",
-            audit_event_type="host_setup",
-        )
+        if host_name == HostName.claude_code:
+            return Host(
+                id=str(uuid4()),
+                created_at=timestamp,
+                updated_at=timestamp,
+                name=HostName.claude_code,
+                supported_targets=[InstructionTargetType.claude_md],
+                mcp_config_method="fastmcp",
+                read_validation_method="claude_md_delta_validator",
+                write_validation_method="safe_write_use_case",
+                rollback_behavior="snapshot_rollback",
+                audit_event_type="host_setup",
+            )
+        elif host_name == HostName.codex:
+            return Host(
+                id=str(uuid4()),
+                created_at=timestamp,
+                updated_at=timestamp,
+                name=HostName.codex,
+                supported_targets=[InstructionTargetType.agents_md],
+                mcp_config_method="fastmcp",
+                read_validation_method="agents_md_compact_validator",
+                write_validation_method="safe_write_use_case",
+                rollback_behavior="snapshot_rollback",
+                audit_event_type="host_setup",
+            )
+        else:
+            raise ValidationFailedError(f"Host ainda nao suportado para setup: {host_id}")
 
     def _agents_md_target(self, host: Host) -> InstructionTarget:
-        if InstructionTargetType.agents_md not in host.supported_targets:
-            raise ValidationFailedError("Host codex nao suporta AGENTS.md")
+        return self._instruction_target_for(host, InstructionTargetType.agents_md)
+
+    def _instruction_target_for(
+        self,
+        host: Host | None,
+        target_type: InstructionTargetType,
+    ) -> InstructionTarget:
+        if host is not None and target_type not in host.supported_targets:
+            raise ValidationFailedError(
+                f"Host {host.name.value} nao suporta {target_type.value}"
+            )
         timestamp = datetime.now(UTC)
-        return InstructionTarget(
-            id=str(uuid4()),
-            created_at=timestamp,
-            updated_at=timestamp,
-            name=InstructionTargetType.agents_md,
-            relative_path="AGENTS.md",
-            ownership=InstructionTargetOwnership.single_writer,
-            supported_classifications=[
-                InstructionClassification.shared_policy,
-                InstructionClassification.provider_delta,
-                InstructionClassification.scoped_rule,
-                InstructionClassification.canonical_doc,
-            ],
-        )
+        if target_type == InstructionTargetType.claude_md:
+            return InstructionTarget(
+                id=str(uuid4()),
+                created_at=timestamp,
+                updated_at=timestamp,
+                name=InstructionTargetType.claude_md,
+                relative_path="CLAUDE.md",
+                ownership=InstructionTargetOwnership.delta_consumer,
+                supported_classifications=[
+                    InstructionClassification.provider_delta,
+                    InstructionClassification.scoped_rule,
+                ],
+            )
+        elif target_type == InstructionTargetType.agents_md:
+            return InstructionTarget(
+                id=str(uuid4()),
+                created_at=timestamp,
+                updated_at=timestamp,
+                name=InstructionTargetType.agents_md,
+                relative_path="AGENTS.md",
+                ownership=InstructionTargetOwnership.single_writer,
+                supported_classifications=[
+                    InstructionClassification.shared_policy,
+                    InstructionClassification.provider_delta,
+                    InstructionClassification.scoped_rule,
+                    InstructionClassification.canonical_doc,
+                ],
+            )
+        else:
+            raise ValidationFailedError(f"Target nao suportado: {target_type.value}")
+
 
     def _read_existing(self, relative_path: str) -> str:
         path = (self.project_root / relative_path).resolve()
@@ -357,6 +551,39 @@ class ConfigureHostUseCase:
         lines.append(UMEM_END)
         return "\n".join(lines) + "\n"
 
+    def _render_claude_managed_block(self, blocks: list[ManifestInstruction]) -> str:
+        lines = [
+            UMEM_START,
+            "# Claude Delta Instructions",
+            "> Leia `AGENTS.md` como manifesto compartilhado quando ele existir; este arquivo "
+            "contem apenas deltas especificos para Claude Code.",
+            "",
+            "## Deltas do Provedor",
+        ]
+
+        if blocks:
+            for block in blocks:
+                lines_content = block.content.splitlines()
+                if lines_content:
+                    lines.append(f"- ({block.classification.value}) {lines_content[0]}")
+                    for subline in lines_content[1:]:
+                        lines.append(f"  {subline}")
+        else:
+            lines.append("- Nenhum delta especifico registrado para Claude Code.")
+        lines.append(UMEM_END)
+        return "\n".join(lines) + "\n"
+
+
+    def _target_manifest_blocks(
+        self,
+        partition: InstructionPartition,
+        target: InstructionTarget,
+    ) -> list[ManifestInstruction]:
+        supported = set(target.supported_classifications)
+        return [
+            block for block in partition.manifest_blocks if block.classification in supported
+        ]
+
     def _render_canonical_document(self, document: CanonicalDocument) -> str:
         return f"# {document.title}\n\n{document.content}\n"
 
@@ -380,21 +607,30 @@ class ConfigureHostUseCase:
         separator = "" if existing_content.endswith("\n") else "\n"
         return f"{existing_content}{separator}\n{managed_content}"
 
-    def _extract_managed_block(self, content: str) -> str:
+    def _extract_managed_block(self, content: str, target_path: str = "AGENTS.md") -> str:
         start = content.find(UMEM_START)
         end = content.find(UMEM_END)
         if start == -1 or end == -1 or end <= start:
-            raise ValidationFailedError("AGENTS.md deve conter delimitadores UMEM validos.")
+            raise ValidationFailedError(f"{target_path} deve conter delimitadores UMEM validos.")
         return content[start : end + len(UMEM_END)]
 
-    def _validate_compact_manifest(self, content: str, *, max_lines: int, max_chars: int) -> None:
-        if len(content) > max_chars or len(content.splitlines()) > max_lines:
+    def _validate_compact_manifest(
+        self,
+        content: str,
+        *,
+        target_path: str = "AGENTS.md",
+        max_lines: int,
+        max_chars: int,
+    ) -> None:
+        lines_count = len(content.splitlines())
+        chars_count = len(content)
+        if chars_count > max_chars or lines_count > max_lines:
             raise ValidationFailedError(
-                "Manifesto AGENTS.md deve permanecer compacto; mova conteudo longo para docs/."
+                f"Manifesto {target_path} deve permanecer compacto; mova conteudo longo para docs/."
             )
 
-    def _validate_no_raw_memory_dump(self, content: str) -> None:
-        managed = self._extract_managed_block(content)
+    def _validate_no_raw_memory_dump(self, content: str, *, target_path: str = "AGENTS.md") -> None:
+        managed = self._extract_managed_block(content, target_path=target_path)
 
         # Avoid false positives by targeting JSON-like formatting of fact attributes
         json_fact_hits = len(re.findall(r'"fact_id"\s*:', managed)) + len(
@@ -402,24 +638,26 @@ class ConfigureHostUseCase:
         )
         if json_fact_hits >= 2:  # noqa: PLR2004
             raise ValidationFailedError(
-                "Manifesto AGENTS.md deve permanecer compacto e nao pode conter dump bruto "
+                f"Manifesto {target_path} deve permanecer compacto e nao pode conter dump bruto "
                 "de fatos ou memorias."
             )
 
         raw_fact_hits = len(re.findall(r"\b(?:raw memory fact|fact_id|source_fact_ids)\b", managed))
         if raw_fact_hits >= 5:  # noqa: PLR2004
             raise ValidationFailedError(
-                "Manifesto AGENTS.md deve permanecer compacto e nao pode conter dump bruto "
+                f"Manifesto {target_path} deve permanecer compacto e nao pode conter dump bruto "
                 "de fatos ou memorias."
             )
 
+
     def _planned_changes(
         self,
-        target_path: str,
+        target: InstructionTarget,
         *,
         existing_content: str,
         final_content: str,
         canonical_documents: list[CanonicalDocument],
+        include_agents_ref: bool = False,
     ) -> list[dict[str, str]]:
         changes: list[dict[str, str]] = []
         for document in canonical_documents:
@@ -432,14 +670,24 @@ class ConfigureHostUseCase:
                 }
             )
         if existing_content != final_content:
+            target_name_val = getattr(target.name, "value", target.name)
+            changes.append(
+                {
+                    "target": target_name_val,
+                    "action": "update" if existing_content else "create",
+                    "path": target.relative_path,
+                }
+            )
+        if include_agents_ref:
             changes.append(
                 {
                     "target": "agents_md",
-                    "action": "update" if existing_content else "create",
-                    "path": target_path,
+                    "action": "reference",
+                    "path": "AGENTS.md",
                 }
             )
         return changes
+
 
 
 def _canonical_doc_path(title: str, docs_directory: str) -> str:

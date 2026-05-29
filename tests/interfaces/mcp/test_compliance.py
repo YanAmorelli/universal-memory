@@ -96,6 +96,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "manual_steps",
         "validation_status",
         "audit_reference",
+        "snapshot_reference",
+        "timestamp",
     },
     "host_check": {
         "host_id",
@@ -104,6 +106,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "manual_steps",
         "validation_status",
         "audit_reference",
+        "snapshot_reference",
+        "timestamp",
     },
 }
 CONTRACT_TYPES_BY_TOOL = {
@@ -161,6 +165,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "manual_steps": list,
         "validation_status": str,
         "audit_reference": str,
+        "snapshot_reference": str,
+        "timestamp": str,
     },
     "host_check": {
         "host_id": str,
@@ -169,6 +175,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "manual_steps": list,
         "validation_status": str,
         "audit_reference": str,
+        "snapshot_reference": str,
+        "timestamp": str,
     },
 }
 

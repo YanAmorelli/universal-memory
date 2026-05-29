@@ -11,7 +11,16 @@ from universal_memory.application.host.setup_host_use_case import (
 )
 from universal_memory.application.security import SafeWriteUseCase
 from universal_memory.domain import SecretDetectedError, StorageError, ValidationFailedError
-from universal_memory.domain.entities import AuditEvent, AuditEventScope, Snapshot, SnapshotStatus
+from universal_memory.domain.entities import (
+    AuditEvent,
+    AuditEventScope,
+    HostName,
+    InstructionClassification,
+    InstructionTargetOwnership,
+    InstructionTargetType,
+    Snapshot,
+    SnapshotStatus,
+)
 from universal_memory.domain.ports import AuditLogRepository, SecretScannerPort, SnapshotRepository
 
 
@@ -213,3 +222,140 @@ def test_result_payload_matches_host_setup_contract(
     assert payload["manual_steps"] == []
     assert payload["validation_status"] == "success"
     assert payload["audit_reference"]
+
+
+def test_claude_code_host_maps_to_claude_delta_target(
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    host = configured_use_case._host_for("claude_code")
+
+    assert host.name == HostName.claude_code
+    assert host.supported_targets == [InstructionTargetType.claude_md]
+    assert host.read_validation_method == "claude_md_delta_validator"
+    assert host.write_validation_method == "safe_write_use_case"
+    assert host.rollback_behavior == "snapshot_rollback"
+    assert host.audit_event_type == "host_setup"
+
+
+def test_claude_md_target_allows_only_delta_classifications(
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    host = configured_use_case._host_for("claude_code")
+    target = configured_use_case._instruction_target_for(
+        host,
+        InstructionTargetType.claude_md,
+    )
+
+    assert target.name == InstructionTargetType.claude_md
+    assert target.relative_path == "CLAUDE.md"
+    assert target.ownership == InstructionTargetOwnership.delta_consumer
+    assert target.supported_classifications == [
+        InstructionClassification.provider_delta,
+        InstructionClassification.scoped_rule,
+    ]
+
+
+def test_claude_code_setup_writes_only_delta_blocks_to_claude_md(
+    tmp_path: Path,
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    result = configured_use_case.execute(
+        ConfigureHostCommand(
+            host_id="claude_code",
+            apply=True,
+            instruction_blocks=[
+                InstructionBlock(
+                    title="Shared Policy",
+                    content="Use relative paths in specs, code and docs.",
+                    classification="shared_policy",
+                ),
+                InstructionBlock(
+                    title="Claude Delta",
+                    content="Use CLAUDE.md only for Claude-specific deltas.",
+                    classification="provider_delta",
+                ),
+                InstructionBlock(
+                    title="Claude Scope",
+                    content="When editing Claude instructions, preserve manual content.",
+                    classification="scoped_rule",
+                ),
+            ],
+            origin="test",
+        )
+    )
+
+    claude_content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert result.host_id == "claude_code"
+    assert result.instruction_targets == ["claude_md"]
+    assert result.audit_reference != "not-applied"
+    assert result.snapshot_reference != "planned"
+    assert result.planned_changes == [
+        {"target": "claude_md", "action": "create", "path": "CLAUDE.md"}
+    ]
+    assert "<!-- UMEM: START -->" in claude_content
+    assert "<!-- UMEM: END -->" in claude_content
+    assert "Use CLAUDE.md only for Claude-specific deltas." in claude_content
+    assert "When editing Claude instructions, preserve manual content." in claude_content
+    assert "Use relative paths in specs, code and docs." not in claude_content
+
+
+def test_claude_code_setup_preserves_manual_content_outside_managed_block(
+    tmp_path: Path,
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    (tmp_path / "CLAUDE.md").write_text(
+        "# Claude manual notes\n\nKeep this.\n\n"
+        "<!-- UMEM: START -->\nold\n<!-- UMEM: END -->\n\n"
+        "Tail note.\n",
+        encoding="utf-8",
+    )
+
+    configured_use_case.execute(
+        ConfigureHostCommand(
+            host_id="claude_code",
+            apply=True,
+            instruction_blocks=[
+                InstructionBlock(
+                    title="Claude Delta",
+                    content="Prefer CLAUDE.md deltas over duplicated shared policy.",
+                    classification="provider_delta",
+                )
+            ],
+            origin="test",
+        )
+    )
+
+    content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert content.startswith("# Claude manual notes\n\nKeep this.")
+    assert content.endswith("Tail note.\n")
+    assert "old" not in content
+    assert "Claude Delta Instructions" in content
+    assert "Prefer CLAUDE.md deltas over duplicated shared policy." in content
+
+
+def test_claude_code_check_reports_drift_warnings_without_mutation(
+    tmp_path: Path,
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    (tmp_path / "AGENTS.md").write_text(
+        "<!-- UMEM: START -->\n"
+        "- (shared_policy) Use relative paths in specs, code and docs.\n"
+        "<!-- UMEM: END -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "CLAUDE.md").write_text(
+        "<!-- UMEM: START -->\n"
+        "- (provider_delta) Use relative paths in specs, code and docs.\n"
+        "<!-- UMEM: END -->\n",
+        encoding="utf-8",
+    )
+
+    result = configured_use_case.execute(
+        ConfigureHostCommand(host_id="claude_code", apply=False, origin="test")
+    )
+
+    assert result.warnings == [
+        "Instrucao duplicada em AGENTS.md e CLAUDE.md: "
+        "Use relative paths in specs, code and docs."
+    ]
+    assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8").count("Use relative paths") == 1

@@ -205,6 +205,8 @@ async def test_host_setup_tool_uses_injected_use_case_and_matches_cli_json_contr
             "manual_steps": [],
             "validation_status": "success",
             "audit_reference": "uuid-v4-reference",
+            "snapshot_reference": "snapshot-reference",
+            "timestamp": "2026-05-28T20:00:00Z",
         },
         "warnings": [],
     }
@@ -245,6 +247,103 @@ async def test_host_check_tool_uses_same_contract_without_mutation(tmp_path: Pat
     assert payload is not None
     assert payload["operation"] == "host_check"
     assert payload["data"]["validation_status"] == "success"
+
+
+@pytest.mark.anyio
+async def test_claude_code_host_setup_tool_returns_devex_contract_with_warnings(
+    tmp_path: Path,
+) -> None:
+    def host_setup(command: ConfigureHostCommand) -> ConfigureHostResult:
+        assert command.host_id == "claude_code"
+        return ConfigureHostResult(
+            host_id="claude_code",
+            instruction_targets=["claude_md"],
+            planned_changes=[{"target": "claude_md", "action": "create", "path": "CLAUDE.md"}],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="uuid-v4-reference",
+            snapshot_reference="uuid-v4-snapshot",
+            timestamp="2026-05-29T00:00:00Z",
+            warnings=["Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."],
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            host_setup=host_setup,
+            host_check=host_setup,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("host_setup", {"host_id": "claude_code", "force": True})
+
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "host_setup",
+        "scope": "project",
+        "data": {
+            "host_id": "claude_code",
+            "instruction_targets": ["claude_md"],
+            "planned_changes": [
+                {"target": "claude_md", "action": "create", "path": "CLAUDE.md"}
+            ],
+            "manual_steps": [],
+            "validation_status": "success",
+            "audit_reference": "uuid-v4-reference",
+            "snapshot_reference": "uuid-v4-snapshot",
+            "timestamp": "2026-05-29T00:00:00Z",
+        },
+        "warnings": ["Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."],
+    }
+
+
+@pytest.mark.anyio
+async def test_claude_code_host_check_tool_returns_devex_contract_with_warnings(
+    tmp_path: Path,
+) -> None:
+    def host_check(command: ConfigureHostCommand) -> ConfigureHostResult:
+        assert command.host_id == "claude_code"
+        assert command.apply is False
+        return ConfigureHostResult(
+            host_id="claude_code",
+            instruction_targets=["claude_md"],
+            planned_changes=[],
+            manual_steps=["Remova a duplicacao manualmente antes de aplicar setup."],
+            validation_status="warning",
+            audit_reference="not-applied",
+            snapshot_reference="planned",
+            timestamp="2026-05-29T00:00:00Z",
+            warnings=["Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."],
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            host_setup=host_check,
+            host_check=host_check,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("host_check", {"host_id": "claude_code"})
+
+    payload = result.structured_content
+    assert payload is not None
+    assert payload["operation"] == "host_check"
+    assert payload["data"]["host_id"] == "claude_code"
+    assert payload["data"]["instruction_targets"] == ["claude_md"]
+    assert payload["data"]["manual_steps"] == [
+        "Remova a duplicacao manualmente antes de aplicar setup."
+    ]
+    assert payload["data"]["snapshot_reference"] == "planned"
+    assert payload["warnings"] == [
+        "Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths."
+    ]
 
 
 @pytest.mark.anyio

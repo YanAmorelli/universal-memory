@@ -52,4 +52,9 @@
 - Missing Instruction Entity and Serialization Validation: Adiado para as próximas stories (5.2/5.3), mantendo o escopo de 5.1 na infraestrutura básica de hosts e targets.
 - Lack of relationship validation between Host and InstructionTarget ownership: Adiado para a validação na camada de aplicação/serviço onde os repositórios estarão acessíveis.
 
+## Deferred from: code review of 5-3-configurar-host-claude-code-com-claude-md.md (2026-05-28)
+
+- Lack of Transactional Multi-File Rollback: The sequential write loop for canonical documents and target file does not implement rollbacks on intermediate failure, despite the host configuring `rollback_behavior="snapshot_rollback"`. [src/universal_memory/application/host/setup_host_use_case.py:321-344]
+
+
 
