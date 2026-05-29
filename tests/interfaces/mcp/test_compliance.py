@@ -23,6 +23,10 @@ from universal_memory.application.security import (
     RollbackResult,
 )
 from universal_memory.application.skills import (
+    ActivateSkillCommand,
+    ActivateSkillResult,
+    DeactivateSkillCommand,
+    DeactivateSkillResult,
     GenerateSkillCommand,
     GenerateSkillResult,
     GetSkillDetailCommand,
@@ -32,6 +36,8 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillResult,
     SkillListItem,
+    UpdateSkillCommand,
+    UpdateSkillResult,
 )
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import (
@@ -71,6 +77,14 @@ PUBLIC_MCP_TOOLS = {
     "generate_skill": {"latent_skill_id": FACT_ID},
     "list_skills": {},
     "get_skill_detail": {"name_or_id": "TDD recorrente"},
+    "activate_skill": {"latent_skill_id": FACT_ID},
+    "deactivate_skill": {"latent_skill_id": FACT_ID},
+    "update_skill": {
+        "latent_skill_id": FACT_ID,
+        "name": "TDD recorrente",
+        "description": "Usuario pede ciclo red green refactor",
+        "triggers": ["red green refactor"],
+    },
 }
 CONTRACT_KEYS_BY_TOOL = {
     "initialize_project": {
@@ -172,6 +186,23 @@ CONTRACT_KEYS_BY_TOOL = {
         "triggers",
         "audit_reference",
         "references_loaded",
+    },
+    "activate_skill": {
+        "latent_skill",
+        "skill_file",
+        "audit_reference",
+        "snapshot_reference",
+    },
+    "deactivate_skill": {
+        "latent_skill",
+        "audit_reference",
+        "snapshot_reference",
+    },
+    "update_skill": {
+        "latent_skill",
+        "skill_file",
+        "audit_reference",
+        "snapshot_reference",
     },
 }
 CONTRACT_TYPES_BY_TOOL = {
@@ -286,6 +317,23 @@ CONTRACT_TYPES_BY_TOOL = {
         "triggers": list,
         "audit_reference": str,
         "references_loaded": bool,
+    },
+    "activate_skill": {
+        "latent_skill": dict,
+        "skill_file": str,
+        "audit_reference": str,
+        "snapshot_reference": str,
+    },
+    "deactivate_skill": {
+        "latent_skill": dict,
+        "audit_reference": str,
+        "snapshot_reference": str,
+    },
+    "update_skill": {
+        "latent_skill": dict,
+        "skill_file": str,
+        "audit_reference": str,
+        "snapshot_reference": str,
     },
 }
 
@@ -435,6 +483,58 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         generate_skill=generate_skill_result,
         list_skills=list_skills_result,
         get_skill_detail=get_skill_detail_result,
+        activate_skill=activate_skill_result,
+        deactivate_skill=deactivate_skill_result,
+        update_skill=update_skill_result,
+    )
+
+
+def mutation_skill(
+    command: ActivateSkillCommand | DeactivateSkillCommand | UpdateSkillCommand,
+) -> LatentSkill:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    status = (
+        LatentSkillStatus.ignored
+        if isinstance(command, DeactivateSkillCommand)
+        else LatentSkillStatus.active
+    )
+    return LatentSkill(
+        id=command.latent_skill_id,
+        created_at=now,
+        updated_at=now,
+        name=getattr(command, "name", None) or "TDD recorrente",
+        description=getattr(command, "description", None)
+        or "Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=status,
+        recurrence_count=3,
+        metadata={"triggers": getattr(command, "triggers", None) or ["red green refactor"]},
+    )
+
+
+def activate_skill_result(command: ActivateSkillCommand) -> ActivateSkillResult:
+    return ActivateSkillResult(
+        latent_skill=mutation_skill(command),
+        skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def deactivate_skill_result(command: DeactivateSkillCommand) -> DeactivateSkillResult:
+    return DeactivateSkillResult(
+        latent_skill=mutation_skill(command),
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def update_skill_result(command: UpdateSkillCommand) -> UpdateSkillResult:
+    return UpdateSkillResult(
+        latent_skill=mutation_skill(command),
+        skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
     )
 
 

@@ -242,5 +242,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         generate_skill_command=generate_skill_use_case.execute,
         list_skills_command=list_skills_use_case.execute,
         get_skill_detail_command=get_skill_detail_use_case.execute,
+        activate_skill_command=_activate_skill_use_case.execute,
+        deactivate_skill_command=_deactivate_skill_use_case.execute,
+        update_skill_command=_update_skill_use_case.execute,
     )
     return configured_main(argv)

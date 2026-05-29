@@ -176,8 +176,10 @@ class UpdateSkillUseCase:
     def execute(self, command: UpdateSkillCommand) -> UpdateSkillResult:
         validated = _UpdateSkillCommandSchema.model_validate(command)
         skill = self.repository.read(validated.latent_skill_id)
-        relative_path = _skill_file_for(skill.scope, _slug(skill.name))
-        absolute_path = self._safe_write_for(skill.scope).project_root / relative_path
+        relative_path = _resolve_skill_file(self.project_root, self.repository, skill)
+        absolute_path = _absolute_skill_file(
+            self.project_root, self.repository, skill.scope, relative_path
+        )
         previous_content = self._read_existing_content(absolute_path, relative_path)
 
         updated, markdown = self._build_update(skill, validated)
@@ -226,7 +228,10 @@ class UpdateSkillUseCase:
     ) -> tuple[LatentSkill, str]:
         if command.raw_markdown is not None:
             parsed = _parse_skill_markdown(command.raw_markdown)
+            _validate_markdown_update_conflicts(command, parsed)
             metadata = dict(skill.metadata or {})
+            if command.metadata is not None:
+                metadata.update(command.metadata)
             metadata["triggers"] = parsed.triggers
             return (
                 _replace_skill(
@@ -434,7 +439,9 @@ def _resolve_skill_file(
     skill: LatentSkill,
 ) -> str:
     expected_relative_path = _skill_file_for(skill.scope, _slug(skill.name))
-    expected_file = _absolute_skill_file(project_root, repository, skill.scope, expected_relative_path)
+    expected_file = _absolute_skill_file(
+        project_root, repository, skill.scope, expected_relative_path
+    )
     if expected_file.is_file():
         return expected_relative_path
 
@@ -490,6 +497,29 @@ def _audit_scope_for(scope: LatentSkillScope) -> AuditEventScope:
     if scope == LatentSkillScope.global_:
         return AuditEventScope.global_
     return AuditEventScope.project
+
+
+def _validate_markdown_update_conflicts(
+    command: _UpdateSkillCommandSchema,
+    parsed: _ParsedSkillMarkdown,
+) -> None:
+    conflicting_fields: list[str] = []
+    if command.name is not None and command.name.strip() != parsed.name:
+        conflicting_fields.append("name")
+    if command.description is not None and command.description.strip() != parsed.description:
+        conflicting_fields.append("description")
+    if command.triggers is not None and _normalize_triggers(command.triggers) != parsed.triggers:
+        conflicting_fields.append("triggers")
+    if conflicting_fields:
+        conflict_list = ", ".join(conflicting_fields)
+        raise ValidationFailedError(
+            "Campos explicitos conflitam com o frontmatter do markdown: "
+            f"{conflict_list}. Ajuste os valores ou envie apenas uma fonte de verdade."
+        )
+
+
+def _normalize_triggers(triggers: list[str]) -> list[str]:
+    return [trigger.strip() for trigger in triggers if trigger.strip()]
 
 
 def _slug(value: str) -> str:

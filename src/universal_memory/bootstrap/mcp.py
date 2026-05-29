@@ -186,6 +186,9 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             generate_skill=generate_skill_use_case.execute,
             list_skills=list_skills_use_case.execute,
             get_skill_detail=get_skill_detail_use_case.execute,
+            activate_skill=_activate_skill_use_case.execute,
+            deactivate_skill=_deactivate_skill_use_case.execute,
+            update_skill=_update_skill_use_case.execute,
         ),
         project_root=root,
     )

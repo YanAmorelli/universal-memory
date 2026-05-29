@@ -50,6 +50,10 @@ from universal_memory.application.security import (
     RollbackResult,
 )
 from universal_memory.application.skills import (
+    ActivateSkillCommand,
+    ActivateSkillResult,
+    DeactivateSkillCommand,
+    DeactivateSkillResult,
     GenerateSkillCommand,
     GenerateSkillResult,
     GetSkillDetailCommand,
@@ -59,6 +63,8 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    UpdateSkillCommand,
+    UpdateSkillResult,
 )
 from universal_memory.domain import (
     ConfigValidationPort,
@@ -73,6 +79,7 @@ from universal_memory.domain.entities import (
     Fact,
     FactScope,
     FactStatus,
+    LatentSkillScope,
     Snapshot,
     SnapshotScope,
     SnapshotStatus,
@@ -106,6 +113,9 @@ ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
 GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
+ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResult]
+DeactivateSkillCommandHandler = Callable[[DeactivateSkillCommand], DeactivateSkillResult]
+UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
@@ -152,6 +162,9 @@ def main(  # noqa: PLR0913
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
+    activate_skill_command: ActivateSkillCommandHandler | None = None,
+    deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
+    update_skill_command: UpdateSkillCommandHandler | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -172,6 +185,9 @@ def main(  # noqa: PLR0913
         generate_skill_command=generate_skill_command,
         list_skills_command=list_skills_command,
         get_skill_detail_command=get_skill_detail_command,
+        activate_skill_command=activate_skill_command,
+        deactivate_skill_command=deactivate_skill_command,
+        update_skill_command=update_skill_command,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
@@ -212,6 +228,9 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
+    activate_skill_command: ActivateSkillCommandHandler | None = None,
+    deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
+    update_skill_command: UpdateSkillCommandHandler | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
     facts_app = typer.Typer(help="Gerenciar fatos de memoria")
@@ -672,6 +691,74 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
+    @skills_app.command("activate")
+    def skills_activate(
+        ctx: typer.Context,
+        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if activate_skill_command is None:
+            msg = "CLI activate_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_activate(
+                activate_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                latent_skill_id=latent_skill_id,
+            )
+        )
+
+    @skills_app.command("deactivate")
+    def skills_deactivate(
+        ctx: typer.Context,
+        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if deactivate_skill_command is None:
+            msg = "CLI deactivate_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_deactivate(
+                deactivate_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                latent_skill_id=latent_skill_id,
+            )
+        )
+
+    @skills_app.command("update")
+    def skills_update(  # noqa: PLR0913
+        ctx: typer.Context,
+        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        name: Annotated[str | None, typer.Option("--name", help="Novo nome da skill.")] = None,
+        description: Annotated[
+            str | None,
+            typer.Option("--description", help="Nova descricao da skill."),
+        ] = None,
+        trigger: Annotated[
+            list[str] | None,
+            typer.Option("--trigger", help="Gatilho da skill. Pode ser usado multiplas vezes."),
+        ] = None,
+        file: Annotated[
+            Path | None,
+            typer.Option("--file", help="Arquivo markdown com novo conteudo da skill."),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if update_skill_command is None:
+            msg = "CLI update_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_update(
+                update_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                latent_skill_id=latent_skill_id,
+                name=name,
+                description=description,
+                triggers=trigger,
+                file=file,
+            )
+        )
+
     return app
 
 
@@ -696,6 +783,9 @@ def build_main(  # noqa: PLR0913
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
+    activate_skill_command: ActivateSkillCommandHandler | None = None,
+    deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
+    update_skill_command: UpdateSkillCommandHandler | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -723,6 +813,9 @@ def build_main(  # noqa: PLR0913
             generate_skill_command=generate_skill_command,
             list_skills_command=list_skills_command,
             get_skill_detail_command=get_skill_detail_command,
+            activate_skill_command=activate_skill_command,
+            deactivate_skill_command=deactivate_skill_command,
+            update_skill_command=update_skill_command,
         )
 
     return configured_main
@@ -1598,6 +1691,104 @@ def _run_skills_generate(
     return 0
 
 
+def _run_skills_activate(
+    command: ActivateSkillCommandHandler,
+    *,
+    output_format: str,
+    latent_skill_id: str,
+) -> int:
+    try:
+        result = command(ActivateSkillCommand(latent_skill_id=latent_skill_id, origin="cli"))
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, latent_skill_id), output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_activate_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_mutation_success("skills.activate", result))
+    return 0
+
+
+def _run_skills_deactivate(
+    command: DeactivateSkillCommandHandler,
+    *,
+    output_format: str,
+    latent_skill_id: str,
+) -> int:
+    try:
+        result = command(DeactivateSkillCommand(latent_skill_id=latent_skill_id, origin="cli"))
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, latent_skill_id), output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_deactivate_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_mutation_success("skills.deactivate", result))
+    return 0
+
+
+def _run_skills_update(  # noqa: PLR0913
+    command: UpdateSkillCommandHandler,
+    *,
+    output_format: str,
+    latent_skill_id: str,
+    name: str | None,
+    description: str | None,
+    triggers: list[str] | None,
+    file: Path | None,
+) -> int:
+    try:
+        raw_markdown = _read_skill_update_file(file) if file is not None else None
+        result = command(
+            UpdateSkillCommand(
+                latent_skill_id=latent_skill_id,
+                origin="cli",
+                name=name.strip() if name is not None else None,
+                description=description.strip() if description is not None else None,
+                triggers=[trigger.strip() for trigger in triggers or [] if trigger.strip()]
+                if triggers is not None
+                else None,
+                raw_markdown=raw_markdown,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, latent_skill_id), output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_update_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_mutation_success("skills.update", result))
+    return 0
+
+
+def _read_skill_update_file(path: Path) -> str:
+    if not path.is_file():
+        raise ValidationFailedError(f"Arquivo markdown nao encontrado: {path.as_posix()}")
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise StorageError(str(error)) from error
+
+
+def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
+    if isinstance(error, KeyError):
+        return ValidationFailedError(
+            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+        )
+    if isinstance(error, StorageError) and str(error) == f"Latent skill not found: {latent_skill_id}":
+        return ValidationFailedError(
+            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+        )
+    if isinstance(error, (ValidationError, ValueError)):
+        return ValidationFailedError(str(error))
+    if isinstance(error, OSError) and not isinstance(error, DOMAIN_ERROR_TYPES):
+        return StorageError(str(error))
+    return error
+
+
 def _map_generate_error(error: Exception, latent_skill_id: str) -> Exception:
     if isinstance(error, KeyError):
         return ValidationFailedError(
@@ -1699,6 +1890,36 @@ def _skill_detail_success_envelope(result: GetSkillDetailResult) -> dict[str, An
     }
 
 
+def _skill_activate_success_envelope(result: ActivateSkillResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.activate",
+        "scope": result.latent_skill.scope.value,
+        "data": _skill_mutation_payload(result),
+        "warnings": [],
+    }
+
+
+def _skill_deactivate_success_envelope(result: DeactivateSkillResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.deactivate",
+        "scope": result.latent_skill.scope.value,
+        "data": _skill_mutation_payload(result),
+        "warnings": [],
+    }
+
+
+def _skill_update_success_envelope(result: UpdateSkillResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.update",
+        "scope": result.latent_skill.scope.value,
+        "data": _skill_mutation_payload(result),
+        "warnings": [],
+    }
+
+
 def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
     return {
         "ok": True,
@@ -1722,6 +1943,36 @@ def _skill_proposal_payload(result: ProposeSkillResult) -> dict[str, Any]:
         "requires_decision": result.requires_decision,
         "evidence": result.proposal["evidence"],
     }
+
+
+def _skill_mutation_payload(
+    result: ActivateSkillResult | DeactivateSkillResult | UpdateSkillResult,
+) -> dict[str, Any]:
+    skill = result.latent_skill
+    payload: dict[str, Any] = {
+        "latent_skill": {
+            "id": skill.id,
+            "name": skill.name,
+            "description": skill.description,
+            "status": skill.status.value,
+            "scope": skill.scope.value,
+            "triggers": _skill_triggers(skill),
+        },
+        "audit_reference": result.audit_reference,
+        "snapshot_reference": result.snapshot_reference,
+    }
+    skill_file = getattr(result, "skill_file", None)
+    if skill_file is not None:
+        payload["skill_file"] = skill_file
+    return payload
+
+
+def _skill_triggers(skill: Any) -> list[str]:
+    metadata = skill.metadata or {}
+    raw_triggers = metadata.get("triggers") or []
+    if isinstance(raw_triggers, list):
+        return [str(trigger) for trigger in raw_triggers]
+    return [str(raw_triggers)]
 
 
 def _context_success_envelope(
@@ -2244,6 +2495,42 @@ def _format_human_skill_generate_success(result: GenerateSkillResult) -> str:
     if result.collision_detected and result.suggested_slug and result.suggested_slug != result.slug:
         lines.append(f"Colisao: slug alternativo usado ({result.suggested_slug}).")
     return "\n".join(lines)
+
+
+def _format_human_skill_mutation_success(
+    operation: str,
+    result: ActivateSkillResult | DeactivateSkillResult | UpdateSkillResult,
+) -> str:
+    payload = _skill_mutation_payload(result)
+    skill = result.latent_skill
+    affected_paths = [_latent_skill_store_path(skill.scope)]
+    skill_file = payload.get("skill_file")
+    if isinstance(skill_file, str):
+        affected_paths.insert(0, skill_file)
+
+    lines = [
+        f"Operacao: {operation}",
+        f"Escopo: {skill.scope.value}",
+        f"Latent skill: {skill.id}",
+        f"Nome: {skill.name}",
+        f"Status: {skill.status.value}",
+        "Caminhos relativos afetados:",
+    ]
+    lines.extend(f"  - {path}" for path in affected_paths)
+    lines.extend(
+        [
+            f"Snapshot: {result.snapshot_reference}",
+            f"Auditoria: {result.audit_reference}",
+        ]
+    )
+    rollback_hint = getattr(result, "rollback_hint", None)
+    if rollback_hint:
+        lines.append(f"Rollback: {rollback_hint}")
+    return "\n".join(lines)
+
+
+def _latent_skill_store_path(scope: Any) -> str:
+    return "memory/latent_skills.jsonl" if scope == LatentSkillScope.global_ else ".umem/memory/latent_skills.jsonl"
 
 
 def _format_human_host_plan(result: ConfigureHostResult, *, operation: str) -> Table | str:

@@ -400,6 +400,64 @@ def test_update_skill_raw_markdown_can_clear_triggers(tmp_path: Path) -> None:
     assert repository.read(skill.id).metadata["triggers"] == []
 
 
+def test_update_skill_finds_existing_skill_file_with_noncanonical_slug(tmp_path: Path) -> None:
+    safe_write, repository, _snapshots, _audit, _scanner = build_safe_write(tmp_path)
+    skill = make_skill(status=LatentSkillStatus.active, name="TDD Avancado")
+    repository.write(skill)
+    write_skill_markdown(tmp_path).write_text(
+        "\n".join(
+            [
+                "---",
+                'name: "TDD Avancado"',
+                'description: "Executa red green refactor para mudancas de codigo."',
+                "triggers:",
+                '  - "red green refactor"',
+                "---",
+                "",
+                "# TDD Avancado",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = UpdateSkillUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(
+        UpdateSkillCommand(
+            latent_skill_id=skill.id,
+            origin="cli",
+            description="Executa red green refactor com revisao final.",
+        )
+    )
+
+    assert result.skill_file == ".umem/skills/tdd-recorrente/SKILL.md"
+    assert "revisao final" in (tmp_path / result.skill_file).read_text(encoding="utf-8")
+
+
+def test_update_skill_rejects_conflicting_explicit_fields_with_raw_markdown(tmp_path: Path) -> None:
+    safe_write, repository, _snapshots, _audit, _scanner = build_safe_write(tmp_path)
+    skill = make_skill(status=LatentSkillStatus.active)
+    repository.write(skill)
+    write_skill_markdown(tmp_path)
+
+    with pytest.raises(ValidationFailedError, match="Campos explicitos conflitam"):
+        UpdateSkillUseCase(
+            project_root=tmp_path,
+            repository=repository,
+            safe_write_use_case=safe_write,
+        ).execute(
+            UpdateSkillCommand(
+                latent_skill_id=skill.id,
+                origin="cli",
+                name="Outro nome",
+                raw_markdown='---\nname: "TDD Recorrente"\ndescription: "Atualizada"\n---\n',
+            )
+        )
+
+
 def test_update_skill_keeps_repository_unchanged_when_skill_file_write_fails(
     tmp_path: Path,
 ) -> None:

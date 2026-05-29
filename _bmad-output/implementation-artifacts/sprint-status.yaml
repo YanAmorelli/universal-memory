@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-22T21:17:01.194515Z"
-last_updated: "2026-05-29T18:09:00-03:00"
+last_updated: "2026-05-29T20:53:57Z"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -86,5 +86,5 @@ development_status:
   6-3-gerar-estrutura-agent-skills: done
   6-4-registrar-e-listar-skills: done
   6-5-ativar-desativar-e-editar-skills-com-seguran-a: done
-  6-6-expor-gest-o-de-skills-por-cli-e-mcp: backlog
+  6-6-expor-gest-o-de-skills-por-cli-e-mcp: done
   epic-6-retrospective: optional

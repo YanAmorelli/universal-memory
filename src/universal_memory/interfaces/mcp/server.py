@@ -37,6 +37,10 @@ from universal_memory.application.security import (
     RollbackResult,
 )
 from universal_memory.application.skills import (
+    ActivateSkillCommand,
+    ActivateSkillResult,
+    DeactivateSkillCommand,
+    DeactivateSkillResult,
     GenerateSkillCommand,
     GenerateSkillResult,
     GetSkillDetailCommand,
@@ -46,8 +50,10 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    UpdateSkillCommand,
+    UpdateSkillResult,
 )
-from universal_memory.domain import ValidationFailedError
+from universal_memory.domain import StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEventScope,
     ContextSummaryScope,
@@ -90,6 +96,9 @@ ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
 GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
+ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResult]
+DeactivateSkillCommandHandler = Callable[[DeactivateSkillCommand], DeactivateSkillResult]
+UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
 ToolResponse = dict[str, Any]
 
 
@@ -116,6 +125,9 @@ class MCPUseCases:
     generate_skill: GenerateSkillCommandHandler = _missing_use_case
     list_skills: ListSkillsCommandHandler = _missing_use_case
     get_skill_detail: GetSkillDetailCommandHandler = _missing_use_case
+    activate_skill: ActivateSkillCommandHandler = _missing_use_case
+    deactivate_skill: DeactivateSkillCommandHandler = _missing_use_case
+    update_skill: UpdateSkillCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -470,6 +482,64 @@ def configure_server(  # noqa: PLR0915
         except Exception as error:
             return _mcp_tool_error(error)
 
+    @server.tool(name="activate_skill")
+    def activate_skill(latent_skill_id: str) -> ToolResponse:
+        """Reactivate an ignored latent skill through the shared safe mutation pipeline."""
+        try:
+            result = use_cases.activate_skill(
+                ActivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
+            )
+            return _success_envelope(
+                operation="skills.activate",
+                scope=result.latent_skill.scope.value,
+                data=_skill_mutation_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+
+    @server.tool(name="deactivate_skill")
+    def deactivate_skill(latent_skill_id: str) -> ToolResponse:
+        """Deactivate an active latent skill without deleting its physical SKILL.md."""
+        try:
+            result = use_cases.deactivate_skill(
+                DeactivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
+            )
+            return _success_envelope(
+                operation="skills.deactivate",
+                scope=result.latent_skill.scope.value,
+                data=_skill_mutation_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+
+    @server.tool(name="update_skill")
+    def update_skill(
+        latent_skill_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        triggers: list[str] | None = None,
+        raw_markdown: str | None = None,
+    ) -> ToolResponse:
+        """Update skill metadata or markdown through the shared safe mutation pipeline."""
+        try:
+            result = use_cases.update_skill(
+                UpdateSkillCommand(
+                    latent_skill_id=latent_skill_id,
+                    origin="mcp",
+                    name=name.strip() if name is not None else None,
+                    description=description.strip() if description is not None else None,
+                    triggers=_normalize_triggers(triggers),
+                    raw_markdown=raw_markdown,
+                )
+            )
+            return _success_envelope(
+                operation="skills.update",
+                scope=result.latent_skill.scope.value,
+                data=_skill_mutation_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+
     return server
 
 
@@ -599,6 +669,42 @@ def _skill_proposal_payload(result: ProposeSkillResult) -> dict[str, Any]:
     }
 
 
+def _skill_mutation_payload(
+    result: ActivateSkillResult | DeactivateSkillResult | UpdateSkillResult,
+) -> dict[str, Any]:
+    skill = result.latent_skill
+    payload: dict[str, Any] = {
+        "latent_skill": {
+            "id": skill.id,
+            "name": skill.name,
+            "description": skill.description,
+            "status": skill.status.value,
+            "scope": skill.scope.value,
+            "triggers": _skill_triggers(skill),
+        },
+        "audit_reference": result.audit_reference,
+        "snapshot_reference": result.snapshot_reference,
+    }
+    skill_file = getattr(result, "skill_file", None)
+    if skill_file is not None:
+        payload["skill_file"] = skill_file
+    return payload
+
+
+def _skill_triggers(skill: Any) -> list[str]:
+    metadata = skill.metadata or {}
+    raw_triggers = metadata.get("triggers") or []
+    if isinstance(raw_triggers, list):
+        return [str(trigger) for trigger in raw_triggers]
+    return [str(raw_triggers)]
+
+
+def _normalize_triggers(triggers: list[str] | None) -> list[str] | None:
+    if triggers is None:
+        return None
+    return [trigger.strip() for trigger in triggers if trigger.strip()]
+
+
 def _entry_dict(entry: Any) -> dict[str, Any]:
     if hasattr(entry, "model_dump"):
         return entry.model_dump()
@@ -688,6 +794,14 @@ def _mcp_tool_error(error: Exception) -> dict[str, Any]:
         "ok": False,
         "error": payload,
     }
+
+
+def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
+    if isinstance(error, StorageError) and str(error) == f"Latent skill not found: {latent_skill_id}":
+        return ValidationFailedError(
+            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+        )
+    return error
 
 
 def _error_code(error: Exception) -> int:
