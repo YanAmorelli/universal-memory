@@ -72,3 +72,10 @@
 
 - Alta concorrência e redundância de locks (listagens e escritas repetidas): O Caso de Uso faz múltiplas chamadas `list()` e depois `write()`, cada uma disputando e adquirindo individualmente travas exclusivas. Otimizações de I/O em lote ou locks compartilhados para leitura são recomendados no futuro. [src/universal_memory/application/skills/track_latent_skill.py:83-90]
 - Ausência de fluxo interativo de confirmação em ocorrências ambíguas: O Caso de Uso apenas registra candidatos propostos separados para similaridades baixas, sem gancho para confirmação interativa do usuário. [src/universal_memory/application/skills/track_latent_skill.py:81-90]
+
+## Deferred from: code review of 6-3-gerar-estrutura-agent-skills.md (2026-05-29)
+
+- TOCTOU (Time-of-check to time-of-use) na resolução de slugs: Há uma janela de tempo entre a verificação de existência do slug e a criação física, porém é de baixíssimo risco no ecossistema local monoproduto atual. [src/universal_memory/application/skills/generate_skill.py:178-189]
+- Tratamento estético de ValidationError do Pydantic na CLI: A CLI repassa o string do ValidationError cru, que é feio/verboso, mas não quebra funcionalidade. [src/universal_memory/interfaces/cli/init_command.py:501-504]
+- Tratamento de caminhos quando project_root é resolved para /: Se o root do projeto for /, substituições de caminho podem corromper caminhos relativos, mas a raiz nunca será / em ambientes de desenvolvimento reais dos usuários. [src/universal_memory/application/skills/generate_skill.py:249]
+

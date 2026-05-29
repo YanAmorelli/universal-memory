@@ -20,6 +20,8 @@ from universal_memory.application.memory import (
     GetMemoryStatusResult,
 )
 from universal_memory.application.skills import (
+    GenerateSkillCommand,
+    GenerateSkillResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
@@ -130,6 +132,31 @@ def skill_result(
         auto_approval_recorded=decision == ProposeSkillDecision.sempre,
         audit_reference="audit-1" if decision is not None else "",
         snapshot_reference="snapshot-1" if decision is not None else "",
+    )
+
+
+def generated_skill_result() -> GenerateSkillResult:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id=SKILL_ID,
+        created_at=now,
+        updated_at=now,
+        name="TDD recorrente",
+        description="Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.active,
+        recurrence_count=3,
+        metadata={},
+    )
+    return GenerateSkillResult(
+        latent_skill=skill,
+        slug="tdd-recorrente",
+        skill_dir=".umem/skills/tdd-recorrente",
+        skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        created_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
+        affected_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
     )
 
 
@@ -374,6 +401,61 @@ async def test_propose_skill_with_decision_invokes_use_case_and_matches_cli_json
     assert result.structured_content is not None
     assert result.structured_content["data"]["auto_approval_recorded"] is True
     assert result.structured_content["data"]["audit_reference"] == "audit-1"
+
+
+@pytest.mark.anyio
+async def test_generate_skill_tool_invokes_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[GenerateSkillCommand] = []
+
+    def generate_skill(command: GenerateSkillCommand) -> GenerateSkillResult:
+        received.append(command)
+        return generated_skill_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            generate_skill=generate_skill,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool(
+        "generate_skill",
+        {"latent_skill_id": SKILL_ID, "update_existing": True},
+    )
+
+    assert "generate_skill" in tool_names
+    assert received == [
+        GenerateSkillCommand(
+            latent_skill_id=SKILL_ID,
+            origin="mcp",
+            update_existing=True,
+        )
+    ]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "skills.generate",
+        "scope": "project",
+        "data": {
+            "skill_id": SKILL_ID,
+            "name": "TDD recorrente",
+            "slug": "tdd-recorrente",
+            "skill_dir": ".umem/skills/tdd-recorrente",
+            "skill_file": ".umem/skills/tdd-recorrente/SKILL.md",
+            "created_paths": [".umem/skills/tdd-recorrente/SKILL.md"],
+            "affected_paths": [".umem/skills/tdd-recorrente/SKILL.md"],
+            "audit_reference": "audit-1",
+            "snapshot_reference": "snapshot-1",
+            "collision_detected": False,
+            "suggested_slug": None,
+        },
+        "warnings": [],
+    }
 
 
 @pytest.mark.anyio

@@ -50,6 +50,8 @@ from universal_memory.application.security import (
     RollbackResult,
 )
 from universal_memory.application.skills import (
+    GenerateSkillCommand,
+    GenerateSkillResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
@@ -97,6 +99,7 @@ ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneR
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
+GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
@@ -140,6 +143,7 @@ def main(  # noqa: PLR0913
     host_check_command: ConfigureHostCommandHandler | None = None,
     host_sync_command: SyncInstructionsCommandHandler | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    generate_skill_command: GenerateSkillCommandHandler | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -157,6 +161,7 @@ def main(  # noqa: PLR0913
         host_check_command=host_check_command,
         host_sync_command=host_sync_command,
         propose_skill_command=propose_skill_command,
+        generate_skill_command=generate_skill_command,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
@@ -194,6 +199,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     host_check_command: ConfigureHostCommandHandler | None = None,
     host_sync_command: SyncInstructionsCommandHandler | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    generate_skill_command: GenerateSkillCommandHandler | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
     facts_app = typer.Typer(help="Gerenciar fatos de memoria")
@@ -598,6 +604,33 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
+    @skills_app.command("generate")
+    def skills_generate(
+        ctx: typer.Context,
+        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill aprovada.")],
+        yes: YesOption = False,
+        update_existing: Annotated[
+            bool,
+            typer.Option(
+                "--update-existing",
+                help="Atualizar skill existente em vez de criar slug alternativo.",
+            ),
+        ] = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if generate_skill_command is None:
+            msg = "CLI generate_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_generate(
+                generate_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                latent_skill_id=latent_skill_id,
+                yes=yes,
+                update_existing=update_existing,
+            )
+        )
+
     return app
 
 
@@ -619,6 +652,7 @@ def build_main(  # noqa: PLR0913
     host_check_command: ConfigureHostCommandHandler,
     host_sync_command: SyncInstructionsCommandHandler,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    generate_skill_command: GenerateSkillCommandHandler | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -643,6 +677,7 @@ def build_main(  # noqa: PLR0913
             host_check_command=host_check_command,
             host_sync_command=host_sync_command,
             propose_skill_command=propose_skill_command,
+            generate_skill_command=generate_skill_command,
         )
 
     return configured_main
@@ -1377,6 +1412,112 @@ def _run_skills_propose(
     return 0
 
 
+def _prompt_generate_collision(
+    result: GenerateSkillResult,
+    update_existing: bool,
+) -> tuple[bool, int]:
+    if update_existing:
+        _stdout_console().print(
+            f"[bold yellow]AVISO: O diretorio da skill '{result.slug}' "
+            "ja existe e sera SOBRESCRITO![/bold yellow]"
+        )
+        if not _confirm("Confirmar sobreescrita e geracao? [s/N]: ", default=False):
+            _stdout_console().print("Geracao de skill cancelada.")
+            return False, 1
+        return True, 0
+
+    _stdout_console().print(
+        f"[bold yellow]Conflito: O diretorio da skill '{result.slug}' ja existe.[/bold yellow]"
+    )
+    _stdout_console().print(
+        f"Sugestao alternativa proposta pelo sistema: '{result.suggested_slug}'"
+    )
+    choice = ""
+    prompt_msg = (
+        "O que deseja fazer? [u] Atualizar existente, "
+        "[a] Usar slug alternativo proposto, [c] Cancelar [u/a/C]: "
+    )
+    while choice not in {"u", "a", "c"}:
+        choice = input(prompt_msg).strip().lower()
+        if not choice:
+            choice = "c"
+    if choice == "c":
+        _stdout_console().print("Geracao de skill cancelada.")
+        return False, 1
+    return choice == "u", 0
+
+
+def _run_skills_generate(
+    command: GenerateSkillCommandHandler,
+    *,
+    output_format: str,
+    latent_skill_id: str,
+    yes: bool,
+    update_existing: bool,
+) -> int:
+    try:
+        if output_format == "json" and not yes:
+            raise ValidationFailedError(
+                "A flag --yes / -y e obrigatoria para executar skills generate com saida JSON."
+            )
+        if output_format != "json":
+            if not yes and (not sys.stdin.isatty() or not sys.stdout.isatty()):
+                raise ValidationFailedError("Ambiente nao-TTY exige --yes para gerar skill.")
+
+            # Perform a dry_run to get real resolved paths and check for collision
+            dry_run_result = command(
+                GenerateSkillCommand(
+                    latent_skill_id=latent_skill_id,
+                    origin="cli",
+                    update_existing=update_existing,
+                    dry_run=True,
+                )
+            )
+            _stdout_console().print(_format_human_skill_generate_plan(dry_run_result))
+
+            if not yes:
+                if dry_run_result.collision_detected:
+                    update_existing, code = _prompt_generate_collision(
+                        dry_run_result, update_existing
+                    )
+                    if code != 0:
+                        return code
+                elif not _confirm("Gerar estrutura da skill? [s/N]: ", default=False):
+                    _stdout_console().print("Geracao de skill cancelada.")
+                    return 1
+
+        result = command(
+            GenerateSkillCommand(
+                latent_skill_id=latent_skill_id,
+                origin="cli",
+                update_existing=update_existing,
+                dry_run=False,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        exc = _map_generate_error(error, latent_skill_id)
+        _print_expected_error(exc, output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_generate_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_generate_success(result))
+    return 0
+
+
+def _map_generate_error(error: Exception, latent_skill_id: str) -> Exception:
+    if isinstance(error, KeyError):
+        return ValidationFailedError(
+            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+        )
+    if isinstance(error, (ValidationError, ValueError)):
+        return ValidationFailedError(str(error))
+    if isinstance(error, OSError) and not isinstance(error, DOMAIN_ERROR_TYPES):
+        return StorageError(str(error))
+    return error
+
+
 def _success_envelope(result: SetupProjectResult) -> dict[str, Any]:
     return {
         "ok": True,
@@ -1433,6 +1574,16 @@ def _skill_proposal_success_envelope(result: ProposeSkillResult) -> dict[str, An
         "scope": result.latent_skill.scope.value,
         "data": _skill_proposal_payload(result),
         "warnings": [],
+    }
+
+
+def _skill_generate_success_envelope(result: GenerateSkillResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.generate",
+        "scope": result.latent_skill.scope.value,
+        "data": result.to_payload(),
+        "warnings": result.warnings,
     }
 
 
@@ -1885,6 +2036,49 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
         lines.append(f"Auditoria: {result.audit_reference}")
     if result.snapshot_reference:
         lines.append(f"Snapshot: {result.snapshot_reference}")
+    return "\n".join(lines)
+
+
+def _format_human_skill_generate_plan(result: GenerateSkillResult) -> str:
+    lines = [
+        "Operacao: skills.generate",
+        f"Escopo: {result.latent_skill.scope.value}",
+        f"Latent skill: {result.latent_skill.id}",
+        "Caminhos relativos afetados:",
+        f"  - {result.skill_file}",
+    ]
+    metadata = result.latent_skill.metadata or {}
+    if bool(metadata.get("include_scripts") or metadata.get("scripts")):
+        lines.append(f"  - {result.skill_dir}/scripts/.gitkeep")
+    if bool(metadata.get("include_references") or metadata.get("references")):
+        lines.append(f"  - {result.skill_dir}/references/.gitkeep")
+    lines.extend(
+        [
+            "Snapshot: criado pelo pipeline seguro antes de cada gravacao.",
+            "Auditoria: evento generate_skill esperado.",
+            "Padrao: nao confirmar.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _format_human_skill_generate_success(result: GenerateSkillResult) -> str:
+    lines = [
+        "Operacao: skills.generate",
+        f"Escopo: {result.latent_skill.scope.value}",
+        f"Nome: {result.latent_skill.name}",
+        f"Slug: {result.slug}",
+        "Caminhos relativos afetados:",
+    ]
+    lines.extend(f"  - {path}" for path in result.affected_paths)
+    lines.extend(
+        [
+            f"Snapshot: {result.snapshot_reference}",
+            f"Auditoria: {result.audit_reference}",
+        ]
+    )
+    if result.collision_detected and result.suggested_slug and result.suggested_slug != result.slug:
+        lines.append(f"Colisao: slug alternativo usado ({result.suggested_slug}).")
     return "\n".join(lines)
 
 

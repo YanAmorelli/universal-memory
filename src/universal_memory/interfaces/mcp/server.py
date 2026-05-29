@@ -37,6 +37,8 @@ from universal_memory.application.security import (
     RollbackResult,
 )
 from universal_memory.application.skills import (
+    GenerateSkillCommand,
+    GenerateSkillResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
@@ -81,6 +83,7 @@ RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
+GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 ToolResponse = dict[str, Any]
 
 
@@ -104,6 +107,7 @@ class MCPUseCases:
     host_check: ConfigureHostCommandHandler = _missing_use_case
     sync_instructions: SyncInstructionsCommandHandler = _missing_use_case
     propose_skill: ProposeSkillCommandHandler = _missing_use_case
+    generate_skill: GenerateSkillCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -405,6 +409,29 @@ def configure_server(  # noqa: PLR0915
                 operation="skills.propose",
                 scope=result.latent_skill.scope.value,
                 data=_skill_proposal_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error)
+
+    @server.tool(name="generate_skill")
+    def generate_skill(
+        latent_skill_id: str,
+        update_existing: bool = False,
+    ) -> ToolResponse:
+        """Generate the physical Agent Skill structure for an approved latent skill."""
+        try:
+            result = use_cases.generate_skill(
+                GenerateSkillCommand(
+                    latent_skill_id=latent_skill_id,
+                    origin="mcp",
+                    update_existing=update_existing,
+                )
+            )
+            return _success_envelope(
+                operation="skills.generate",
+                scope=result.latent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
             )
         except Exception as error:
             return _mcp_tool_error(error)

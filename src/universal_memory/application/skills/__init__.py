@@ -1,3 +1,8 @@
+from universal_memory.application.skills.generate_skill import (
+    GenerateSkillCommand,
+    GenerateSkillResult,
+    GenerateSkillUseCase,
+)
 from universal_memory.application.skills.propose_skill import (
     ProposeSkillCommand,
     ProposeSkillDecision,
@@ -11,6 +16,9 @@ from universal_memory.application.skills.track_latent_skill import (
 )
 
 __all__ = [
+    "GenerateSkillCommand",
+    "GenerateSkillResult",
+    "GenerateSkillUseCase",
     "ProposeSkillCommand",
     "ProposeSkillDecision",
     "ProposeSkillResult",
