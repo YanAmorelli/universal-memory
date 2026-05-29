@@ -1778,7 +1778,9 @@ def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Excepti
         return ValidationFailedError(
             f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
         )
-    if isinstance(error, StorageError) and str(error) == f"Latent skill not found: {latent_skill_id}":
+    if isinstance(error, StorageError) and str(error) == (
+        f"Latent skill not found: {latent_skill_id}"
+    ):
         return ValidationFailedError(
             f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
         )
@@ -2530,7 +2532,9 @@ def _format_human_skill_mutation_success(
 
 
 def _latent_skill_store_path(scope: Any) -> str:
-    return "memory/latent_skills.jsonl" if scope == LatentSkillScope.global_ else ".umem/memory/latent_skills.jsonl"
+    if scope == LatentSkillScope.global_:
+        return "memory/latent_skills.jsonl"
+    return ".umem/memory/latent_skills.jsonl"
 
 
 def _format_human_host_plan(result: ConfigureHostResult, *, operation: str) -> Table | str:

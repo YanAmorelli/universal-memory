@@ -797,7 +797,9 @@ def _mcp_tool_error(error: Exception) -> dict[str, Any]:
 
 
 def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
-    if isinstance(error, StorageError) and str(error) == f"Latent skill not found: {latent_skill_id}":
+    if isinstance(error, StorageError) and str(error) == (
+        f"Latent skill not found: {latent_skill_id}"
+    ):
         return ValidationFailedError(
             f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
         )
