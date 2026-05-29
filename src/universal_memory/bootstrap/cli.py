@@ -119,6 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         rule_repository=EmptyRuleRepository(),
         latent_skill_repository=EmptyLatentSkillRepository(),
         layout_port=layout_port,
+        audit_log_repository=audit_log_repository,
         data_root=data_root,
     )
     facts_list_use_case = ListFactsUseCase(fact_repository=fact_repository)

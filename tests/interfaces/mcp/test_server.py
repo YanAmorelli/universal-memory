@@ -38,7 +38,20 @@ def initialized_status() -> GetMemoryStatusResult:
         registered_skills_count=3,
         approximate_size_bytes=42,
         last_health_check="2026-05-27T20:00:00Z",
-        host_validation={"claude": "unconfigured", "gemini": "valid"},
+        host_validation={
+            "claude_code": {
+                "status": "unconfigured",
+                "timestamp": None,
+                "method": None,
+                "audit_reference": None,
+            },
+            "codex": {
+                "status": "success",
+                "timestamp": "2026-05-27T20:00:00Z",
+                "method": "agents_md_compact_validator",
+                "audit_reference": "audit-codex",
+            },
+        },
         recommended_action=None,
     )
 
@@ -109,7 +122,20 @@ async def test_status_tool_uses_injected_use_case_and_matches_cli_json_contract(
             "registered_skills_count": 3,
             "approximate_size_bytes": 42,
             "last_health_check": "2026-05-27T20:00:00Z",
-            "host_validation": {"claude": "unconfigured", "gemini": "valid"},
+            "host_validation": {
+                "claude_code": {
+                    "status": "unconfigured",
+                    "timestamp": None,
+                    "method": None,
+                    "audit_reference": None,
+                },
+                "codex": {
+                    "status": "success",
+                    "timestamp": "2026-05-27T20:00:00Z",
+                    "method": "agents_md_compact_validator",
+                    "audit_reference": "audit-codex",
+                },
+            },
         },
     }
 
@@ -242,7 +268,9 @@ async def test_host_check_tool_uses_same_contract_without_mutation(tmp_path: Pat
 
     result = await server.call_tool("host_check", {"host_id": "codex"})
 
-    assert received == [ConfigureHostCommand(host_id="codex", apply=False, origin="mcp")]
+    assert received == [
+        ConfigureHostCommand(host_id="codex", apply=False, check=True, origin="mcp")
+    ]
     payload = result.structured_content
     assert payload is not None
     assert payload["operation"] == "host_check"

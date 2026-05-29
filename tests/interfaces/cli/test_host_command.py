@@ -81,7 +81,7 @@ def test_host_check_json_uses_same_use_case_without_mutation(
 ) -> None:
     def host_check(command: ConfigureHostCommand) -> ConfigureHostResult:
         assert command.host_id == "codex"
-        assert command.apply is False
+        assert command.check is True
         return ConfigureHostResult(
             host_id="codex",
             instruction_targets=["agents_md"],
@@ -161,7 +161,7 @@ def test_claude_code_host_check_json_outputs_devex_contract_with_warnings(
 ) -> None:
     def host_check(command: ConfigureHostCommand) -> ConfigureHostResult:
         assert command.host_id == "claude_code"
-        assert command.apply is False
+        assert command.check is True
         return ConfigureHostResult(
             host_id="claude_code",
             instruction_targets=["claude_md"],

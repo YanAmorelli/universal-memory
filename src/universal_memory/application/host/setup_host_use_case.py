@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -11,6 +12,7 @@ from universal_memory.application.host.drift_detector import InstructionDriftDet
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
 from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import (
+    AuditEvent,
     AuditEventScope,
     FactStatus,
     Host,
@@ -74,6 +76,7 @@ class InstructionPartition:
 class ConfigureHostCommand:
     host_id: str
     apply: bool = False
+    check: bool = False
     instruction_blocks: list[InstructionBlock] = field(default_factory=list)
     max_managed_lines: int = DEFAULT_MAX_MANAGED_LINES
     max_managed_chars: int = DEFAULT_MAX_MANAGED_CHARS
@@ -111,6 +114,15 @@ class PreparedInstructionTarget:
     final_content: str
     canonical_documents: list[CanonicalDocument]
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class HostReadValidationResult:
+    status: str
+    method: str
+    checks: dict[str, bool]
+    failures: list[str]
+    warnings: list[str]
 
 
 def partition_instruction_blocks(
@@ -180,6 +192,22 @@ class ConfigureHostUseCase:
     def execute(self, command: ConfigureHostCommand) -> ConfigureHostResult:
         host = self._host_for(command.host_id)
         target = self._primary_target_for(host)
+
+        if command.check:
+            validation = self._validate_host_read(host, target)
+            audit_reference = self._record_host_validation(command, host, validation)
+            return ConfigureHostResult(
+                host_id=host.name.value,
+                instruction_targets=[target.name.value],
+                planned_changes=[],
+                manual_steps=[],
+                validation_status=validation.status,
+                audit_reference=audit_reference,
+                snapshot_reference="planned",
+                timestamp=format_utc_iso(datetime.now(UTC)),
+                warnings=validation.warnings,
+            )
+
         existing_content = self._read_existing(target.relative_path)
         self._validate_existing_managed_content(
             existing_content,
@@ -236,6 +264,174 @@ class ConfigureHostUseCase:
             timestamp=format_utc_iso(datetime.now(UTC)),
             warnings=warnings,
         )
+
+
+    def _validate_host_read(
+        self,
+        host: Host,
+        target: InstructionTarget,
+    ) -> HostReadValidationResult:
+        method = host.read_validation_method
+        checks = {
+            "instruction_file_exists": False,
+            "instruction_file_readable": False,
+            "managed_block_has_valid_delimiters": False,
+            "managed_block_has_content": False,
+            "managed_block_has_mcp_reference": False,
+            "mcp_configuration_documented_or_active": False,
+        }
+        failures: list[str] = []
+
+        path = (self.project_root / target.relative_path).resolve()
+        project_root_resolved = self.project_root.resolve()
+        try:
+            path.relative_to(project_root_resolved)
+        except ValueError:
+            failures.append("Falha de Arquivo de Instrução: caminho fora do projeto.")
+            return self._host_read_validation_result(method, checks, failures)
+
+        if not path.exists() or not path.is_file():
+            failures.append(
+                f"Falha de Arquivo de Instrução: {target.relative_path} ausente."
+            )
+            return self._host_read_validation_result(method, checks, failures)
+
+        checks["instruction_file_exists"] = True
+
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            failures.append(
+                f"Falha de Permissão de Leitura ou Escrita: não foi possível ler "
+                f"{target.relative_path}: {exc}"
+            )
+            return self._host_read_validation_result(method, checks, failures)
+
+        checks["instruction_file_readable"] = True
+
+        try:
+            managed_block = self._extract_managed_block(
+                content,
+                target_path=target.relative_path,
+            )
+        except ValidationFailedError:
+            failures.append(
+                f"Falha de Arquivo de Instrução: {target.relative_path} deve conter "
+                "delimitadores UMEM válidos."
+            )
+            return self._host_read_validation_result(method, checks, failures)
+
+        checks["managed_block_has_valid_delimiters"] = True
+        try:
+            self._validate_compact_manifest(
+                managed_block,
+                target_path=target.relative_path,
+                max_lines=DEFAULT_MAX_MANAGED_LINES,
+                max_chars=DEFAULT_MAX_MANAGED_CHARS,
+            )
+            self._validate_no_raw_memory_dump(content, target_path=target.relative_path)
+        except ValidationFailedError as exc:
+            failures.append(f"Falha de Arquivo de Instrução: {exc}")
+
+        inner_content = self._managed_block_inner_content(managed_block).strip()
+        if inner_content:
+            checks["managed_block_has_content"] = True
+        else:
+            failures.append(
+                f"Falha de Arquivo de Instrução: bloco UMEM em {target.relative_path} está vazio."
+            )
+
+        if self._has_mcp_reference(inner_content):
+            checks["managed_block_has_mcp_reference"] = True
+            checks["mcp_configuration_documented_or_active"] = True
+        else:
+            failures.append(
+                "Falha de Configuração MCP: bloco UMEM não referencia universal-memory, "
+                "MCP/FastMCP ou comandos como umem context/status."
+            )
+
+        result = self._host_read_validation_result(method, checks, failures)
+        
+        # Combine failures and drift warnings if readable
+        all_warnings = failures.copy()
+        if checks["instruction_file_readable"] and host.name == HostName.claude_code:
+            drift_warnings = self._drift_warnings(host, target, content)
+            all_warnings.extend(drift_warnings)
+            
+        return HostReadValidationResult(
+            status=result.status,
+            method=result.method,
+            checks=result.checks,
+            failures=result.failures,
+            warnings=all_warnings,
+        )
+
+
+    def _host_read_validation_result(
+        self,
+        method: str,
+        checks: dict[str, bool],
+        failures: list[str],
+    ) -> HostReadValidationResult:
+        return HostReadValidationResult(
+            status="failure" if failures else "success",
+            method=method,
+            checks=checks,
+            failures=failures,
+            warnings=failures.copy(),
+        )
+
+
+    def _record_host_validation(
+        self,
+        command: ConfigureHostCommand,
+        host: Host,
+        validation: HostReadValidationResult,
+    ) -> str:
+        timestamp = datetime.now(UTC)
+        audit_reference = str(uuid4())
+        details = {
+            "method": validation.method,
+            "checks": validation.checks,
+            "failures": validation.failures,
+        }
+        event = AuditEvent(
+            id=audit_reference,
+            created_at=timestamp,
+            updated_at=timestamp,
+            timestamp=timestamp,
+            action=f"host_validation.{host.name.value}",
+            scope=AuditEventScope.project,
+            origin=command.origin,
+            result=validation.status,
+            snapshot_reference=str(uuid4()),
+            audit_reference=audit_reference,
+            status="logged" if validation.status == "success" else "failed",
+            details=json.dumps(details, sort_keys=True),
+        )
+        try:
+            self.safe_write_use_case.audit_log_repository.write(event)
+        except (OSError, KeyError, ValueError):
+            pass
+        return audit_reference
+
+
+    def _managed_block_inner_content(self, managed_block: str) -> str:
+        start = managed_block.find(UMEM_START) + len(UMEM_START)
+        end = managed_block.rfind(UMEM_END)
+        return managed_block[start:end]
+
+
+    def _has_mcp_reference(self, content: str) -> bool:
+        normalized = content.lower()
+        references = (
+            "universal-memory",
+            "umem context",
+            "umem status",
+            "mcp",
+            "fastmcp",
+        )
+        return any(reference in normalized for reference in references)
 
 
     def _validate_existing_managed_content(
@@ -416,7 +612,10 @@ class ConfigureHostUseCase:
         if host.name != HostName.claude_code or target.name != InstructionTargetType.claude_md:
             return []
         agents_target = self._instruction_target_for(None, InstructionTargetType.agents_md)
-        agents_content = self._read_existing(agents_target.relative_path)
+        try:
+            agents_content = self._read_existing(agents_target.relative_path)
+        except (OSError, UnicodeDecodeError, ValueError, ValidationFailedError):
+            return []
         if not agents_content:
             return []
         return InstructionDriftDetector().detect(

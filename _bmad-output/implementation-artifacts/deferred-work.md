@@ -56,5 +56,7 @@
 
 - Lack of Transactional Multi-File Rollback: The sequential write loop for canonical documents and target file does not implement rollbacks on intermediate failure, despite the host configuring `rollback_behavior="snapshot_rollback"`. [src/universal_memory/application/host/setup_host_use_case.py:321-344]
 
+## Deferred from: code review of 5-4-validar-leitura-de-contexto-por-host.md (2026-05-29)
 
-
+- In-memory O(N) linear scan scalability bottleneck in audit log listing: The status use case loads all project-scoped audit events and groups/filters them in memory to find the latest check. As the audit log grows, this will degrade command response time linearly. [src/universal_memory/application/memory/get_memory_status_use_case.py:323-349]
+- Missing implementation of "manual_pending" validation status: AC 1 specifies that validation must return "success", "failure", or "manual_pending". [src/universal_memory/application/host/setup_host_use_case.py:188-194] — Simplificar o MVP com validações 100% automatizadas e binárias, postergando tratamentos de onboarding manual.

@@ -987,6 +987,7 @@ def _run_host_check(
             ConfigureHostCommand(
                 host_id=host_id,
                 apply=False,
+                check=True,
                 max_managed_lines=max_lines,
                 max_managed_chars=max_chars,
                 origin="cli",
@@ -1267,8 +1268,17 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
         f"Skills registradas: {result.registered_skills_count}",
         "Hosts:",
     ]
-    for host, status in result.host_validation.items():
-        lines.append(f"- {host}: {status}")
+    for host, validation in result.host_validation.items():
+        status = validation.get("status", "unconfigured")
+        method = validation.get("method")
+        audit_reference = validation.get("audit_reference")
+        suffix_parts = []
+        if method:
+            suffix_parts.append(f"metodo={method}")
+        if audit_reference:
+            suffix_parts.append(f"auditoria={audit_reference}")
+        suffix = f" ({', '.join(suffix_parts)})" if suffix_parts else ""
+        lines.append(f"- {host}: {status}{suffix}")
     lines.append("Fatos por escopo/status:")
     for scope, counts in result.fact_counts.items():
         rendered_counts = ", ".join(f"{status}: {count}" for status, count in counts.items())
@@ -1456,7 +1466,29 @@ def _format_human_host_plan(result: ConfigureHostResult, *, operation: str) -> T
     return table
 
 
-def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -> str:
+def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -> str | Panel:
+    if operation == "check":
+        status_styles = {
+            "success": "green",
+            "failure": "red",
+            "manual_pending": "yellow",
+        }
+        style = status_styles.get(result.validation_status, "white")
+        lines = [
+            "[bold]Host check concluido.[/bold]",
+            f"Host: {result.host_id}",
+            f"Alvos: {', '.join(result.instruction_targets)}",
+            f"Validacao: [{style}]{result.validation_status}[/{style}]",
+            f"Auditoria: {result.audit_reference}",
+        ]
+        if result.warnings:
+            if result.validation_status == "failure":
+                lines.append("Erros de Validação:")
+            else:
+                lines.append("Alertas:")
+            lines.extend(f"- {warning}" for warning in result.warnings)
+        return Panel.fit("\n".join(lines), border_style=style)
+
     changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
     return "\n".join(
         [

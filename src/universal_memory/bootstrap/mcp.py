@@ -60,6 +60,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         rule_repository=rule_repository,
         latent_skill_repository=EmptyLatentSkillRepository(),
         layout_port=layout_port,
+        audit_log_repository=audit_log_repository,
         data_root=data_root,
     )
     context_use_case = AssembleContextSummaryUseCase(

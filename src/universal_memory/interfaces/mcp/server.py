@@ -331,6 +331,7 @@ def configure_server(  # noqa: PLR0915
                 ConfigureHostCommand(
                     host_id=host_id,
                     apply=False,
+                    check=True,
                     max_managed_lines=max_lines,
                     max_managed_chars=max_chars,
                     origin="mcp",

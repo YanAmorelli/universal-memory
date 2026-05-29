@@ -10,7 +10,7 @@ from universal_memory.application.host.setup_host_use_case import (
     partition_instruction_blocks,
 )
 from universal_memory.application.security import SafeWriteUseCase
-from universal_memory.domain import SecretDetectedError, StorageError, ValidationFailedError
+from universal_memory.domain import SecretDetectedError, StorageError
 from universal_memory.domain.entities import (
     AuditEvent,
     AuditEventScope,
@@ -90,6 +90,24 @@ def configured_use_case(tmp_path: Path) -> ConfigureHostUseCase:
             audit_log_repository=InMemoryAuditLogRepository(),
         ),
     )
+
+
+@pytest.fixture()
+def configured_use_case_with_audit(
+    tmp_path: Path,
+) -> tuple[ConfigureHostUseCase, InMemoryAuditLogRepository]:
+    (tmp_path / ".umem").mkdir()
+    audit_log_repository = InMemoryAuditLogRepository()
+    use_case = ConfigureHostUseCase(
+        project_root=tmp_path,
+        safe_write_use_case=SafeWriteUseCase(
+            project_root=tmp_path,
+            secret_scanner=InMemorySecretScanner(),
+            snapshot_repository=InMemorySnapshotRepository(),
+            audit_log_repository=audit_log_repository,
+        ),
+    )
+    return use_case, audit_log_repository
 
 
 def test_partition_instruction_blocks_moves_canonical_docs_to_docs_pointer() -> None:
@@ -183,8 +201,10 @@ def test_check_rejects_massive_agents_md_dump(
         encoding="utf-8",
     )
 
-    with pytest.raises(ValidationFailedError, match="compact"):
-        configured_use_case.execute(ConfigureHostCommand(host_id="codex", apply=False))
+    result = configured_use_case.execute(ConfigureHostCommand(host_id="codex", check=True))
+
+    assert result.validation_status == "failure"
+    assert any("compact" in warning for warning in result.warnings)
 
 
 def test_secret_detection_blocks_agents_md_write(
@@ -346,12 +366,13 @@ def test_claude_code_check_reports_drift_warnings_without_mutation(
     (tmp_path / "CLAUDE.md").write_text(
         "<!-- UMEM: START -->\n"
         "- (provider_delta) Use relative paths in specs, code and docs.\n"
+        "- Use the universal-memory MCP server.\n"
         "<!-- UMEM: END -->\n",
         encoding="utf-8",
     )
 
     result = configured_use_case.execute(
-        ConfigureHostCommand(host_id="claude_code", apply=False, origin="test")
+        ConfigureHostCommand(host_id="claude_code", check=True, origin="test")
     )
 
     assert result.warnings == [
@@ -359,3 +380,76 @@ def test_claude_code_check_reports_drift_warnings_without_mutation(
         "Use relative paths in specs, code and docs."
     ]
     assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8").count("Use relative paths") == 1
+
+
+def test_host_check_records_failure_when_instruction_file_is_missing(
+    configured_use_case_with_audit: tuple[ConfigureHostUseCase, InMemoryAuditLogRepository],
+) -> None:
+    use_case, audit_log_repository = configured_use_case_with_audit
+
+    result = use_case.execute(ConfigureHostCommand(host_id="codex", check=True, origin="cli"))
+
+    assert result.validation_status == "failure"
+    assert result.planned_changes == []
+    assert result.snapshot_reference == "planned"
+    assert result.audit_reference != "not-applied"
+    assert any("Falha de Arquivo de Instrução" in warning for warning in result.warnings)
+    assert len(audit_log_repository.events) == 1
+    event = audit_log_repository.events[0]
+    assert event.action == "host_validation.codex"
+    assert event.result == "failure"
+    assert event.scope == AuditEventScope.project
+    assert event.origin == "cli"
+    assert event.details is not None
+    details = json.loads(event.details)
+    assert details["method"] == "agents_md_compact_validator"
+    assert details["checks"]["instruction_file_exists"] is False
+
+
+def test_host_check_records_success_for_valid_agents_md(
+    tmp_path: Path,
+    configured_use_case_with_audit: tuple[ConfigureHostUseCase, InMemoryAuditLogRepository],
+) -> None:
+    use_case, audit_log_repository = configured_use_case_with_audit
+    (tmp_path / "AGENTS.md").write_text(
+        "<!-- UMEM: START -->\n"
+        "Use the universal-memory MCP server and run `umem context` before coding.\n"
+        "<!-- UMEM: END -->\n",
+        encoding="utf-8",
+    )
+
+    result = use_case.execute(ConfigureHostCommand(host_id="codex", check=True, origin="mcp"))
+
+    assert result.validation_status == "success"
+    assert result.planned_changes == []
+    assert result.manual_steps == []
+    assert result.warnings == []
+    event = audit_log_repository.events[0]
+    assert event.action == "host_validation.codex"
+    assert event.result == "success"
+    details = json.loads(event.details or "{}")
+    assert details["method"] == "agents_md_compact_validator"
+    assert details["checks"]["managed_block_has_mcp_reference"] is True
+
+
+def test_host_check_records_failure_for_corrupted_umem_delimiters(
+    tmp_path: Path,
+    configured_use_case_with_audit: tuple[ConfigureHostUseCase, InMemoryAuditLogRepository],
+) -> None:
+    use_case, audit_log_repository = configured_use_case_with_audit
+    (tmp_path / "CLAUDE.md").write_text(
+        "<!-- UMEM: START -->\nUse mcp server universal-memory.\n",
+        encoding="utf-8",
+    )
+
+    result = use_case.execute(
+        ConfigureHostCommand(host_id="claude_code", check=True, origin="cli")
+    )
+
+    assert result.validation_status == "failure"
+    assert any("delimitadores UMEM" in warning for warning in result.warnings)
+    event = audit_log_repository.events[0]
+    assert event.action == "host_validation.claude_code"
+    details = json.loads(event.details or "{}")
+    assert details["method"] == "claude_md_delta_validator"
+    assert details["checks"]["managed_block_has_valid_delimiters"] is False
