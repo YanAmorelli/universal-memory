@@ -90,6 +90,39 @@ def test_rollback_json_success_outputs_strict_envelope(
     assert isinstance(payload["data"]["audit_reference"], str)
 
 
+def test_rollback_json_removes_file_created_by_first_remember(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["init", "--yes", "--format", "json"]) == 0
+    capsys.readouterr()
+    assert (
+        main(
+            [
+                "remember",
+                "Fato antes do rollback.",
+                "--scope",
+                "project",
+                "--format",
+                "json",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    exit_code = main(["rollback", "--scope", "project", "--format", "json", "--yes"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["ok"] is True
+    assert not (tmp_path / ".umem" / "memory" / "facts.jsonl").exists()
+
+
 def test_rollback_interactive_confirmation_accepts_yes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -62,13 +62,19 @@ class SafeWriteUseCase:
             raise
 
         target_path = self._resolve_target(relative_path)
+        previous_file_existed = target_path.exists()
         try:
-            previous_bytes = target_path.read_bytes() if target_path.exists() else b""
+            previous_bytes = target_path.read_bytes() if previous_file_existed else b""
         except OSError:
             previous_bytes = b""
 
         try:
-            snapshot = self._snapshot_for(command, relative_path, previous_bytes)
+            snapshot = self._snapshot_for(
+                command,
+                relative_path,
+                previous_bytes,
+                previous_file_existed=previous_file_existed,
+            )
             self.snapshot_repository.write(snapshot)
         except Exception:
             try:
@@ -141,6 +147,8 @@ class SafeWriteUseCase:
         command: SafeWriteCommand,
         relative_path: str,
         previous_bytes: bytes,
+        *,
+        previous_file_existed: bool,
     ) -> Snapshot:
         timestamp = datetime.now(UTC)
         snapshot_scope = (
@@ -158,6 +166,7 @@ class SafeWriteUseCase:
             action=command.action,
             relative_path=relative_path,
             hash=sha256(previous_bytes).hexdigest(),
+            previous_file_existed=previous_file_existed,
             status=SnapshotStatus.created,
         )
 

@@ -203,6 +203,27 @@ async def test_server_factory_initializes_fastmcp_offline() -> None:
 
 
 @pytest.mark.anyio
+async def test_real_mcp_rollback_removes_file_created_by_first_remember(tmp_path: Path) -> None:
+    server = build_server(project_root=tmp_path)
+
+    init_result = await server.call_tool("initialize_project", {})
+    remember_result = await server.call_tool(
+        "remember_fact",
+        {"content": "Fato antes do rollback.", "scope": "project", "tags": ["mcp"]},
+    )
+    rollback_result = await server.call_tool(
+        "rollback_scope",
+        {"scope": "project", "confirm": True},
+    )
+
+    assert init_result.structured_content["ok"] is True
+    assert remember_result.structured_content["ok"] is True
+    assert rollback_result.structured_content["ok"] is True
+    assert rollback_result.structured_content["operation"] == "rollback"
+    assert not (tmp_path / ".umem" / "memory" / "facts.jsonl").exists()
+
+
+@pytest.mark.anyio
 async def test_status_tool_uses_injected_use_case_and_matches_cli_json_contract(
     tmp_path: Path,
 ) -> None:

@@ -17,6 +17,8 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.ports import AuditLogRepository, SnapshotRepository
 
+EMPTY_FILE_HASH = sha256(b"").hexdigest()
+
 
 @dataclass(frozen=True, slots=True)
 class RollbackCommand:
@@ -59,17 +61,25 @@ class RollbackUseCase:
         snapshot = max(snapshots, key=lambda item: self._normalize_datetime(item.timestamp))
         actual_hash = None
         try:
-            content = self.snapshot_repository.get_content(snapshot.id)
-            actual_hash = sha256(content).hexdigest()
-            if actual_hash != snapshot.hash:
-                raise SnapshotFailedError(
-                    "Falha de integridade do snapshot: hash SHA-256 do backup fisico "
-                    "nao corresponde ao manifesto. Hint: inspecione os snapshots e recrie "
-                    "o estado a partir de um backup confiavel."
-                )
-
             target_path = self._resolve_target(snapshot)
-            self._atomic_write_bytes(target_path, content)
+            if snapshot.previous_file_existed:
+                try:
+                    content = self.snapshot_repository.get_content(snapshot.id)
+                except Exception:
+                    if not self._is_legacy_initial_creation_snapshot(snapshot):
+                        raise
+                    self._remove_created_file_snapshot(snapshot, target_path)
+                else:
+                    actual_hash = sha256(content).hexdigest()
+                    if actual_hash != snapshot.hash:
+                        raise SnapshotFailedError(
+                            "Falha de integridade do snapshot: hash SHA-256 do backup fisico "
+                            "nao corresponde ao manifesto. Hint: inspecione os snapshots e recrie "
+                            "o estado a partir de um backup confiavel."
+                        )
+                    self._atomic_write_bytes(target_path, content)
+            else:
+                self._remove_created_file_snapshot(snapshot, target_path)
         except Exception as error:
             details = None
             if actual_hash is not None and actual_hash != snapshot.hash:
@@ -103,6 +113,18 @@ class RollbackUseCase:
             restored_paths=[snapshot.relative_path],
             audit_reference=event.audit_reference,
         )
+
+    def _remove_created_file_snapshot(self, snapshot: Snapshot, target_path: Path) -> None:
+        if snapshot.hash != EMPTY_FILE_HASH:
+            raise SnapshotFailedError(
+                "Falha de integridade do snapshot: estado anterior ausente deve ter "
+                "hash SHA-256 de conteudo vazio. Hint: inspecione o manifesto de snapshots."
+            )
+        target_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def _is_legacy_initial_creation_snapshot(snapshot: Snapshot) -> bool:
+        return "previous_file_existed" not in snapshot.model_fields_set and snapshot.hash == EMPTY_FILE_HASH
 
     def _resolve_target(self, snapshot: Snapshot) -> Path:
         target_path = (self.project_root / snapshot.relative_path).resolve()

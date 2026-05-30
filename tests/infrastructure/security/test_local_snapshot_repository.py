@@ -19,6 +19,7 @@ def make_snapshot(
     content: bytes = b"previous state\n",
     scope: SnapshotScope = SnapshotScope.project,
     created_at: datetime | None = None,
+    previous_file_existed: bool = True,
 ) -> Snapshot:
     timestamp = created_at or datetime.now(UTC)
     return Snapshot(
@@ -30,6 +31,7 @@ def make_snapshot(
         action="test-write",
         relative_path=relative_path,
         hash=sha256(content).hexdigest(),
+        previous_file_existed=previous_file_existed,
         status=SnapshotStatus.created,
     )
 
@@ -82,7 +84,11 @@ def test_write_records_initial_creation_without_physical_copy(tmp_path: Path) ->
     repository = LocalSnapshotRepository(
         project_root=project_root, data_root=project_root / ".umem"
     )
-    snapshot = make_snapshot(relative_path="memory/new-file.jsonl", content=b"")
+    snapshot = make_snapshot(
+        relative_path="memory/new-file.jsonl",
+        content=b"",
+        previous_file_existed=False,
+    )
 
     repository.write(snapshot)
 

@@ -77,6 +77,7 @@ def make_snapshot(
     scope: SnapshotScope = SnapshotScope.project,
     relative_path: str = ".umem/memory/facts.jsonl",
     action: str = "safe_write",
+    previous_file_existed: bool = True,
 ) -> Snapshot:
     return Snapshot(
         id=str(uuid4()),
@@ -88,6 +89,7 @@ def make_snapshot(
         action=action,
         relative_path=relative_path,
         hash=sha256(content).hexdigest(),
+        previous_file_existed=previous_file_existed,
         status=SnapshotStatus.created,
     )
 
@@ -227,3 +229,81 @@ def test_rollback_restores_deleted_target_file(tmp_path: Path) -> None:
 
     assert result.snapshot_reference == snapshot.id
     assert target.read_bytes() == b"restored from deletion\n"
+
+
+def test_rollback_removes_file_created_from_nonexistent_snapshot(tmp_path: Path) -> None:
+    target = tmp_path / ".umem" / "memory" / "facts.jsonl"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"created state\n")
+    snapshot = make_snapshot(
+        content=b"",
+        created_at=datetime(2026, 5, 26, tzinfo=UTC),
+        previous_file_existed=False,
+    )
+    audit = RecordingAuditRepository()
+    use_case = RollbackUseCase(
+        project_root=tmp_path,
+        snapshot_repository=RecordingSnapshotRepository([snapshot], {}),
+        audit_log_repository=audit,
+    )
+
+    result = use_case.execute(RollbackCommand(scope=SnapshotScope.project, origin="cli"))
+
+    assert result.snapshot_reference == snapshot.id
+    assert not target.exists()
+    assert audit.written[0].result == "success"
+    assert audit.written[0].status == "logged"
+
+
+def test_rollback_removes_legacy_empty_snapshot_without_backup(tmp_path: Path) -> None:
+    target = tmp_path / ".umem" / "memory" / "facts.jsonl"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"created state\n")
+    timestamp = datetime(2026, 5, 26, tzinfo=UTC)
+    snapshot = Snapshot(
+        id=str(uuid4()),
+        created_at=timestamp,
+        updated_at=timestamp,
+        timestamp=timestamp,
+        scope=SnapshotScope.project,
+        origin="cli",
+        action="safe_write",
+        relative_path=".umem/memory/facts.jsonl",
+        hash=sha256(b"").hexdigest(),
+        status=SnapshotStatus.created,
+    )
+    audit = RecordingAuditRepository()
+    use_case = RollbackUseCase(
+        project_root=tmp_path,
+        snapshot_repository=RecordingSnapshotRepository([snapshot], {}),
+        audit_log_repository=audit,
+    )
+
+    result = use_case.execute(RollbackCommand(scope=SnapshotScope.project, origin="cli"))
+
+    assert result.snapshot_reference == snapshot.id
+    assert not target.exists()
+    assert audit.written[0].result == "success"
+
+
+def test_rollback_rejects_nonexistent_snapshot_with_non_empty_hash(tmp_path: Path) -> None:
+    target = tmp_path / ".umem" / "memory" / "facts.jsonl"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"created state\n")
+    snapshot = make_snapshot(
+        content=b"not empty",
+        created_at=datetime(2026, 5, 26, tzinfo=UTC),
+        previous_file_existed=False,
+    )
+    audit = RecordingAuditRepository()
+    use_case = RollbackUseCase(
+        project_root=tmp_path,
+        snapshot_repository=RecordingSnapshotRepository([snapshot], {}),
+        audit_log_repository=audit,
+    )
+
+    with pytest.raises(SnapshotFailedError, match="estado anterior ausente"):
+        use_case.execute(RollbackCommand(scope=SnapshotScope.project, origin="cli"))
+
+    assert target.exists()
+    assert audit.written[0].result == "failure"
