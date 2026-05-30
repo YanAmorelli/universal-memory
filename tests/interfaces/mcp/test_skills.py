@@ -246,6 +246,9 @@ async def test_skill_tool_errors_are_json_rpc_safe(
 
     assert payload.get("isError", True) is True
     assert error_payload["ok"] is False
+    assert error_payload["operation"] == "skills.activate"
+    assert error_payload["scope"] == "project"
+    assert error_payload["warnings"] == []
     assert error_payload["error"]["code"] == expected_code
     assert "sk-test-secret-value" not in error_payload["error"]["data"]["detail"]
 

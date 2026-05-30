@@ -153,7 +153,7 @@ def configure_server(  # noqa: PLR0915
                 data=_init_payload(result, root),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="init", scope="project")
 
     @server.tool(name="status")
     def status() -> ToolResponse:
@@ -170,7 +170,7 @@ def configure_server(  # noqa: PLR0915
                 data=_status_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="status", scope="project")
 
     @server.tool(name="context")
     def context(
@@ -198,7 +198,7 @@ def configure_server(  # noqa: PLR0915
                 data=_context_payload(result, max_size_chars=max_size_chars),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="context", scope=_raw_scope(scope))
 
     @server.tool(name="remember_fact")
     def remember_fact(
@@ -224,7 +224,7 @@ def configure_server(  # noqa: PLR0915
                 data=_remember_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="remember", scope=_raw_scope(scope))
 
     @server.tool(name="list_facts")
     def list_facts(
@@ -243,7 +243,11 @@ def configure_server(  # noqa: PLR0915
                 data={"facts": [_fact_payload(fact) for fact in result.facts]},
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(
+                error,
+                operation="facts.list",
+                scope=_raw_scope(scope) if scope is not None else "all",
+            )
 
     @server.tool(name="purge_fact")
     def purge_fact(
@@ -269,7 +273,11 @@ def configure_server(  # noqa: PLR0915
                 data=_purge_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(
+                error,
+                operation="facts.purge",
+                scope=_raw_scope(scope) if scope is not None else "fact",
+            )
 
     @server.tool(name="list_audit_events")
     def list_audit_events(
@@ -285,7 +293,7 @@ def configure_server(  # noqa: PLR0915
                 data={"events": [_entry_dict(event) for event in result.events]},
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="audit.list", scope=_raw_scope(scope))
 
     @server.tool(name="list_snapshots")
     def list_snapshots(
@@ -303,7 +311,7 @@ def configure_server(  # noqa: PLR0915
                 data={"snapshots": [_entry_dict(snapshot) for snapshot in result.snapshots]},
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="snapshots.list", scope=_raw_scope(scope))
 
     @server.tool(name="rollback_scope")
     def rollback_scope(
@@ -328,7 +336,7 @@ def configure_server(  # noqa: PLR0915
                 data=_rollback_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="rollback", scope=_raw_scope(scope))
 
     @server.tool(name="host_setup")
     def host_setup(
@@ -355,7 +363,7 @@ def configure_server(  # noqa: PLR0915
                 warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="host_setup", scope="project")
 
     @server.tool(name="host_check")
     def host_check(
@@ -382,7 +390,7 @@ def configure_server(  # noqa: PLR0915
                 warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="host_check", scope="project")
 
     @server.tool(name="sync_instructions")
     def sync_instructions(
@@ -405,7 +413,7 @@ def configure_server(  # noqa: PLR0915
                 warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="host_sync", scope="project")
 
     @server.tool(name="propose_skill")
     def propose_skill(
@@ -431,7 +439,7 @@ def configure_server(  # noqa: PLR0915
                 data=_skill_proposal_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="skills.propose", scope="project")
 
     @server.tool(name="generate_skill")
     def generate_skill(
@@ -454,7 +462,7 @@ def configure_server(  # noqa: PLR0915
                 warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="skills.generate", scope="project")
 
     @server.tool(name="list_skills")
     def list_skills() -> ToolResponse:
@@ -467,7 +475,7 @@ def configure_server(  # noqa: PLR0915
                 data=result.to_payload(),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="skills.list", scope="all")
 
     @server.tool(name="get_skill_detail")
     def get_skill_detail(name_or_id: str) -> ToolResponse:
@@ -480,7 +488,7 @@ def configure_server(  # noqa: PLR0915
                 data=result.to_payload(),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="skills.detail", scope="project")
 
     @server.tool(name="activate_skill")
     def activate_skill(latent_skill_id: str) -> ToolResponse:
@@ -495,7 +503,11 @@ def configure_server(  # noqa: PLR0915
                 data=_skill_mutation_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+            return _mcp_tool_error(
+                _map_skill_mutation_error(error, latent_skill_id),
+                operation="skills.activate",
+                scope="project",
+            )
 
     @server.tool(name="deactivate_skill")
     def deactivate_skill(latent_skill_id: str) -> ToolResponse:
@@ -510,7 +522,11 @@ def configure_server(  # noqa: PLR0915
                 data=_skill_mutation_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+            return _mcp_tool_error(
+                _map_skill_mutation_error(error, latent_skill_id),
+                operation="skills.deactivate",
+                scope="project",
+            )
 
     @server.tool(name="update_skill")
     def update_skill(
@@ -538,7 +554,11 @@ def configure_server(  # noqa: PLR0915
                 data=_skill_mutation_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+            return _mcp_tool_error(
+                _map_skill_mutation_error(error, latent_skill_id),
+                operation="skills.update",
+                scope="project",
+            )
 
     return server
 
@@ -783,7 +803,7 @@ def _error_envelope(error: Exception) -> dict[str, Any]:
     }
 
 
-def _mcp_tool_error(error: Exception) -> dict[str, Any]:
+def _mcp_tool_error(error: Exception, *, operation: str, scope: str) -> dict[str, Any]:
     if _error_code(error) == JSON_RPC_UNEXPECTED_ERROR:
         traceback.print_exc(file=sys.stderr)
     else:
@@ -792,8 +812,16 @@ def _mcp_tool_error(error: Exception) -> dict[str, Any]:
     payload = json_rpc_error_payload(error)
     return {
         "ok": False,
+        "operation": operation,
+        "scope": scope,
+        "data": {},
         "error": payload,
+        "warnings": [],
     }
+
+
+def _raw_scope(value: Any) -> str:
+    return str(value).lower()
 
 
 def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:

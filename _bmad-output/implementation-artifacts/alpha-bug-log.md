@@ -274,7 +274,7 @@ Uso combinado sugerido:
 
 ## BUG-005 - Erros MCP nao preservam envelope uniforme com `operation`, `scope` e `warnings`
 
-- Status: open
+- Status: verified
 - Severidade: medium
 - Superficie: MCP
 - Encontrado em: 2026-05-29
@@ -314,12 +314,15 @@ Uso combinado sugerido:
 
 ### Correcao
 
-- preencher quando corrigido
+- `_mcp_tool_error` agora preserva o envelope MCP uniforme tambem em falhas, preenchendo `ok=false`, `operation`, `scope`, `data`, `warnings` e `error`.
+- As tools MCP passam explicitamente a operacao e escopo esperado ao montar erros controlados, incluindo `purge_fact`, `rollback_scope`, `activate_skill` e `update_skill`.
+- Testes de regressao cobrem erros destrutivos sem confirmacao e erros de mutacao de skills mantendo `operation`, `scope` e `warnings`.
 
 ### Verificacao
 
-- reexecutar a secao 8 de `docs/alpha-sandbox-test-plan.md`
-- validar que respostas de erro incluem pelo menos `ok`, `operation`, `scope`, `warnings` e `error`
+- `uv run pytest tests/interfaces/mcp/test_server.py tests/interfaces/mcp/test_skills.py` -> 25 passed
+- `uv run pytest tests/interfaces/mcp` -> 29 passed
+- Validado por regressao automatizada que respostas de erro incluem `ok`, `operation`, `scope`, `data`, `warnings` e `error`.
 
 ## BUG-006 - MCP permite mutacao antes de inicializacao e deixa layout `.umem` parcial
 

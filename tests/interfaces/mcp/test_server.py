@@ -42,6 +42,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.interfaces.mcp.server import (
     JSON_RPC_SECRET_DETECTED,
+    JSON_RPC_VALIDATION_FAILED,
     MCPUseCases,
     configure_server,
     create_mcp_server,
@@ -227,6 +228,41 @@ async def test_real_mcp_rollback_removes_file_created_by_first_remember(tmp_path
     assert rollback_content["ok"] is True
     assert rollback_content["operation"] == "rollback"
     assert not (tmp_path / ".umem" / "memory" / "facts.jsonl").exists()
+
+
+@pytest.mark.anyio
+async def test_destructive_mcp_errors_keep_uniform_envelope(tmp_path: Path) -> None:
+    server = build_server(project_root=tmp_path)
+
+    purge_result = await server.call_tool(
+        "purge_fact",
+        {"id": "11111111-1111-4111-8111-111111111111", "confirm": False},
+    )
+    rollback_result = await server.call_tool(
+        "rollback_scope",
+        {"scope": "project", "confirm": False},
+    )
+    purge_payload = purge_result.structured_content
+    rollback_payload = rollback_result.structured_content
+
+    assert purge_payload == {
+        "ok": False,
+        "operation": "facts.purge",
+        "scope": "fact",
+        "data": {},
+        "error": purge_payload["error"],
+        "warnings": [],
+    }
+    assert purge_payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
+    assert rollback_payload == {
+        "ok": False,
+        "operation": "rollback",
+        "scope": "project",
+        "data": {},
+        "error": rollback_payload["error"],
+        "warnings": [],
+    }
+    assert rollback_payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
 
 
 @pytest.mark.anyio
