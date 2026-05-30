@@ -124,7 +124,10 @@ class RollbackUseCase:
 
     @staticmethod
     def _is_legacy_initial_creation_snapshot(snapshot: Snapshot) -> bool:
-        return "previous_file_existed" not in snapshot.model_fields_set and snapshot.hash == EMPTY_FILE_HASH
+        return (
+            "previous_file_existed" not in snapshot.model_fields_set
+            and snapshot.hash == EMPTY_FILE_HASH
+        )
 
     def _resolve_target(self, snapshot: Snapshot) -> Path:
         target_path = (self.project_root / snapshot.relative_path).resolve()

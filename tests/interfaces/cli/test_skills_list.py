@@ -67,7 +67,7 @@ def test_skills_list_empty_human_output_suggests_actionable_next_step(capsys) ->
             skills=[],
             recommended_action=(
                 "Latent skills aparecem quando o universal-memory registra padroes recorrentes. "
-                "Continue usando `umem remember \"...\"` para registrar memoria; quando uma "
+                'Continue usando `umem remember "..."` para registrar memoria; quando uma '
                 "candidata aparecer, rode `umem skills list` novamente para acompanhar as skills."
             ),
         )

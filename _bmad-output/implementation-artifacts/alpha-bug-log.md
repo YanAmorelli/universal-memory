@@ -375,3 +375,101 @@ Uso combinado sugerido:
 - `uv run pytest tests/interfaces/mcp/test_server.py` -> 18 passed
 - `uv run pytest tests/interfaces/mcp` -> 30 passed
 - `uv run pytest` -> 397 passed
+
+## BUG-007 - Plano alpha usa argumentos incorretos para tools MCP de skills
+
+- Status: verified
+- Severidade: low
+- Superficie: Docs | MCP | Skills
+- Encontrado em: 2026-05-30
+- Contexto: durante nova execucao black-box do plano `docs/alpha-sandbox-test-plan.md` com cliente FastMCP real via `stdio`, o fluxo MCP de skills falhou quando executado com argumentos inferidos do plano/CLI.
+
+### Reproducao
+
+1. criar sandbox isolado com `HOME`, `XDG_CONFIG_HOME` e `XDG_DATA_HOME`
+2. subir `umem-mcp` via cliente FastMCP real usando `uv run --project <repo> umem-mcp`
+3. inicializar projeto com `initialize_project`
+4. criar fixture valida em `.umem/memory/latent_skills.jsonl`
+5. chamar `get_skill_detail(latent_skill_id=<id>)`
+6. chamar `generate_skill(latent_skill_id=<id>, confirm=true)`
+
+### Esperado
+
+- o plano alpha deve refletir os nomes reais dos argumentos MCP expostos pelo schema das tools
+- uma pessoa seguindo o plano nao deve precisar inferir diferencas entre CLI e MCP
+
+### Obtido
+
+- `get_skill_detail` rejeita `latent_skill_id`; o argumento real e `name_or_id`
+- `generate_skill` rejeita `confirm`; a tool MCP real aceita `latent_skill_id` e `update_existing`
+- ao corrigir o fluxo para `get_skill_detail(name_or_id=<id>)` e `generate_skill(latent_skill_id=<id>)`, as tools passam com envelope MCP valido
+
+### Evidencias
+
+- sandbox MCP com falha por argumento: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-smoke.yvochg57/project`
+- erro observado em `get_skill_detail`: `Missing required argument name_or_id` e `Unexpected keyword argument latent_skill_id`
+- erro observado em `generate_skill`: `Unexpected keyword argument confirm`
+- codigo MCP: `src/universal_memory/interfaces/mcp/server.py`
+- assinaturas observadas: `get_skill_detail(name_or_id: str)` e `generate_skill(latent_skill_id: str, update_existing: bool = False)`
+
+### Hipotese / Causa Raiz
+
+- o plano alpha mistura o contrato CLI (`skills detail <id>`, `skills generate <id> --yes`) com o contrato MCP real
+- a documentacao do plano nao foi atualizada apos estabilizacao das assinaturas MCP de skills
+
+### Correcao
+
+- `docs/alpha-sandbox-test-plan.md` atualizado para usar `get_skill_detail(name_or_id=<id>)` no fluxo MCP de skills.
+- `generate_skill` no fluxo MCP agora usa `generate_skill(latent_skill_id=<id>, update_existing=false)` e a validacao documenta que tools MCP nao devem reutilizar flags CLI como `--yes` ou `confirm`.
+- A sequencia MCP recomendada agora inclui explicitamente os passos de skills com os nomes de argumentos expostos pelo schema MCP real.
+
+### Verificacao
+
+- fluxo corrigido validado via cliente FastMCP real em sandbox: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-skills.pmuawni_/project`
+- checks MCP de skills corrigidos: 19 passed, 0 failed
+- inspecao documental: `docs/alpha-sandbox-test-plan.md` agora referencia `get_skill_detail(name_or_id=<id>)` e `generate_skill(latent_skill_id=<id>, update_existing=false)`, sem `confirm` no fluxo MCP de skills.
+
+## BUG-008 - Plano alpha nao lista `deactivate_skill` entre tools MCP esperadas
+
+- Status: verified
+- Severidade: low
+- Superficie: Docs | MCP | Skills
+- Encontrado em: 2026-05-30
+- Contexto: durante nova execucao black-box do plano `docs/alpha-sandbox-test-plan.md`, o fluxo de skills MCP completo exigiu `deactivate_skill` para validar `generate -> deactivate -> activate -> update`, mas a lista de tools esperadas no plano omite essa tool.
+
+### Reproducao
+
+1. abrir `docs/alpha-sandbox-test-plan.md`
+2. verificar a secao `8. MCP Black-Box`
+3. comparar a lista de tools esperadas com as tools reais expostas pelo servidor MCP
+
+### Esperado
+
+- a lista de tools MCP do plano deve incluir todas as tools publicas relevantes para o fluxo alpha de skills
+- o fluxo MCP deve espelhar a cobertura CLI quando aplicavel
+
+### Obtido
+
+- a lista inclui `activate_skill` e `update_skill`, mas nao inclui `deactivate_skill`
+- `deactivate_skill` esta exposta pelo servidor MCP e passou no teste black-box corrigido
+
+### Evidencias
+
+- plano: `docs/alpha-sandbox-test-plan.md`, secao `8. MCP Black-Box`
+- codigo MCP: `src/universal_memory/interfaces/mcp/server.py`
+- tool real observada via `client.list_tools()`: `deactivate_skill`
+- validacao corrigida: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-skills.pmuawni_/project`
+
+### Hipotese / Causa Raiz
+
+- lacuna de documentacao no plano alpha apos introducao da tool MCP de desativacao de skills
+
+### Correcao
+
+- `deactivate_skill` adicionado a lista de tools MCP esperadas em `docs/alpha-sandbox-test-plan.md`.
+- O fluxo MCP de skills agora inclui explicitamente `deactivate_skill(latent_skill_id=<id>)` antes de `activate_skill(latent_skill_id=<id>)`.
+
+### Verificacao
+
+- fluxo corrigido com `deactivate_skill` validado via cliente FastMCP real: 19 passed, 0 failed
+- inspecao documental: `docs/alpha-sandbox-test-plan.md` lista `deactivate_skill` e inclui o passo `deactivate_skill(latent_skill_id=<id>)` antes de `activate_skill(latent_skill_id=<id>)`.

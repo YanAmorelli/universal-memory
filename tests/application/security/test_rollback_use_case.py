@@ -76,7 +76,6 @@ def make_snapshot(
     created_at: datetime,
     scope: SnapshotScope = SnapshotScope.project,
     relative_path: str = ".umem/memory/facts.jsonl",
-    action: str = "safe_write",
     previous_file_existed: bool = True,
 ) -> Snapshot:
     return Snapshot(
@@ -86,7 +85,7 @@ def make_snapshot(
         timestamp=created_at,
         scope=scope,
         origin="cli",
-        action=action,
+        action="safe_write",
         relative_path=relative_path,
         hash=sha256(content).hexdigest(),
         previous_file_existed=previous_file_existed,

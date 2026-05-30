@@ -19,7 +19,10 @@ from universal_memory.application.security import (
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import AuditEventScope, Rule, RuleScope, RuleStatus
 from universal_memory.domain.ports import RuleRepository
-from universal_memory.infrastructure.security import LocalAuditLogRepository, LocalSnapshotRepository
+from universal_memory.infrastructure.security import (
+    LocalAuditLogRepository,
+    LocalSnapshotRepository,
+)
 
 STALE_LOCK_SECONDS = 10.0
 

@@ -25,7 +25,10 @@ from universal_memory.domain.entities import (
     LatentSkillStatus,
 )
 from universal_memory.domain.ports import LatentSkillRepository
-from universal_memory.infrastructure.security import LocalAuditLogRepository, LocalSnapshotRepository
+from universal_memory.infrastructure.security import (
+    LocalAuditLogRepository,
+    LocalSnapshotRepository,
+)
 
 STALE_LOCK_SECONDS = 10.0
 

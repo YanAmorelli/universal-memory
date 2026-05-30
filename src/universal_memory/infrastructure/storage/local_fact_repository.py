@@ -23,7 +23,10 @@ from universal_memory.application.security import (
 from universal_memory.domain import FactNotFoundError, StorageError
 from universal_memory.domain.entities import AuditEventScope, Fact, FactScope, FactStatus
 from universal_memory.domain.ports import FactRepository
-from universal_memory.infrastructure.security import LocalAuditLogRepository, LocalSnapshotRepository
+from universal_memory.infrastructure.security import (
+    LocalAuditLogRepository,
+    LocalSnapshotRepository,
+)
 
 STALE_LOCK_SECONDS = 10.0
 MIN_REGEX_QUERY_LENGTH = 2

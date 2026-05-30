@@ -14,7 +14,7 @@ from universal_memory.domain.ports import LatentSkillRepository
 
 RECOMMENDED_SKILL_ACTION = (
     "Latent skills aparecem quando o universal-memory registra padroes recorrentes. "
-    "Continue usando `umem remember \"...\"` para registrar memoria; quando uma "
+    'Continue usando `umem remember "..."` para registrar memoria; quando uma '
     "candidata aparecer, rode `umem skills list` novamente para acompanhar as skills."
 )
 FRONTMATTER_SPLIT_PARTS = 2
