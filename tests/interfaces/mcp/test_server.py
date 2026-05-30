@@ -231,6 +231,34 @@ async def test_real_mcp_rollback_removes_file_created_by_first_remember(tmp_path
 
 
 @pytest.mark.anyio
+async def test_real_mcp_blocks_project_mutation_before_initialization(tmp_path: Path) -> None:
+    server = build_server(project_root=tmp_path)
+
+    remember_result = await server.call_tool(
+        "remember_fact",
+        {"content": "MCP grava fatos corretamente", "scope": "project", "tags": ["mcp"]},
+    )
+    remember_content = remember_result.structured_content
+
+    assert not (tmp_path / ".umem").exists()
+
+    init_result = await server.call_tool("initialize_project", {})
+    init_content = init_result.structured_content
+
+    assert remember_content is not None
+    assert init_content is not None
+    assert remember_content["ok"] is False
+    assert remember_content["operation"] == "remember"
+    assert remember_content["scope"] == "project"
+    assert remember_content["error"]["code"] == JSON_RPC_VALIDATION_FAILED
+    assert "initialize_project" in remember_content["error"]["data"]["detail"]
+    assert init_content["ok"] is True
+    assert (tmp_path / ".umem" / "config.toml").is_file()
+    assert (tmp_path / ".umem" / "skills").is_dir()
+    assert (tmp_path / ".umem" / "benchmarks" / "retrieval-results.json").is_file()
+
+
+@pytest.mark.anyio
 async def test_destructive_mcp_errors_keep_uniform_envelope(tmp_path: Path) -> None:
     server = build_server(project_root=tmp_path)
 

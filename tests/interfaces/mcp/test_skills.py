@@ -6,6 +6,7 @@ from typing import Any, cast
 
 import pytest
 
+from universal_memory.application.memory import GetMemoryStatusResult
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
@@ -70,9 +71,23 @@ def update_result() -> UpdateSkillResult:
     )
 
 
+def initialized_status() -> GetMemoryStatusResult:
+    return GetMemoryStatusResult(
+        initialized=True,
+        project_path=".",
+        fact_counts={},
+        active_rules_count=0,
+        registered_skills_count=0,
+        approximate_size_bytes=0,
+        last_health_check=None,
+        host_validation={},
+        recommended_action=None,
+    )
+
+
 def base_use_cases(**overrides):
     return MCPUseCases(
-        status=cast(Any, lambda _command: None),
+        status=cast(Any, lambda _command: initialized_status()),
         context=cast(Any, lambda _command: None),
         **overrides,
     )

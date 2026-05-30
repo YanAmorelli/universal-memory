@@ -142,6 +142,13 @@ def configure_server(  # noqa: PLR0915
 ) -> FastMCP:
     root = project_root or Path.cwd()
 
+    def require_project_initialized() -> None:
+        result = use_cases.status(GetMemoryStatusCommand(project_root=root))
+        if not result.initialized:
+            raise ValidationFailedError(
+                "Project memory is not initialized. Call initialize_project first."
+            )
+
     @server.tool(name="initialize_project")
     def initialize_project() -> ToolResponse:
         """Initialize the local Universal Memory project layout."""
@@ -185,6 +192,8 @@ def configure_server(  # noqa: PLR0915
         """
         try:
             context_scope = _context_scope(scope)
+            if context_scope is ContextSummaryScope.project:
+                require_project_initialized()
             result = use_cases.context(
                 AssembleContextSummaryCommand(
                     scope=context_scope,
@@ -209,6 +218,8 @@ def configure_server(  # noqa: PLR0915
         """Persist a memory fact through the shared safe mutation pipeline."""
         try:
             fact_scope = _fact_scope(scope)
+            if fact_scope is FactScope.project:
+                require_project_initialized()
             result = use_cases.remember(
                 RememberFactCommand(
                     content=content,
@@ -234,6 +245,8 @@ def configure_server(  # noqa: PLR0915
         """List memory facts with optional scope and status filters."""
         try:
             fact_scope = _fact_scope_optional(scope)
+            if fact_scope is None or fact_scope is FactScope.project:
+                require_project_initialized()
             result = use_cases.list_facts(
                 ListFactsCommand(scope=fact_scope, status=FactStatus(status))
             )
@@ -266,6 +279,8 @@ def configure_server(  # noqa: PLR0915
                     "Please call this tool with confirm=True."
                 )
             fact_scope = _fact_scope_optional(scope)
+            if fact_scope is None or fact_scope is FactScope.project:
+                require_project_initialized()
             result = use_cases.purge_fact(PurgeFactCommand(id=id, scope=fact_scope, origin="mcp"))
             return _success_envelope(
                 operation="facts.purge",
@@ -286,6 +301,8 @@ def configure_server(  # noqa: PLR0915
         """List audit events for a scope."""
         try:
             audit_scope = _audit_scope(scope)
+            if audit_scope is AuditEventScope.project:
+                require_project_initialized()
             result = use_cases.list_audit_events(ListAuditLogCommand(scope=audit_scope))
             return _success_envelope(
                 operation="audit.list",
@@ -302,6 +319,8 @@ def configure_server(  # noqa: PLR0915
         """List created snapshots for a scope."""
         try:
             snapshot_scope = _snapshot_scope(scope)
+            if snapshot_scope is SnapshotScope.project:
+                require_project_initialized()
             result = use_cases.list_snapshots(
                 ListSnapshotsCommand(scope=snapshot_scope, status=SnapshotStatus.created)
             )
@@ -329,6 +348,8 @@ def configure_server(  # noqa: PLR0915
                     "Please call this tool with confirm=True."
                 )
             snapshot_scope = _snapshot_scope(scope)
+            if snapshot_scope is SnapshotScope.project:
+                require_project_initialized()
             result = use_cases.rollback_scope(RollbackCommand(scope=snapshot_scope, origin="mcp"))
             return _success_envelope(
                 operation="rollback",
@@ -347,6 +368,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Configure an agent host manifest through the safe mutation pipeline."""
         try:
+            require_project_initialized()
             result = use_cases.host_setup(
                 ConfigureHostCommand(
                     host_id=host_id,
@@ -373,6 +395,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Validate an agent host manifest without mutating files."""
         try:
+            require_project_initialized()
             result = use_cases.host_check(
                 ConfigureHostCommand(
                     host_id=host_id,
@@ -399,6 +422,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Synchronize approved active rules into supported instruction targets."""
         try:
+            require_project_initialized()
             result = use_cases.sync_instructions(
                 SyncInstructionsCommand(
                     host_ids=host_ids or ["codex", "claude_code"],
@@ -426,6 +450,7 @@ def configure_server(  # noqa: PLR0915
         evidence, and explicit choices for a follow-up call.
         """
         try:
+            require_project_initialized()
             result = use_cases.propose_skill(
                 ProposeSkillCommand(
                     latent_skill_id=latent_skill_id,
@@ -448,6 +473,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Generate the physical Agent Skill structure for an approved latent skill."""
         try:
+            require_project_initialized()
             result = use_cases.generate_skill(
                 GenerateSkillCommand(
                     latent_skill_id=latent_skill_id,
@@ -468,6 +494,7 @@ def configure_server(  # noqa: PLR0915
     def list_skills() -> ToolResponse:
         """List registered skills and candidates without mutating local state."""
         try:
+            require_project_initialized()
             result = use_cases.list_skills(ListSkillsCommand())
             return _success_envelope(
                 operation="skills.list",
@@ -481,6 +508,7 @@ def configure_server(  # noqa: PLR0915
     def get_skill_detail(name_or_id: str) -> ToolResponse:
         """Inspect metadata and triggers for one registered skill."""
         try:
+            require_project_initialized()
             result = use_cases.get_skill_detail(GetSkillDetailCommand(name_or_id=name_or_id))
             return _success_envelope(
                 operation="skills.detail",
@@ -494,6 +522,7 @@ def configure_server(  # noqa: PLR0915
     def activate_skill(latent_skill_id: str) -> ToolResponse:
         """Reactivate an ignored latent skill through the shared safe mutation pipeline."""
         try:
+            require_project_initialized()
             result = use_cases.activate_skill(
                 ActivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
             )
@@ -513,6 +542,7 @@ def configure_server(  # noqa: PLR0915
     def deactivate_skill(latent_skill_id: str) -> ToolResponse:
         """Deactivate an active latent skill without deleting its physical SKILL.md."""
         try:
+            require_project_initialized()
             result = use_cases.deactivate_skill(
                 DeactivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
             )
@@ -538,6 +568,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Update skill metadata or markdown through the shared safe mutation pipeline."""
         try:
+            require_project_initialized()
             result = use_cases.update_skill(
                 UpdateSkillCommand(
                     latent_skill_id=latent_skill_id,

@@ -326,7 +326,7 @@ Uso combinado sugerido:
 
 ## BUG-006 - MCP permite mutacao antes de inicializacao e deixa layout `.umem` parcial
 
-- Status: open
+- Status: verified
 - Severidade: high
 - Superficie: MCP | Onboarding | Storage
 - Encontrado em: 2026-05-29
@@ -365,9 +365,13 @@ Uso combinado sugerido:
 
 ### Correcao
 
-- preencher quando corrigido
+- Tools MCP de escopo `project` agora exigem projeto inicializado antes de acessar use cases que leem ou escrevem estado local.
+- A guarda usa `status(GetMemoryStatusCommand(project_root=...))` e retorna erro controlado com envelope MCP uniforme quando o layout ainda nao existe, orientando chamar `initialize_project` primeiro.
+- `initialize_project` e `status` continuam permitidos antes da inicializacao; operacoes `global` continuam disponiveis sem criar `.umem` do projeto.
+- Adicionado teste de regressao real para `remember_fact(scope="project")` antes de init, garantindo que `.umem` nao e criado parcialmente e que `initialize_project {}` posterior completa o layout canonico.
 
 ### Verificacao
 
-- repetir o fluxo acima e confirmar que nenhuma mutacao pre-init cria `.umem` parcial, ou que `initialize_project` repara o layout
-- reexecutar a secao MCP do plano alpha em sandbox limpo e em sandbox com tentativa pre-init invalida
+- `uv run pytest tests/interfaces/mcp/test_server.py` -> 18 passed
+- `uv run pytest tests/interfaces/mcp` -> 30 passed
+- `uv run pytest` -> 397 passed
