@@ -190,6 +190,11 @@ def test_setup_preserves_manual_content_outside_managed_block(
     assert content.endswith("Tail note.\n")
     assert "old" not in content
     assert "Universal Memory Active Policy" in content
+    managed_block = content.split("<!-- UMEM: START -->", 1)[1].split("<!-- UMEM: END -->", 1)[0]
+    assert "umem context --scope project" in managed_block
+    assert "--scope global" in managed_block
+    assert "--scope project" in managed_block
+    assert "aprendizados" in managed_block
 
 
 def test_check_rejects_massive_agents_md_dump(
@@ -339,6 +344,10 @@ def test_claude_code_setup_without_deltas_passes_own_read_validator(
     assert "universal-memory" in claude_content
     assert "umem context" in claude_content
     assert "umem status" in claude_content
+    assert "AGENTS.md" in claude_content
+    assert ".umem/skills/use-universal-memory/SKILL.md" in claude_content
+    assert "politica" in claude_content
+    assert "--scope global" not in claude_content
     details = json.loads(audit_log_repository.events[-1].details or "{}")
     assert details["checks"]["managed_block_has_mcp_reference"] is True
 

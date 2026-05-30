@@ -707,8 +707,11 @@ class ConfigureHostUseCase:
             "# Universal Memory Active Policy",
             "> [!IMPORTANT]",
             "> Antes de iniciar qualquer tarefa de codificação, consulte a Short Term Memory "
-            "deste repositório executando a CLI `umem context` ou usando as ferramentas MCP "
-            "correspondentes.",
+            "deste repositório executando `umem context --scope project` ou usando as ferramentas "
+            "MCP correspondentes.",
+            "> Ao registrar aprendizados, use `--scope global` para preferências duráveis do "
+            "usuário entre projetos e `--scope project` para decisões, comandos e contexto deste "
+            "repositório.",
             "> Use a skill `.umem/skills/use-universal-memory/SKILL.md` para decidir quando "
             "consultar `umem skills list`, `umem skills detail` e registrar novos aprendizados.",
             "",
@@ -739,9 +742,9 @@ class ConfigureHostUseCase:
             "> Leia `AGENTS.md` como manifesto compartilhado quando ele existir; este arquivo "
             "contem apenas deltas especificos para Claude Code.",
             "> Integracao MCP/FastMCP: contexto universal-memory disponivel via "
-            "`umem context`; valide a configuracao com `umem status`.",
-            "> Para fluxos operacionais, consulte a skill "
-            "`.umem/skills/use-universal-memory/SKILL.md` e liste skills com `umem skills list`.",
+            "`umem context --scope project`; valide a configuracao com `umem status`.",
+            "> Para a politica global/local de memoria, consulte `AGENTS.md` e a skill "
+            "`.umem/skills/use-universal-memory/SKILL.md`; liste skills com `umem skills list`.",
             "",
             "## Deltas do Provedor",
         ]

@@ -8,11 +8,11 @@ from universal_memory.infrastructure.config.toml_loader import update_project_co
 
 DEFAULT_ENABLED_HOST_IDS = ["codex", "claude_code"]
 DEFAULT_UMEM_SKILL_ID = "00000000-0000-4000-8000-000000000001"
-DEFAULT_UMEM_SKILL_NAME = "Use Universal Memory"
+DEFAULT_UMEM_SKILL_NAME = "use-universal-memory"
 DEFAULT_UMEM_SKILL_RELATIVE_PATH = ".umem/skills/use-universal-memory/SKILL.md"
 DEFAULT_UMEM_LATENT_SKILLS_RELATIVE_PATH = ".umem/memory/latent_skills.jsonl"
 DEFAULT_UMEM_SKILL_MARKDOWN = """---
-name: "Use Universal Memory"
+name: "use-universal-memory"
 description: "Use umem to inspect project memory, skills, and durable learnings."
 triggers:
   - "inicio de uma sessao de trabalho"
@@ -36,18 +36,39 @@ triggers:
 3. Rode `umem skills list` para ver skills registradas ou candidatas.
 4. Se uma skill parecer relevante, rode `umem skills detail <nome-ou-id>` antes de agir.
 5. Use `umem facts list --scope project` quando precisar auditar fatos individuais.
-6. Registre aprendizados duraveis com `umem remember "..." --scope project --tag <tag>`.
+6. Durante ou ao final da atividade, revisar aprendizados duraveis e registrar apenas fatos
+   curtos, verificaveis e nao sensiveis.
+
+## Memoria Global Vs Memoria De Projeto
+
+- Use `--scope global` para preferencias pessoais, estilo de comunicacao, informacoes
+  duraveis sobre o usuario, habitos recorrentes e comportamentos que devem valer entre
+  projetos.
+- Use `--scope project` para decisoes, arquitetura, comandos, restricoes, tarefas, bugs,
+  dominio e aprendizados especificos do repositorio atual.
+- `umem context --scope project` carrega a memoria do projeto junto com preferencias globais
+  relevantes.
+
+## Exemplos
+
+```bash
+umem remember "Preferir respostas objetivas em portugues." --scope global --tag preference
+umem remember "Projeto usa Firebase Admin/ADC backend-only." --scope project --tag architecture
+```
 
 ## Criterios Para Registrar Memoria
 
-- Registre decisoes arquiteturais, convencoes recorrentes e preferencias do usuario.
-- Nao registre passos transitorios, outputs enormes, segredos ou informacoes incertas.
+- Registre decisoes arquiteturais, convencoes recorrentes e preferencias do usuario no
+  escopo correto.
+- Nao registre passos transitorios, outputs enormes, logs brutos, segredos, credenciais,
+  dados pessoais sensiveis ou informacoes incertas.
 - Prefira fatos verificaveis e curtos, com tags como `architecture`, `workflow` ou `bug`.
 
 ## Guardrails
 
 - Nao rode `purge`, `rollback` ou `hygiene` sem confirmacao explicita do usuario.
 - Nao cole dumps completos de memoria em arquivos de instrucao de host.
+- Nao persista tokens, chaves, dumps de env, dados sensiveis ou fatos que voce nao verificou.
 - Se `umem status` indicar problema de inicializacao, reporte isso antes de continuar.
 """
 

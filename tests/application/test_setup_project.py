@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -41,10 +42,23 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     ]
     default_skill = tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md"
     assert default_skill.is_file()
-    assert "umem context --scope project" in default_skill.read_text(encoding="utf-8")
-    assert "Use Universal Memory" in (
-        tmp_path / ".umem" / "memory" / "latent_skills.jsonl"
-    ).read_text(encoding="utf-8")
+    skill_content = default_skill.read_text(encoding="utf-8")
+    assert 'name: "use-universal-memory"' in skill_content
+    assert 'name: "Use Universal Memory"' not in skill_content
+    assert "umem context --scope project" in skill_content
+    assert "--scope global" in skill_content
+    assert "--scope project" in skill_content
+    assert "--tag preference" in skill_content
+    assert "--tag architecture" in skill_content
+    assert "segredos" in skill_content
+    assert "credenciais" in skill_content
+    assert "dados pessoais sensiveis" in skill_content
+    assert "revisar aprendizados" in skill_content
+    latent_skill_line = (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").read_text(
+        encoding="utf-8"
+    )
+    latent_skill = json.loads(latent_skill_line)
+    assert latent_skill["name"] == "use-universal-memory"
     assert (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8") == (
         '[project]\nname = ""\ncreated_by = "universal-memory"\n\n'
         '[hosts]\nenabled = [\n    "codex",\n    "claude_code",\n]\n'
