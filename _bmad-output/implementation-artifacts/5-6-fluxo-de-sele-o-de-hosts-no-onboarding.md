@@ -94,7 +94,7 @@ Para que o setup inicial ative apenas integrações relevantes ao meu fluxo.
 
 ### Project Structure Notes
 
-- O arquivo de configuração local é `.umem/config.toml`. O arquivo global padrão (opcional) lives em `~/.config/universal-memory/config.toml`.
+- O arquivo de configuração local é `.umem/config.toml`. O arquivo global padrão (opcional) lives em `~/.config/umem/config.toml` (atualizado por BUG-002).
 - O layout gerado na inicialização deve preservar a conformidade descrita em `project_layout.py`.
 
 ### References

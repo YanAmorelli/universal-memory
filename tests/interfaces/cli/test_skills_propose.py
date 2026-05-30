@@ -37,6 +37,7 @@ def make_result(
     *,
     decision: ProposeSkillDecision | None = None,
     requires_decision: bool = False,
+    scope: LatentSkillScope = LatentSkillScope.project,
 ) -> ProposeSkillResult:
     skill = make_skill(
         status=LatentSkillStatus.proposed
@@ -47,6 +48,7 @@ def make_result(
             else LatentSkillStatus.active
         )
     )
+    skill = skill.model_copy(update={"scope": scope})
     return ProposeSkillResult(
         latent_skill=skill,
         proposal={
@@ -61,6 +63,21 @@ def make_result(
         audit_reference="audit-1" if decision is not None else "",
         snapshot_reference="snapshot-1" if decision is not None else "",
     )
+
+
+def test_skills_propose_global_output_uses_umem_config_path(capsys) -> None:
+    def propose(command: ProposeSkillCommand) -> ProposeSkillResult:
+        return make_result(decision=command.decision, scope=LatentSkillScope.global_)
+
+    exit_code = cli_main(
+        ["skills", "propose", "skill-1", "--decision", "sempre"],
+        propose_skill_command=propose,
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "~/.config/umem/config.toml" in output
+    assert "~/.config/universal-memory/config.toml" not in output
 
 
 def test_skills_propose_human_output_shows_proposal_and_choices(capsys) -> None:

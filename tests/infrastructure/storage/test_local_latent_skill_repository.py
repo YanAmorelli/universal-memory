@@ -143,9 +143,7 @@ def test_write_uses_project_and_global_jsonl_paths(tmp_path: Path) -> None:
     repository.write(global_skill)
 
     project_path = tmp_path / ".umem" / "memory" / "latent_skills.jsonl"
-    global_path = (
-        global_home / ".local" / "share" / "universal-memory" / "memory" / "latent_skills.jsonl"
-    )
+    global_path = global_home / ".local" / "share" / "umem" / "memory" / "latent_skills.jsonl"
     assert (
         json.loads(project_path.read_text(encoding="utf-8").splitlines()[0])["id"]
         == project_skill.id
@@ -153,6 +151,8 @@ def test_write_uses_project_and_global_jsonl_paths(tmp_path: Path) -> None:
     assert (
         json.loads(global_path.read_text(encoding="utf-8").splitlines()[0])["id"] == global_skill.id
     )
+    assert (global_home / ".local" / "share" / "umem" / "audit" / "events.jsonl").is_file()
+    assert (global_home / ".local" / "share" / "umem" / "snapshots" / "manifest.json").is_file()
 
 
 def test_write_updates_existing_latent_skill_in_place(tmp_path: Path) -> None:

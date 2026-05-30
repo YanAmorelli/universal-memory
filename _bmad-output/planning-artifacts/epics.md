@@ -115,8 +115,8 @@ NFR12: CLI, motor de persistência e servidor MCP devem executar leitura, grava�
 - A persistência deve usar JSON para dados estruturados e Markdown para documentos e arquivos de instrução.
 - Todos os JSON persistidos devem usar `snake_case`, UUID v4 como string, timestamps ISO 8601 UTC, enums `lowercase_snake`, booleanos JSON nativos e campos obrigatórios `schema_version`, `id`, `created_at`, `updated_at`, `scope` e `status`.
 - O layout persistente por projeto deve usar `.umem/` com `config.toml`, `memory/`, `audit/events.jsonl`, `snapshots/`, `skills/` e `benchmarks/retrieval-results.json`.
-- O layout global deve usar `~/.local/share/universal-memory/`.
-- Configuração global deve viver em `~/.config/universal-memory/config.toml` e configuração por projeto em `.umem/config.toml`.
+- O layout global deve usar `~/.local/share/umem/`.
+- Configuração global deve viver em `~/.config/umem/config.toml` e configuração por projeto em `.umem/config.toml`.
 - Leitura TOML deve usar `tomllib`; escrita TOML deve usar `tomli-w`.
 - Toda mutação automática deve seguir o pipeline obrigatório: validar entrada, escanear segredos, resolver escopo e caminho, criar snapshot, abortar se snapshot falhar, escrever atomicamente via storage port, registrar auditoria e retornar referência de auditoria.
 - Nenhum adapter pode bypassar o pipeline de mutação.

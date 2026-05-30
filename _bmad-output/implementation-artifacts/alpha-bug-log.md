@@ -170,7 +170,7 @@ Uso combinado sugerido:
 
 ## BUG-002 - Estrategia de armazenamento global usa caminhos diferentes por tipo de dado
 
-- Status: open
+- Status: verified
 - Severidade: medium
 - Superficie: Global State
 - Encontrado em: 2026-05-29
@@ -204,8 +204,13 @@ Uso combinado sugerido:
 
 ### Correcao
 
-- pendente
+- Config global padrao movida para `~/.config/umem/config.toml`.
+- Facts, rules e latent skills globais agora usam `~/.local/share/umem/memory/`.
+- Escritas globais via SafeWrite para facts/rules agora usam a raiz XDG de dados, preservando `.umem/memory/*` apenas para escopo de projeto.
+- Testes de regressao cobrem os caminhos globais XDG com nome `umem`.
 
 ### Verificacao
 
-- pendente
+- `uv run pytest tests/infrastructure/config/test_toml_loader.py tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_rule_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py tests/interfaces/cli/test_skills_propose.py` -> 44 passed
+- `uv run pytest tests/infrastructure/security/test_local_audit_log_repository.py::test_concurrent_writes_preserve_all_jsonl_events` -> 1 passed apos falha concorrente transiente na primeira suite completa
+- `uv run pytest` -> 390 passed

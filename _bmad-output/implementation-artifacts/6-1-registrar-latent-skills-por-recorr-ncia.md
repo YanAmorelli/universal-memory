@@ -20,7 +20,7 @@ para que padrões recorrentes possam virar capacidades reutilizáveis sem eu ree
   - [x] Criar ou atualizar testes para garantir que `LatentSkillRepository` é uma interface/port de domínio abstrata válida.
   - [x] Criar `tests/infrastructure/storage/test_local_latent_skill_repository.py`.
   - [x] Cobrir operações CRUD básicas de `LocalLatentSkillRepository`: `read`, `list` com filtros de escopo e status, `write`, `delete` e `migrate`.
-  - [x] Cobrir manipulação e persistência no formato JSONL sob `.umem/memory/latent_skills.jsonl` (projeto) e `~/.local/share/universal-memory/memory/latent_skills.jsonl` (global).
+  - [x] Cobrir manipulação e persistência no formato JSONL sob `.umem/memory/latent_skills.jsonl` (projeto) e `~/.local/share/umem/memory/latent_skills.jsonl` (global; atualizado por BUG-002).
   - [x] Cobrir proteção contra concorrência e aquisição de locks (`.latent_skills.jsonl.lock`) seguindo a paridade com `local_fact_repository.py` e `local_rule_repository.py`.
 
 - [x] **Task 2: Escrever testes RED do use case de registro e tracking** (AC: 1, 2, 3)

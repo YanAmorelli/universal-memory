@@ -19,6 +19,7 @@ from universal_memory.application.security import (
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import AuditEventScope, Rule, RuleScope, RuleStatus
 from universal_memory.domain.ports import RuleRepository
+from universal_memory.infrastructure.security import LocalAuditLogRepository, LocalSnapshotRepository
 
 STALE_LOCK_SECONDS = 10.0
 
@@ -54,7 +55,7 @@ class LocalRuleRepository(RuleRepository):
         else:
             self.global_home = Path.home()
 
-        self.global_data_root = self.global_home / ".umem"
+        self.global_data_root = self._global_data_root(self.global_home)
         self.global_memory_root = self.global_data_root / "memory"
         self.global_rules_path = self.global_memory_root / "rules.jsonl"
 
@@ -62,10 +63,16 @@ class LocalRuleRepository(RuleRepository):
         self.global_safe_write_use_case = None
         if safe_write_use_case is not None:
             self.global_safe_write_use_case = SafeWriteUseCase(
-                project_root=self.global_home,
+                project_root=self.global_data_root,
                 secret_scanner=safe_write_use_case.secret_scanner,
-                snapshot_repository=safe_write_use_case.snapshot_repository,
-                audit_log_repository=safe_write_use_case.audit_log_repository,
+                snapshot_repository=LocalSnapshotRepository(
+                    project_root=self.global_data_root,
+                    data_root=self.global_data_root,
+                ),
+                audit_log_repository=LocalAuditLogRepository(
+                    project_root=self.global_data_root,
+                    data_root=self.global_data_root,
+                ),
             )
 
     @contextmanager
@@ -212,7 +219,7 @@ class LocalRuleRepository(RuleRepository):
         is_global = scope == RuleScope.global_
         safe_write = self.global_safe_write_use_case if is_global else self.safe_write_use_case
         if safe_write is not None:
-            relative_path = ".umem/memory/rules.jsonl"
+            relative_path = "memory/rules.jsonl" if is_global else ".umem/memory/rules.jsonl"
             safe_write.execute(
                 SafeWriteCommand(
                     relative_path=relative_path,
@@ -235,3 +242,12 @@ class LocalRuleRepository(RuleRepository):
 
     def _audit_scope_for(self, scope: RuleScope) -> AuditEventScope:
         return AuditEventScope.global_ if scope == RuleScope.global_ else AuditEventScope.project
+
+    @staticmethod
+    def _global_data_root(global_home: Path) -> Path:
+        if sys.platform == "win32":
+            local_appdata = os.environ.get("LOCALAPPDATA")
+            if local_appdata:
+                return Path(local_appdata) / "umem"
+            return global_home / "AppData" / "Local" / "umem"
+        return global_home / ".local" / "share" / "umem"

@@ -200,7 +200,7 @@ CLI traduz para mensagens Rich coloridas; MCP traduz para JSON-RPC error codes.
 Rationale: expressivo, idiomático em Python, cada interface traduz independentemente.
 
 **Gestão de Configuração:** TOML.
-Global: `~/.config/universal-memory/config.toml`
+Global: `~/.config/umem/config.toml`
 Por projeto: `<projeto>/.umem/config.toml`
 Leitura nativa com `tomllib` (Python 3.12+); escrita com `tomli-w`.
 Rationale: padrão do ecossistema Python moderno, suporta comentários, legível.
@@ -651,7 +651,7 @@ uv add --dev pytest pytest-cov ruff pyright
 
 ### Persistent Data Layout
 
-**Global data root:** `~/.local/share/universal-memory/`
+**Global data root:** `~/.local/share/umem/`
 
 **Project data root:** `.umem/`
 

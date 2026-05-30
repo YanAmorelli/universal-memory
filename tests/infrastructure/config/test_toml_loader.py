@@ -64,7 +64,7 @@ def test_load_config_uses_default_global_path_when_not_overridden(
 
     config = load_config(project_root=project_root)
 
-    assert config.global_config_path == tmp_path / ".config" / "universal-memory" / "config.toml"
+    assert config.global_config_path == tmp_path / ".config" / "umem" / "config.toml"
     assert config.project_config_path == project_config
     assert config.merged["project"]["name"] == "demo"
 

@@ -2370,7 +2370,7 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
     is_global = scope == "global"
 
     skill_path = "memory/latent_skills.jsonl" if is_global else ".umem/memory/latent_skills.jsonl"
-    config_path = "~/.config/universal-memory/config.toml" if is_global else ".umem/config.toml"
+    config_path = "~/.config/umem/config.toml" if is_global else ".umem/config.toml"
 
     lines = [
         "Operacao: skills.propose",

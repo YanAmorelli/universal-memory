@@ -46,7 +46,7 @@ def load_config(project_root: Path, global_config_path: Path | None = None) -> L
     resolved_global_config_path = (
         global_config_path.resolve()
         if global_config_path is not None
-        else Path.home() / ".config" / "universal-memory" / "config.toml"
+        else Path.home() / ".config" / "umem" / "config.toml"
     )
     project_config_path = normalized_project_root / ".umem" / "config.toml"
 
