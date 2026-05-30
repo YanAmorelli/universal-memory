@@ -36,7 +36,15 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
         ".umem/skills",
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
+        ".umem/skills/use-universal-memory/SKILL.md",
+        ".umem/memory/latent_skills.jsonl",
     ]
+    default_skill = tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md"
+    assert default_skill.is_file()
+    assert "umem context --scope project" in default_skill.read_text(encoding="utf-8")
+    assert "Use Universal Memory" in (
+        tmp_path / ".umem" / "memory" / "latent_skills.jsonl"
+    ).read_text(encoding="utf-8")
     assert (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8") == (
         '[project]\nname = ""\ncreated_by = "universal-memory"\n\n'
         '[hosts]\nenabled = [\n    "codex",\n    "claude_code",\n]\n'
@@ -80,6 +88,8 @@ def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path)
         ".umem/skills",
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
+        ".umem/skills/use-universal-memory/SKILL.md",
+        ".umem/memory/latent_skills.jsonl",
     ]
 
 

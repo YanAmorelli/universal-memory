@@ -221,19 +221,19 @@ Sequencia recomendada:
 10. `list_audit_events(scope="project")`
 11. `list_snapshots(scope="project")`
 12. Criar fixture valida em `.umem/memory/latent_skills.jsonl`, como na secao de Skills
-13. `list_skills(scope="project")`
+13. `list_skills()`
 14. `get_skill_detail(name_or_id=<id>)`
 15. `propose_skill(latent_skill_id=<id>, decision="sim")`
 16. `generate_skill(latent_skill_id=<id>, update_existing=false)`
 17. `deactivate_skill(latent_skill_id=<id>)`
 18. `activate_skill(latent_skill_id=<id>)`
-19. `update_skill(latent_skill_id=<id>, name="Nova Skill", trigger="quando revisar contexto")`
+19. `update_skill(latent_skill_id=<id>, name="Nova Skill", triggers=["quando revisar contexto"])`
 
 Validar:
 
 - Toda resposta MCP segue envelope com `ok`, `operation`, `scope`, `data`, `warnings`.
 - Erros destrutivos sem confirmacao retornam erro controlado.
-- Tools MCP de skills usam os nomes de argumentos expostos pelo schema MCP; nao reutilizar flags CLI como `--yes` ou `confirm`.
+- Tools MCP de skills usam os nomes de argumentos expostos pelo schema MCP; nao reutilizar flags CLI como `--yes`, `confirm` ou filtros nao expostos como `scope` em `list_skills()`.
 - Estado criado pelo MCP e visivel depois pelo CLI `umem`.
 - Estado criado pelo CLI e visivel depois pelo MCP.
 

@@ -473,3 +473,98 @@ Uso combinado sugerido:
 
 - fluxo corrigido com `deactivate_skill` validado via cliente FastMCP real: 19 passed, 0 failed
 - inspecao documental: `docs/alpha-sandbox-test-plan.md` lista `deactivate_skill` e inclui o passo `deactivate_skill(latent_skill_id=<id>)` antes de `activate_skill(latent_skill_id=<id>)`.
+
+## BUG-009 - Plano alpha usa `trigger` singular em `update_skill` MCP
+
+- Status: verified
+- Severidade: low
+- Superficie: Docs | MCP | Skills
+- Encontrado em: 2026-05-30
+- Contexto: durante nova execucao black-box do plano `docs/alpha-sandbox-test-plan.md` com cliente FastMCP real via `stdio`, a etapa final de skills MCP falhou ao seguir literalmente o plano.
+
+### Reproducao
+
+1. criar sandbox isolado com `HOME`, `XDG_CONFIG_HOME` e `XDG_DATA_HOME`
+2. subir `umem-mcp` via cliente FastMCP real usando `uv run --project <repo> umem-mcp`
+3. inicializar projeto com `initialize_project`
+4. criar fixture valida em `.umem/memory/latent_skills.jsonl`
+5. executar o fluxo MCP de skills ate `activate_skill(latent_skill_id=<id>)`
+6. chamar `update_skill(latent_skill_id=<id>, name="Nova Skill", trigger="quando revisar contexto")`
+
+### Esperado
+
+- o plano alpha deve usar os nomes reais dos argumentos MCP expostos pelo schema da tool
+- a etapa `update_skill` deve ser executavel por uma pessoa seguindo o plano literalmente
+
+### Obtido
+
+- FastMCP rejeita `trigger` como argumento inesperado
+- erro observado: `Unexpected keyword argument` em `trigger`
+- a chamada corrigida `update_skill(latent_skill_id=<id>, name="Nova Skill", triggers=["quando revisar contexto"])` funciona
+
+### Evidencias
+
+- sandbox MCP: `/tmp/umem-alpha.CVvZrW/mcp-project-full2`
+- tool real: `update_skill(latent_skill_id: str, name: str | None = None, description: str | None = None, triggers: list[str] | None = None, raw_markdown: str | None = None)`
+- plano: `docs/alpha-sandbox-test-plan.md`, secao `8. MCP Black-Box`, passo 19
+
+### Hipotese / Causa Raiz
+
+- o plano reutilizou o conceito singular do CLI `--trigger`, mas a tool MCP estabilizada usa `triggers` plural em formato de lista
+
+### Correcao
+
+- `docs/alpha-sandbox-test-plan.md` atualizado para usar `update_skill(latent_skill_id=<id>, name="Nova Skill", triggers=["quando revisar contexto"])`.
+
+### Verificacao
+
+- fluxo MCP corrigido validado via cliente FastMCP real: `MCP_ALPHA_OK project=/tmp/umem-alpha.CVvZrW/mcp-project-full2 fact_id=1fad751f-27d6-49ec-9531-d04901731843 latent_skill_id=9e5b5b6f-30bc-4d67-ab85-6e382e38278e`
+- compatibilidade CLI/MCP validada no mesmo sandbox: `CLI_MCP_COMPAT_OK project=/tmp/umem-alpha.CVvZrW/mcp-project-full2 global_home=/tmp/umem-alpha.CVvZrW/home`
+
+## BUG-010 - Plano alpha passa `scope` para `list_skills` MCP, mas a tool nao aceita filtros
+
+- Status: verified
+- Severidade: low
+- Superficie: Docs | MCP | Skills
+- Encontrado em: 2026-05-30
+- Contexto: durante nova execucao black-box do plano `docs/alpha-sandbox-test-plan.md` com cliente FastMCP real via `stdio`, o fluxo MCP de skills falhou ao seguir literalmente o passo `list_skills(scope="project")`.
+
+### Reproducao
+
+1. criar sandbox isolado com `HOME`, `XDG_CONFIG_HOME` e `XDG_DATA_HOME`
+2. subir `umem-mcp` via cliente FastMCP real usando `uv run --project <repo> umem-mcp`
+3. inicializar projeto com `initialize_project`
+4. criar fixture valida em `.umem/memory/latent_skills.jsonl`
+5. chamar `list_skills(scope="project")`
+
+### Esperado
+
+- o plano alpha deve usar apenas argumentos expostos pelo schema MCP real
+- o fluxo MCP de skills deve ser executavel literalmente por uma pessoa seguindo o plano
+
+### Obtido
+
+- FastMCP rejeita `scope` como argumento inesperado em `list_skills`
+- a tool real e exposta como `list_skills()` sem argumentos
+- ao corrigir a chamada para `list_skills()`, o fluxo MCP completo passa
+
+### Evidencias
+
+- sandbox MCP com falha por argumento: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-alpha-smoke.ds51m9tj/mcp-project`
+- erro observado: `Unexpected keyword argument` em `scope`
+- codigo MCP: `src/universal_memory/interfaces/mcp/server.py`
+- assinatura observada: `list_skills()`
+
+### Hipotese / Causa Raiz
+
+- o plano alpha reaproveitou o padrao de filtros por escopo de outras tools MCP, mas `list_skills` MCP atualmente lista skills sem aceitar argumentos
+
+### Correcao
+
+- `docs/alpha-sandbox-test-plan.md` atualizado para usar `list_skills()` no fluxo MCP de skills.
+- A validacao documental agora explicita que tools MCP de skills nao devem receber filtros nao expostos como `scope` em `list_skills()`.
+
+### Verificacao
+
+- fluxo alpha completo validado via runner sandbox com cliente FastMCP real por `stdio`: `ALPHA_SMOKE_OK sandbox=/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-alpha-smoke.mq1so31a`
+- o fluxo validado cobriu CLI, MCP, compatibilidade CLI/MCP, hosts, snapshots, rollback, purge, memoria local/global e geracao/ativacao/atualizacao de skills.

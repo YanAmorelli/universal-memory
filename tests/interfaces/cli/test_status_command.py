@@ -162,7 +162,7 @@ def test_status_bootstrap_uses_local_data_and_no_network(
     assert captured.err == ""
     assert payload["data"]["initialized"] is True
     assert payload["data"]["active_rules_count"] == 0
-    assert payload["data"]["registered_skills_count"] == 0
+    assert payload["data"]["registered_skills_count"] == 1
 
 
 def test_cli_adapter_requires_composed_status_dependency() -> None:

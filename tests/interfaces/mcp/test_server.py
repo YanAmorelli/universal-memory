@@ -920,4 +920,4 @@ async def test_bootstrap_server_uses_local_dependencies_without_network(
     assert payload["operation"] == "status"
     assert payload["data"]["initialized"] is True
     assert payload["data"]["active_rules_count"] == 0
-    assert payload["data"]["registered_skills_count"] == 0
+    assert payload["data"]["registered_skills_count"] == 1
