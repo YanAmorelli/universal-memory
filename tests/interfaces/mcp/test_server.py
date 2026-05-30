@@ -215,11 +215,17 @@ async def test_real_mcp_rollback_removes_file_created_by_first_remember(tmp_path
         "rollback_scope",
         {"scope": "project", "confirm": True},
     )
+    init_content = init_result.structured_content
+    remember_content = remember_result.structured_content
+    rollback_content = rollback_result.structured_content
 
-    assert init_result.structured_content["ok"] is True
-    assert remember_result.structured_content["ok"] is True
-    assert rollback_result.structured_content["ok"] is True
-    assert rollback_result.structured_content["operation"] == "rollback"
+    assert init_content is not None
+    assert remember_content is not None
+    assert rollback_content is not None
+    assert init_content["ok"] is True
+    assert remember_content["ok"] is True
+    assert rollback_content["ok"] is True
+    assert rollback_content["operation"] == "rollback"
     assert not (tmp_path / ".umem" / "memory" / "facts.jsonl").exists()
 
 
