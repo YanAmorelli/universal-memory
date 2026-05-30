@@ -245,6 +245,8 @@ async def test_destructive_mcp_errors_keep_uniform_envelope(tmp_path: Path) -> N
     purge_payload = purge_result.structured_content
     rollback_payload = rollback_result.structured_content
 
+    assert purge_payload is not None
+    assert rollback_payload is not None
     assert purge_payload == {
         "ok": False,
         "operation": "facts.purge",
