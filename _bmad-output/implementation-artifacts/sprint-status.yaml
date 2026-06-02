@@ -1,5 +1,5 @@
 # generated: 2026-06-01T23:27:13Z
-# last_updated: 2026-06-02T00:38:36Z
+# last_updated: 2026-06-02T01:09:07Z
 # project: universal-memory
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-01T23:27:13Z"
-last_updated: "2026-06-02T00:38:36Z"
+last_updated: "2026-06-02T01:09:07Z"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -74,7 +74,7 @@ development_status:
   4-3-implementar-matriz-de-paridade-cli-mcp: done
   4-4-mapear-erros-de-dom-nio-para-cli-e-json-rpc: done
   4-5-validar-conformidade-mcp-e-contratos-de-interface: done
-  4-6-exibir-identidade-visual-de-terminal-de-forma-segura: ready-for-dev
+  4-6-exibir-identidade-visual-de-terminal-de-forma-segura: review
   epic-4-retrospective: optional
 
   epic-5: in-progress
@@ -84,7 +84,7 @@ development_status:
   5-4-validar-leitura-de-contexto-por-host: done
   5-5-sincronizar-regras-consolidadas-para-instru-es: done
   5-6-onboarding-cli-de-sele-o-multi-runtime: done
-  5-7-atualiza-es-de-biblioteca-migra-o-de-schema-e-benchmarks: ready-for-dev
+  5-7-atualiza-es-de-biblioteca-migra-o-de-schema-e-benchmarks: review
   epic-5-retrospective: optional
 
   epic-6: in-progress
