@@ -200,6 +200,117 @@ def test_init_human_uses_pt_br_overlay_when_configured(
     assert "Local memory already initialized." not in captured.out
 
 
+def test_init_human_interactive_renders_terminal_splash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr(
+        "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
+    )
+
+    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "umem" in captured.out
+    assert "USB" in captured.out
+    assert "==" in captured.out
+    assert captured.out.index("USB") < captured.out.index(".umem/")
+    assert "\x1b[" in captured.out
+
+
+def test_init_json_never_renders_terminal_splash_or_ansi(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+
+    exit_code = cli_main(["init", "--format", "json"], setup_project_command=_setup_project_command)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out.startswith("{")
+    assert json.loads(captured.out)["ok"] is True
+    assert "USB" not in captured.out
+    assert "\x1b[" not in captured.out
+
+
+@pytest.mark.parametrize(
+    ("stdin_tty", "stdout_tty"),
+    [(False, True), (True, False)],
+)
+def test_init_non_interactive_does_not_render_terminal_splash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    stdin_tty: bool,
+    stdout_tty: bool,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: stdin_tty)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: stdout_tty)
+    monkeypatch.setattr(
+        "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
+    )
+
+    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "USB" not in captured.out
+    assert "\x1b[" not in captured.out
+
+
+def test_init_ci_environment_does_not_render_terminal_splash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr(
+        "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
+    )
+
+    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "USB" not in captured.out
+    assert "\x1b[" not in captured.out
+
+
+def test_init_no_color_renders_plain_ascii_splash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setenv("NO_COLOR", "")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr(
+        "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
+    )
+
+    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "umem" in captured.out
+    assert "USB" in captured.out
+    assert "\x1b[" not in captured.out
+
+
 def test_init_module_execution_exits_with_process_status_and_json(
     tmp_path: Path,
 ) -> None:

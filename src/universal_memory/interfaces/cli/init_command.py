@@ -95,6 +95,12 @@ from universal_memory.interfaces.errors import (
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
+INIT_SPLASH_MARKER = "USB"
+INIT_SPLASH_LINES = (
+    "umem",
+    "[USB]====[universal-memory]====[terminal]",
+    "portable memory for AI agents",
+)
 SetupProjectCommand = (
     Callable[[Path, list[str] | None], SetupProjectResult] | Callable[[Path], SetupProjectResult]
 )
@@ -864,6 +870,43 @@ def _stderr_console() -> Console:
     return Console(file=sys.stderr, width=200)
 
 
+def _stream_is_tty(stream: Any) -> bool:
+    try:
+        return bool(stream.isatty())
+    except Exception:
+        return False
+
+
+def _ci_environment_enabled() -> bool:
+    return bool(os.environ.get("CI"))
+
+
+def _terminal_color_enabled() -> bool:
+    if "NO_COLOR" in os.environ:
+        return False
+    return os.environ.get("TERM", "") != "dumb"
+
+
+def _should_render_init_splash(output_format: str) -> bool:
+    return (
+        output_format != "json"
+        and _stream_is_tty(sys.stdout)
+        and _stream_is_tty(sys.stdin)
+        and not _ci_environment_enabled()
+    )
+
+
+def _render_init_splash() -> None:
+    banner = "\n".join(INIT_SPLASH_LINES) + "\n"
+    if _terminal_color_enabled():
+        banner = (
+            f"\x1b[36m{INIT_SPLASH_LINES[0]}\x1b[0m\n"
+            f"\x1b[90m{INIT_SPLASH_LINES[1]}\x1b[0m\n"
+            f"{INIT_SPLASH_LINES[2]}\n"
+        )
+    sys.stdout.write(banner)
+
+
 def _confirm(prompt: str, default: bool = False) -> bool:
     answer = input(prompt)
     val = answer.strip().lower()
@@ -883,6 +926,8 @@ def _run_init(  # noqa: PLR0913
 ) -> int:
     locale = project_locale(Path.cwd()) if output_format != "json" else "en"
     try:
+        if _should_render_init_splash(output_format):
+            _render_init_splash()
         host_ids = _selected_init_hosts(
             selected_hosts,
             output_format=output_format,

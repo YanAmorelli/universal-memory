@@ -1,6 +1,6 @@
 # Story 4.6: Exibir Identidade Visual de Terminal de Forma Segura
 
-Status: ready-for-dev
+Status: review
 
 ## História
 
@@ -45,17 +45,17 @@ para que a ferramenta tenha uma identidade visual reconhecível sem quebrar auto
 
 ## Tarefas
 
-- [ ] Criar testes primeiro para a política de exibição do splash no CLI `init`.
-- [ ] Cobrir o caso positivo: `umem init` humano, `stdout.isatty() == True`, sem `--format json`, sem CI, sem `NO_COLOR`, renderiza banner compacto antes do output humano.
-- [ ] Cobrir supressão por `--format json`: stdout deve continuar começando com `{`, ser parseável por `json.loads`, e não conter marca/bordas/escape codes do splash.
-- [ ] Cobrir supressão em modo não interativo: quando `stdout.isatty() == False` ou `stdin.isatty() == False`, `umem init` não renderiza splash.
-- [ ] Cobrir supressão por CI/CD: quando `CI` está definido com valor truthy, `umem init` não renderiza splash.
-- [ ] Cobrir fallback `NO_COLOR`: com `NO_COLOR` definido e TTY interativo, renderizar versão sem escape ANSI.
-- [ ] Implementar helper pequeno no adapter CLI para decidir se o splash deve ser exibido, evitando espalhar condicionais no comando.
-- [ ] Implementar renderização ASCII/ANSI sem dependências externas novas, usando Rich/Console já disponível ou strings ANSI nativas conforme a arquitetura.
-- [ ] Chamar o splash apenas no fluxo humano de `_run_init`, antes do status spinner ou antes do output final, garantindo que ele não apareça em stderr e não contamine JSON.
-- [ ] Garantir que `--format json`, MCP e testes de paridade não sejam alterados por esta story.
-- [ ] Executar testes focados e validação geral mínima antes de marcar a story como concluída.
+- [x] Criar testes primeiro para a política de exibição do splash no CLI `init`.
+- [x] Cobrir o caso positivo: `umem init` humano, `stdout.isatty() == True`, sem `--format json`, sem CI, sem `NO_COLOR`, renderiza banner compacto antes do output humano.
+- [x] Cobrir supressão por `--format json`: stdout deve continuar começando com `{`, ser parseável por `json.loads`, e não conter marca/bordas/escape codes do splash.
+- [x] Cobrir supressão em modo não interativo: quando `stdout.isatty() == False` ou `stdin.isatty() == False`, `umem init` não renderiza splash.
+- [x] Cobrir supressão por CI/CD: quando `CI` está definido com valor truthy, `umem init` não renderiza splash.
+- [x] Cobrir fallback `NO_COLOR`: com `NO_COLOR` definido e TTY interativo, renderizar versão sem escape ANSI.
+- [x] Implementar helper pequeno no adapter CLI para decidir se o splash deve ser exibido, evitando espalhar condicionais no comando.
+- [x] Implementar renderização ASCII/ANSI sem dependências externas novas, usando Rich/Console já disponível ou strings ANSI nativas conforme a arquitetura.
+- [x] Chamar o splash apenas no fluxo humano de `_run_init`, antes do status spinner ou antes do output final, garantindo que ele não apareça em stderr e não contamine JSON.
+- [x] Garantir que `--format json`, MCP e testes de paridade não sejam alterados por esta story.
+- [x] Executar testes focados e validação geral mínima antes de marcar a story como concluída.
 
 ## Contexto / Guardrails do Desenvolvedor
 
@@ -167,17 +167,17 @@ Lições e guardrails aplicáveis:
 
 ## Checklist de validação
 
-- [ ] Story implementada com mudança restrita ao adapter CLI/testes relevantes.
-- [ ] Banner aparece somente em `umem init` humano interativo permitido.
-- [ ] Banner não aparece em `--format json` e JSON continua parseável.
-- [ ] Banner não aparece em CI/CD.
-- [ ] Banner não aparece em modo não interativo/redirecionado.
-- [ ] `NO_COLOR` remove todos os ANSI escapes do splash e mantém arte legível.
-- [ ] Nenhum comportamento MCP foi alterado.
-- [ ] Testes de paridade CLI/MCP continuam passando.
-- [ ] Não foram adicionadas dependências novas.
-- [ ] Não houve alteração em `sprint-status.yaml`.
-- [ ] Dev Agent Record deve registrar comandos executados, resultados e qualquer divergência residual.
+- [x] Story implementada com mudança restrita ao adapter CLI/testes relevantes.
+- [x] Banner aparece somente em `umem init` humano interativo permitido.
+- [x] Banner não aparece em `--format json` e JSON continua parseável.
+- [x] Banner não aparece em CI/CD.
+- [x] Banner não aparece em modo não interativo/redirecionado.
+- [x] `NO_COLOR` remove todos os ANSI escapes do splash e mantém arte legível.
+- [x] Nenhum comportamento MCP foi alterado.
+- [x] Testes de paridade CLI/MCP continuam passando.
+- [x] Não foram adicionadas dependências novas.
+- [x] Não houve alteração em `sprint-status.yaml`.
+- [x] Dev Agent Record deve registrar comandos executados, resultados e qualquer divergência residual.
 
 ## Referências
 
@@ -190,3 +190,45 @@ Lições e guardrails aplicáveis:
 ## Completion Note
 
 Ultimate context engine analysis completed - comprehensive developer guide created.
+
+## Dev Agent Record
+
+### Implementation Plan
+
+- Adicionar testes de adapter CLI para política do splash antes da implementação.
+- Manter o splash restrito ao `init` humano interativo, com helper privado para centralizar `format`, TTY e CI.
+- Renderizar arte ASCII compacta com ANSI nativo apenas quando cor for permitida, preservando fallback texto plano com `NO_COLOR`.
+- Validar que JSON, paridade CLI/MCP e conformidade MCP continuam sem alterações de contrato.
+
+### Debug Log
+
+- `uv run pytest tests/interfaces/cli/test_init_command.py` após adicionar testes: falhou inicialmente como esperado por ausência do splash; ajustes nos testes isolaram dependências de host e mantiveram falhas focadas em `USB` ausente.
+- `uv run pytest tests/interfaces/cli/test_init_command.py`: 18 passed.
+- `uv run pytest tests/interfaces/test_parity.py`: 16 passed.
+- `uv run pytest tests/interfaces/mcp/test_compliance.py`: 4 passed.
+- `uv run ruff check .`: falhou inicialmente por linhas longas; formatação ajustada.
+- `uv run ruff check .`: All checks passed.
+- `uv run pyright`: 0 errors, 0 warnings, 0 informations.
+- `uv run pytest`: 403 passed.
+- `uv run pytest tests/interfaces/test_parity.py`: 16 passed.
+- `uv run pytest tests/interfaces/mcp/test_compliance.py`: 4 passed.
+
+### Completion Notes
+
+- Implementado splash compacto ASCII/ANSI para `umem init` somente quando `output_format != "json"`, `stdin` e `stdout` são TTY e `CI` não está definido com valor truthy.
+- Implementado fallback sem cor quando `NO_COLOR` está presente ou `TERM=dumb`, mantendo a marca e o marcador ASCII `USB` legíveis.
+- Splash é escrito apenas em stdout no fluxo humano de `_run_init`, antes da seleção de hosts, spinner e output final.
+- JSON de `init`, payloads MCP e contratos de paridade não foram alterados.
+- Nenhuma dependência nova foi adicionada.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` não foi alterado, conforme guardrail do usuário.
+
+## File List
+
+- `src/universal_memory/interfaces/cli/init_command.py`
+- `tests/interfaces/cli/test_init_command.py`
+- `_bmad-output/implementation-artifacts/4-6-exibir-identidade-visual-de-terminal-de-forma-segura.md`
+
+## Change Log
+
+- 2026-06-01: Adicionado splash seguro do `umem init` para terminais humanos interativos, com supressão em JSON, CI e modo não interativo, mais fallback `NO_COLOR`.
+- 2026-06-01: Adicionados testes focados de política do splash e executada validação completa da story.
