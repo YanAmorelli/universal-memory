@@ -47,6 +47,12 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert 'name: "use-universal-memory"' in skill_content
     assert 'name: "Use Universal Memory"' not in skill_content
     assert "umem context --scope project" in skill_content
+    assert "umem status --format json" in skill_content
+    assert "umem skills list --format json" in skill_content
+    assert "umem skills detail <skill-id-or-name> --format json" in skill_content
+    assert "Codex, Claude Code, and other agents" in skill_content
+    assert "Required Startup Procedure" in skill_content
+    assert "Command Reference" in skill_content
     assert "--scope global" in skill_content
     assert "--scope project" in skill_content
     assert "--tag preference" in skill_content
@@ -54,7 +60,8 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "secrets" in skill_content
     assert "credentials" in skill_content
     assert "sensitive personal data" in skill_content
-    assert "review durable learnings" in skill_content
+    assert "Record only stable facts" in skill_content
+    assert "Do not skip steps 1-3" in skill_content
     latent_skill_line = (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").read_text(
         encoding="utf-8"
     )

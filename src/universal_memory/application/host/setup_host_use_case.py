@@ -78,6 +78,7 @@ class ConfigureHostCommand:
     apply: bool = False
     check: bool = False
     instruction_blocks: list[InstructionBlock] = field(default_factory=list)
+    shared_manifest_available: bool | None = None
     max_managed_lines: int = DEFAULT_MAX_MANAGED_LINES
     max_managed_chars: int = DEFAULT_MAX_MANAGED_CHARS
     origin: str = "host_setup"
@@ -480,8 +481,13 @@ class ConfigureHostUseCase:
         command: ConfigureHostCommand,
     ) -> PreparedInstructionTarget:
         partition = partition_instruction_blocks(instruction_blocks)
+        shared_manifest_available = True
+        if target.name == InstructionTargetType.claude_md:
+            shared_manifest_available = self._shared_manifest_available(command)
 
         supported = set(getattr(c, "value", c) for c in target.supported_classifications)
+        if target.name == InstructionTargetType.claude_md and not shared_manifest_available:
+            supported.add(InstructionClassification.shared_policy.value)
         warnings = []
         for block in instruction_blocks:
             classification_val = getattr(block.classification, "value", block.classification)
@@ -497,7 +503,12 @@ class ConfigureHostUseCase:
             if partition.canonical_documents:
                 raise ValidationFailedError("Host Claude Code nao suporta documentos canonicos.")
             managed_content = self._render_claude_managed_block(
-                self._target_manifest_blocks(partition, target)
+                self._target_manifest_blocks(
+                    partition,
+                    target,
+                    include_shared_policy=not shared_manifest_available,
+                ),
+                shared_manifest_available=shared_manifest_available,
             )
         else:
             canonical_documents = partition.canonical_documents
@@ -522,6 +533,11 @@ class ConfigureHostUseCase:
             canonical_documents=canonical_documents,
             warnings=warnings,
         )
+
+    def _shared_manifest_available(self, command: ConfigureHostCommand) -> bool:
+        if command.shared_manifest_available is not None:
+            return command.shared_manifest_available
+        return bool(self._read_existing("AGENTS.md"))
 
     def _drift_content(
         self,
@@ -706,14 +722,27 @@ class ConfigureHostUseCase:
             UMEM_START,
             "# Universal Memory Active Policy",
             "> [!IMPORTANT]",
-            "> Antes de iniciar qualquer tarefa de codificação, consulte a Short Term Memory "
-            "deste repositório executando `umem context --scope project` ou usando as ferramentas "
-            "MCP correspondentes.",
+            "> `umem` é a memória operacional deste projeto. Antes de planejar, editar, "
+            "investigar ou revisar, carregue a memória com `umem status --format json`, "
+            "`umem context --scope project --format json` e `umem skills list --format json` "
+            "ou use as ferramentas MCP/FastMCP equivalentes.",
+            "> Leia e siga `.umem/skills/use-universal-memory/SKILL.md`. Se houver skill "
+            "ativa relevante, consulte `umem skills detail <skill-id-or-name> --format json` "
+            "antes de agir.",
             "> Ao registrar aprendizados, use `--scope global` para preferências duráveis do "
             "usuário entre projetos e `--scope project` para decisões, comandos e contexto deste "
-            "repositório.",
-            "> Use a skill `.umem/skills/use-universal-memory/SKILL.md` para decidir quando "
-            "consultar `umem skills list`, `umem skills detail` e registrar novos aprendizados.",
+            "repositório. Nunca grave segredos, dumps extensos ou fatos incertos.",
+            "",
+            "## Bootstrap Obrigatório",
+            "- Execute `umem status --format json` para validar a integração.",
+            "- Execute `umem context --scope project --format json` e trate o resultado "
+            "como contexto ativo.",
+            "- Execute `umem skills list --format json`; para cada skill relevante, "
+            "execute `umem skills detail <skill-id-or-name> --format json`.",
+            "- Se MCP/FastMCP estiver disponível, prefira as ferramentas equivalentes; "
+            "se não estiver, use os comandos CLI acima.",
+            "- Mantenha `AGENTS.md` e `CLAUDE.md` compactos: eles apontam para `umem`, "
+            "não armazenam dumps de memória.",
             "",
             "## Regras Operacionais Consolidadas",
         ]
@@ -735,19 +764,84 @@ class ConfigureHostUseCase:
         lines.append(UMEM_END)
         return "\n".join(lines) + "\n"
 
-    def _render_claude_managed_block(self, blocks: list[ManifestInstruction]) -> str:
+    def _render_claude_managed_block(
+        self,
+        blocks: list[ManifestInstruction],
+        *,
+        shared_manifest_available: bool,
+    ) -> str:
+        if shared_manifest_available:
+            title = "# Claude Delta Instructions"
+            scope_line = (
+                "> Leia `AGENTS.md` como manifesto compartilhado. Este arquivo contém apenas "
+                "deltas específicos para Claude Code, mas o uso de `umem` continua obrigatório."
+            )
+            memory_line = (
+                "> Antes de planejar, editar, investigar ou revisar, carregue `umem` com "
+                "`umem status --format json`, `umem context --scope project --format json` "
+                "e `umem skills list --format json`, ou use as ferramentas MCP/FastMCP "
+                "equivalentes."
+            )
+            policy_line = (
+                "> Leia e siga `.umem/skills/use-universal-memory/SKILL.md`. Se houver skill "
+                "ativa relevante, consulte `umem skills detail <skill-id-or-name> --format json` "
+                "antes de agir."
+            )
+            section_title = "## Deltas do Provedor"
+            empty_line = "- Nenhum delta especifico registrado para Claude Code."
+        else:
+            title = "# Claude Code Universal Memory Instructions"
+            scope_line = (
+                "> Use este arquivo como a referencia operacional do Claude Code neste projeto. "
+                "Ele consolida como recuperar contexto, aplicar regras ativas e registrar "
+                "aprendizados "
+                "quando `AGENTS.md` ainda nao existe."
+            )
+            memory_line = (
+                "> Antes de planejar, editar, investigar ou revisar, carregue `umem` com "
+                "`umem status --format json`, `umem context --scope project --format json` "
+                "e `umem skills list --format json`, ou use as ferramentas MCP/FastMCP "
+                "equivalentes."
+            )
+            policy_line = (
+                "> Leia e siga `.umem/skills/use-universal-memory/SKILL.md`. Se houver skill "
+                "ativa relevante, consulte `umem skills detail <skill-id-or-name> --format json` "
+                "antes de agir."
+            )
+            section_title = "## Regras Operacionais"
+            empty_line = (
+                "- Nenhuma regra consolidada registrada; use "
+                "`umem context --scope project` para recuperar contexto sob demanda."
+            )
         lines = [
             UMEM_START,
-            "# Claude Delta Instructions",
-            "> Leia `AGENTS.md` como manifesto compartilhado quando ele existir; este arquivo "
-            "contem apenas deltas especificos para Claude Code.",
-            "> Integracao MCP/FastMCP: contexto universal-memory disponivel via "
-            "`umem context --scope project`; valide a configuracao com `umem status`.",
-            "> Para a politica global/local de memoria, consulte `AGENTS.md` e a skill "
-            "`.umem/skills/use-universal-memory/SKILL.md`; liste skills com `umem skills list`.",
+            title,
+            scope_line,
+            memory_line,
+            policy_line,
             "",
-            "## Deltas do Provedor",
         ]
+
+        if not shared_manifest_available:
+            lines.extend(
+                [
+                    "## Fluxo Padrao",
+                    "- Execute `umem status --format json` para validar a integração.",
+                    "- Execute `umem context --scope project --format json` e trate o "
+                    "resultado como contexto ativo.",
+                    "- Execute `umem skills list --format json`; para cada skill relevante, "
+                    "execute `umem skills detail <skill-id-or-name> --format json`.",
+                    "- Ao encontrar uma preferencia duravel do usuario, registre como memoria "
+                    "global; ao encontrar decisao ou detalhe deste repositorio, registre como "
+                    "memoria do projeto.",
+                    "- Preserve conteudo manual fora do bloco UMEM e mantenha este bloco "
+                    "compacto, apontando para documentos externos quando a orientacao ficar "
+                    "longa.",
+                    "",
+                ]
+            )
+
+        lines.append(section_title)
 
         if blocks:
             for block in blocks:
@@ -757,7 +851,7 @@ class ConfigureHostUseCase:
                     for subline in lines_content[1:]:
                         lines.append(f"  {subline}")
         else:
-            lines.append("- Nenhum delta especifico registrado para Claude Code.")
+            lines.append(empty_line)
         lines.append(UMEM_END)
         return "\n".join(lines) + "\n"
 
@@ -765,8 +859,12 @@ class ConfigureHostUseCase:
         self,
         partition: InstructionPartition,
         target: InstructionTarget,
+        *,
+        include_shared_policy: bool = False,
     ) -> list[ManifestInstruction]:
         supported = set(target.supported_classifications)
+        if include_shared_policy:
+            supported.add(InstructionClassification.shared_policy)
         return [block for block in partition.manifest_blocks if block.classification in supported]
 
     def _render_canonical_document(self, document: CanonicalDocument) -> str:

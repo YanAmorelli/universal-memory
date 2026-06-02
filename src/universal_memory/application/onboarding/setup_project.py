@@ -18,14 +18,20 @@ DEFAULT_UMEM_SKILL_RELATIVE_PATH = ".umem/skills/use-universal-memory/SKILL.md"
 DEFAULT_UMEM_LATENT_SKILLS_RELATIVE_PATH = ".umem/memory/latent_skills.jsonl"
 DEFAULT_UMEM_SKILL_MARKDOWN = """---
 name: "use-universal-memory"
-description: "Use umem to inspect project memory, skills, and durable learnings."
+description: "Operational guide for using umem memory, skills, and durable learnings."
 triggers:
   - "at the start of a work session"
   - "before implementing, investigating, or reviewing code"
   - "when project memory, facts, or skills are needed"
+  - "when instructions mention AGENTS.md, CLAUDE.md, memory, context, or learned preferences"
+  - "before changing project conventions, architecture, workflows, or documentation"
 ---
 
 # Use Universal Memory
+
+`umem` is the project memory layer. It stores short, curated facts and skills outside
+agent-specific instruction files so Codex, Claude Code, and other agents can recover the
+same context without duplicating or rewriting `AGENTS.md` and `CLAUDE.md`.
 
 ## When To Use
 
@@ -34,16 +40,36 @@ triggers:
   decisions.
 - When the user asks to inspect memory, context, facts, rules, or skills.
 - After discovering a durable decision that should be remembered for future work.
+- Before editing instructions, specs, docs, tests, or source files when the repository has
+  `.umem/`.
 
-## Procedure
+## Required Startup Procedure
 
-1. Run `umem status` to confirm the project is initialized.
-2. Run `umem context --scope project` to load relevant facts and preferences.
-3. Run `umem skills list` to inspect registered or candidate skills.
-4. If a skill looks relevant, run `umem skills detail <name-or-id>` before acting.
-5. Use `umem facts list --scope project` when individual facts need to be audited.
-6. During or at the end of the activity, review durable learnings and record only short,
-   verifiable, non-sensitive facts.
+1. Run `umem status --format json` to confirm the project is initialized and to inspect
+   memory health.
+2. Run `umem context --scope project --format json` before planning or editing. Treat the
+   returned context as active project guidance.
+3. Run `umem skills list --format json` to inspect active and candidate skills.
+4. For every relevant active skill, run `umem skills detail <skill-id-or-name> --format json`
+   and follow that skill before acting.
+5. If no skill applies, continue with the loaded context. Do not skip steps 1-3 just because
+   the task looks small.
+
+Use the MCP/FastMCP tools with equivalent names when they are available. If the MCP tools
+are unavailable, use the CLI commands above.
+
+## Command Reference
+
+```bash
+umem status --format json
+umem context --scope project --format json
+umem skills list --format json
+umem skills detail <skill-id-or-name> --format json
+umem facts list --scope project --format json
+umem facts list --scope global --format json
+umem remember "Short verified fact." --scope project --tag workflow --format json
+umem remember "Durable user preference." --scope global --tag preference --format json
+```
 
 ## Global Memory Vs Project Memory
 
@@ -54,12 +80,15 @@ triggers:
 - `umem context --scope project` loads project memory together with relevant global
   preferences.
 
-## Examples
+## Recording Procedure
 
-```bash
-umem remember "Prefer concise responses in English." --scope global --tag preference
-umem remember "Project uses Firebase Admin/ADC backend-only." --scope project --tag architecture
-```
+1. Record only stable facts that will help a future session.
+2. Prefer one short sentence per fact.
+3. Use `--scope global` only for cross-project user preferences.
+4. Use `--scope project` for repository-specific decisions, commands, bugs, architecture,
+   workflows, and documentation conventions.
+5. Add a tag such as `preference`, `architecture`, `workflow`, `bug`, `testing`, or `docs`.
+6. If the fact is uncertain, ask or verify before recording.
 
 ## Criteria For Recording Memory
 
@@ -69,12 +98,21 @@ umem remember "Project uses Firebase Admin/ADC backend-only." --scope project --
   sensitive personal data, or uncertain information.
 - Prefer short, verifiable facts with tags such as `architecture`, `workflow`, or `bug`.
 
+## Examples
+
+```bash
+umem remember "Prefer concise responses in English." --scope global --tag preference
+umem remember "Project uses Firebase Admin/ADC backend-only." --scope project --tag architecture
+```
+
 ## Guardrails
 
 - Do not run `purge`, `rollback`, or `hygiene` without explicit user confirmation.
 - Do not paste full memory dumps into host instruction files.
 - Do not persist tokens, keys, env dumps, sensitive data, or facts you have not verified.
 - If `umem status` reports an initialization problem, report it before continuing.
+- Keep `AGENTS.md` and `CLAUDE.md` compact. They should point to `umem`, not contain raw
+  memory dumps.
 """
 
 

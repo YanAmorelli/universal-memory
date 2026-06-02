@@ -192,6 +192,10 @@ def test_setup_preserves_manual_content_outside_managed_block(
     assert "Universal Memory Active Policy" in content
     managed_block = content.split("<!-- UMEM: START -->", 1)[1].split("<!-- UMEM: END -->", 1)[0]
     assert "umem context --scope project" in managed_block
+    assert "umem status --format json" in managed_block
+    assert "umem skills list --format json" in managed_block
+    assert "umem skills detail <skill-id-or-name> --format json" in managed_block
+    assert "Bootstrap Obrigatório" in managed_block
     assert "--scope global" in managed_block
     assert "--scope project" in managed_block
     assert "aprendizados" in managed_block
@@ -280,7 +284,7 @@ def test_claude_md_target_allows_only_delta_classifications(
     ]
 
 
-def test_claude_code_setup_writes_only_delta_blocks_to_claude_md(
+def test_claude_code_setup_without_agents_md_includes_shared_policy_in_claude_md(
     tmp_path: Path,
     configured_use_case: ConfigureHostUseCase,
 ) -> None:
@@ -321,7 +325,53 @@ def test_claude_code_setup_writes_only_delta_blocks_to_claude_md(
     assert "<!-- UMEM: END -->" in claude_content
     assert "Use CLAUDE.md only for Claude-specific deltas." in claude_content
     assert "When editing Claude instructions, preserve manual content." in claude_content
+    assert "Use relative paths in specs, code and docs." in claude_content
+    assert "Claude Code Universal Memory Instructions" in claude_content
+    assert "Use este arquivo como a referencia operacional" in claude_content
+    assert "umem status --format json" in claude_content
+    assert "umem skills list --format json" in claude_content
+    assert "umem skills detail <skill-id-or-name> --format json" in claude_content
+    assert "## Regras Operacionais" in claude_content
+
+
+def test_claude_code_setup_with_agents_md_writes_only_delta_blocks_to_claude_md(
+    tmp_path: Path,
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    (tmp_path / "AGENTS.md").write_text(
+        "<!-- UMEM: START -->\n"
+        "- (shared_policy) Use relative paths in specs, code and docs.\n"
+        "<!-- UMEM: END -->\n",
+        encoding="utf-8",
+    )
+
+    configured_use_case.execute(
+        ConfigureHostCommand(
+            host_id="claude_code",
+            apply=True,
+            instruction_blocks=[
+                InstructionBlock(
+                    title="Shared Policy",
+                    content="Use relative paths in specs, code and docs.",
+                    classification="shared_policy",
+                ),
+                InstructionBlock(
+                    title="Claude Delta",
+                    content="Use CLAUDE.md only for Claude-specific deltas.",
+                    classification="provider_delta",
+                ),
+            ],
+            origin="test",
+        )
+    )
+
+    claude_content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+
+    assert "Use CLAUDE.md only for Claude-specific deltas." in claude_content
     assert "Use relative paths in specs, code and docs." not in claude_content
+    assert "contém apenas" in claude_content
+    assert "umem status --format json" in claude_content
+    assert "umem skills detail <skill-id-or-name> --format json" in claude_content
 
 
 def test_claude_code_setup_without_deltas_passes_own_read_validator(
@@ -344,9 +394,10 @@ def test_claude_code_setup_without_deltas_passes_own_read_validator(
     assert "universal-memory" in claude_content
     assert "umem context" in claude_content
     assert "umem status" in claude_content
-    assert "AGENTS.md" in claude_content
+    assert "umem skills list --format json" in claude_content
+    assert "umem skills detail <skill-id-or-name> --format json" in claude_content
     assert ".umem/skills/use-universal-memory/SKILL.md" in claude_content
-    assert "politica" in claude_content
+    assert "registre como memoria global" in claude_content
     assert "--scope global" not in claude_content
     details = json.loads(audit_log_repository.events[-1].details or "{}")
     assert details["checks"]["managed_block_has_mcp_reference"] is True
@@ -382,7 +433,7 @@ def test_claude_code_setup_preserves_manual_content_outside_managed_block(
     assert content.startswith("# Claude manual notes\n\nKeep this.")
     assert content.endswith("Tail note.\n")
     assert "old" not in content
-    assert "Claude Delta Instructions" in content
+    assert "Claude Code Universal Memory Instructions" in content
     assert "Prefer CLAUDE.md deltas over duplicated shared policy." in content
 
 
