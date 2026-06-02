@@ -568,3 +568,43 @@ Uso combinado sugerido:
 
 - fluxo alpha completo validado via runner sandbox com cliente FastMCP real por `stdio`: `ALPHA_SMOKE_OK sandbox=/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-alpha-smoke.mq1so31a`
 - o fluxo validado cobriu CLI, MCP, compatibilidade CLI/MCP, hosts, snapshots, rollback, purge, memoria local/global e geracao/ativacao/atualizacao de skills.
+
+## BUG-011 - Banner ANSI do `umem init` ainda renderiza quebrado
+
+- Status: open
+- Severidade: low
+- Superficie: CLI
+- Encontrado em: 2026-06-02
+- Contexto: durante a inclusao da identidade visual do `umem init`, o banner ANSI foi salvo mesmo ainda apresentando renderizacao quebrada.
+
+### Reproducao
+
+1. executar `umem init` em terminal com suporte a cor
+2. observar o splash exibido antes do prompt de selecao de runtimes
+
+### Esperado
+
+- banner visual alinhado, legivel e consistente em terminais comuns
+- fallback sem cor legivel quando ANSI nao estiver habilitado
+
+### Obtido
+
+- banner ANSI conhecido como quebrado/desalinhado
+- alteracao foi preservada para correcao posterior
+
+### Evidencias
+
+- `src/universal_memory/interfaces/cli/init_command.py`
+- `assets/umem-logo.png`
+
+### Hipotese / Causa Raiz
+
+- conversao do asset visual para ANSI precisa de ajuste de largura, paleta ou estrategia de renderizacao
+
+### Correcao
+
+- pendente
+
+### Verificacao
+
+- pendente

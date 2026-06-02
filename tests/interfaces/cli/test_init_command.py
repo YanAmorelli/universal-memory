@@ -291,8 +291,8 @@ def test_init_human_interactive_prompts_for_runtime_indices(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert prompts == ["Para quais runtime(s) voce quer instalar? [1 2 3 4 5]: "]
-    assert "Para quais runtime(s) voce quer instalar?" in captured.out
+    assert prompts == ["Which runtime(s) would you like to install for? [1 2 3 4 5]: "]
+    assert "Which runtime(s) would you like to install for?" in captured.out
     assert "1. Claude Code (tier_1)" in captured.out
     assert "2. OpenCode (tier_1)" in captured.out
     assert "3. Codex/OpenAI-class (tier_1)" in captured.out
