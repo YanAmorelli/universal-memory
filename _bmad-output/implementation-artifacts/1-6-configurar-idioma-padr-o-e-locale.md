@@ -1,6 +1,6 @@
 # Story 1.6: Configurar Idioma Padrão e Locale
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -56,6 +56,8 @@ para que a saída da CLI, instruções geradas e templates de skills sejam consi
 
 ### Review Findings
 
+- [x] [Review][Patch] Erros de parsing Typer/Click quebram `--format json` [src/universal_memory/interfaces/cli/init_command.py:221] — resolvido; `ClickException` com `--format json` agora emite envelope JSON padrão.
+- [x] [Review][Patch] Prompt interativo de runtimes ignora locale `pt-BR` [src/universal_memory/interfaces/cli/init_command.py:1017] — resolvido; seleção interativa de runtimes usa `human_message(...)` e overlay `pt-BR`.
 - [x] [Review][Patch] Help humano padrao ainda expõe textos em portugues, violando English-first [src/universal_memory/interfaces/cli/init_command.py:237] — resolvido; CLI/help/saidas humanas publicas migradas para ingles canonico por padrao, mantendo overlay explicito `pt-BR`.
 - [x] [Review][Patch] Fallback de erro humano usa `pt-BR` quando nenhum locale foi resolvido [src/universal_memory/interfaces/cli/init_command.py:2685] — resolvido; fallback sem locale explicito agora e `en`.
 - [x] [Review][Patch] Catalogo de mensagens importa infraestrutura diretamente na camada CLI [src/universal_memory/interfaces/cli/message_catalog.py:3] — resolvido; resolucao de locale movida para bootstrap via `locale_resolver`, mantendo catalogo puro.

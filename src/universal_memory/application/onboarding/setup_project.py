@@ -104,22 +104,27 @@ def setup_project(  # noqa: PLR0913
     normalized_project_root = project_root.resolve()
     layout_result = layout_port.ensure_project_layout(normalized_project_root)
     seeded_skill_paths = _ensure_default_umem_skill(normalized_project_root)
+    loaded_config = load_config(normalized_project_root, global_config_path=global_config_path)
     requested_runtime_ids = (
         enabled_runtime_ids if enabled_runtime_ids is not None else enabled_host_ids
     )
-    if requested_runtime_ids is not None:
-        normalized_runtime_ids = _normalize_runtime_ids(requested_runtime_ids)
-        unsupported = [
-            runtime_id
-            for runtime_id in normalized_runtime_ids
-            if runtime_id not in DEFAULT_ENABLED_RUNTIME_IDS
-        ]
-        if unsupported:
-            raise InvalidConfigError(f"Unsupported runtimes: {', '.join(unsupported)}")
+    if requested_runtime_ids is None:
+        configured_runtime_ids = _configured_runtime_ids(loaded_config.merged)
+        normalized_runtime_ids = (
+            configured_runtime_ids
+            if configured_runtime_ids is not None
+            else list(DEFAULT_ENABLED_RUNTIME_IDS)
+        )
     else:
-        normalized_runtime_ids = list(DEFAULT_ENABLED_RUNTIME_IDS)
+        normalized_runtime_ids = _normalize_runtime_ids(requested_runtime_ids)
+    unsupported = [
+        runtime_id
+        for runtime_id in normalized_runtime_ids
+        if runtime_id not in DEFAULT_ENABLED_RUNTIME_IDS
+    ]
+    if unsupported:
+        raise InvalidConfigError(f"Unsupported runtimes: {', '.join(unsupported)}")
 
-    loaded_config = load_config(normalized_project_root, global_config_path=global_config_path)
     preferences = loaded_config.project_data.get("preferences")
     updates: dict[str, Any] = {"runtimes": {"enabled": normalized_runtime_ids}}
     if not isinstance(preferences, dict) or "locale" not in preferences:
@@ -164,6 +169,16 @@ def _normalize_runtime_ids(runtime_ids: list[str]) -> list[str]:
         if resolved not in normalized:
             normalized.append(resolved)
     return normalized
+
+
+def _configured_runtime_ids(config_data: dict[str, Any]) -> list[str] | None:
+    raw_runtimes = config_data.get("runtimes")
+    if not isinstance(raw_runtimes, dict):
+        return None
+    raw_enabled = raw_runtimes.get("enabled")
+    if not isinstance(raw_enabled, list):
+        return None
+    return _normalize_runtime_ids([str(runtime_id) for runtime_id in raw_enabled])
 
 
 def _ensure_default_umem_skill(project_root: Path) -> dict[str, list[str]]:

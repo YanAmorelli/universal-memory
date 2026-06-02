@@ -1,6 +1,6 @@
 # Story 5.7: Atualizacoes de Biblioteca, Migracao de Schema e Benchmarks
 
-Status: review
+Status: done
 
 ## Historia
 
@@ -114,6 +114,9 @@ para que eu nao perca meu historico de uso, fatos ou regras customizadas.
 
 ### Review Findings
 
+- [x] [Review][Patch] `umem update --check/--migrate` ignora arquivos de memória `.json` [src/universal_memory/application/update/update_use_cases.py:27] — resolvido; `.json` legados são detectados, migrados com snapshot/auditoria e validados.
+- [x] [Review][Patch] Migração JSONL pode marcar registros inválidos como schema alvo sem validar o modelo resultante [src/universal_memory/application/update/update_use_cases.py:427] — resolvido; registros migrados são validados contra modelos reais de domínio antes da escrita.
+- [x] [Review][Patch] Testes de `umem update` não protegem requisito offline contra uso de rede [tests/interfaces/cli/test_update_command.py:13] — resolvido; testes bloqueiam uso de socket/rede nos fluxos de update.
 - [x] [Review][Patch] Migracao de config com `schema_version = 0` preserva o schema antigo em vez de migrar para o alvo [src/universal_memory/application/update/update_use_cases.py:328] — resolvido; merge corrigido e teste com schema legado explicito adicionado.
 - [x] [Review][Patch] Migracao pode deixar projeto parcialmente migrado se uma escrita posterior falhar [src/universal_memory/application/update/update_use_cases.py:281] — resolvido; migracao prepara snapshots antes do primeiro commit e aplica rollback reverso dos writes ja commitados quando commit posterior falha.
 - [x] [Review][Patch] Testes nao cobrem schema anterior explicito nem schema invalido [tests/application/test_update_use_cases.py:80] — resolvido; adicionada cobertura para schema legado explicito, tipo invalido string, boolean em config/check e boolean em JSONL.

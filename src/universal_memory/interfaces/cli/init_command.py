@@ -66,6 +66,7 @@ from universal_memory.application.skills import (
     UpdateSkillCommand,
     UpdateSkillResult,
 )
+from universal_memory.application.skills.native_skill_sync import NativeDriftDecision
 from universal_memory.application.update import (
     UpdateBenchmarksCommand,
     UpdateBenchmarksResult,
@@ -88,13 +89,18 @@ from universal_memory.domain.entities import (
     FactScope,
     FactStatus,
     LatentSkillScope,
+    LatentSkillStatus,
     Snapshot,
     SnapshotScope,
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.entities.runtime import RuntimeAdapter, default_runtime_registry
-from universal_memory.interfaces.cli.message_catalog import DEFAULT_LOCALE, human_message
+from universal_memory.interfaces.cli.message_catalog import (
+    DEFAULT_LOCALE,
+    PT_BR_LOCALE,
+    human_message,
+)
 from universal_memory.interfaces.errors import (
     DOMAIN_ERROR_TYPES,
     error_descriptor,
@@ -221,7 +227,8 @@ def main(  # noqa: PLR0913
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
     except click.exceptions.ClickException as e:
-        _stderr_console().print(f"[bold red]Error:[/bold red] {e.format_message()}")
+        fmt = _determine_output_format(argv)
+        _print_expected_error(ValidationFailedError(e.format_message()), output_format=fmt)
         return e.exit_code
     except click.exceptions.Exit as exit_error:
         code = exit_error.exit_code
@@ -345,10 +352,14 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             bool,
             typer.Option("--benchmarks", help="Update local benchmarks offline."),
         ] = False,
+        skills: Annotated[
+            bool,
+            typer.Option("--skills", help="Synchronize active skills into native runtime targets."),
+        ] = False,
         yes: YesOption = False,
         output_format: OutputFormatOption = None,
     ) -> None:
-        if update_check_command is None:
+        if update_check_command is None and not any([migrate, benchmarks, skills]):
             msg = "CLI update_check_command dependency was not configured."
             raise RuntimeError(msg)
         raise typer.Exit(
@@ -356,10 +367,13 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 check_command=update_check_command,
                 migrate_command=update_migrate_command,
                 benchmarks_command=update_benchmarks_command,
+                list_skills_command=list_skills_command,
+                update_skill_command=update_skill_command,
                 output_format=_effective_format(ctx, output_format),
                 check=check,
                 migrate=migrate,
                 benchmarks=benchmarks,
+                skills=skills,
                 yes=yes,
             )
         )
@@ -833,6 +847,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 description=description,
                 triggers=trigger,
                 file=file,
+                yes=False,
             )
         )
 
@@ -956,7 +971,10 @@ def _stream_is_tty(stream: Any) -> bool:
 
 
 def _ci_environment_enabled() -> bool:
-    return bool(os.environ.get("CI"))
+    value = os.environ.get("CI")
+    if value is None:
+        return False
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
 def _terminal_color_enabled() -> bool:
@@ -1019,6 +1037,7 @@ def _run_init(  # noqa: PLR0913
             selected_hosts=selected_hosts,
             output_format=output_format,
             yes=yes,
+            locale=PT_BR_LOCALE,
         )
         if output_format == "json":
             result = _execute_setup_project(command, Path.cwd(), runtime_ids)
@@ -1092,6 +1111,7 @@ def _selected_init_runtimes(
     selected_hosts: list[str] | None = None,
     output_format: str,
     yes: bool,
+    locale: str = PT_BR_LOCALE,
 ) -> list[str]:
     if runtimes:
         return _normalize_supported_runtimes(runtimes)
@@ -1103,12 +1123,19 @@ def _selected_init_runtimes(
         return list(DEFAULT_ENABLED_RUNTIME_IDS)
 
     registry = default_runtime_registry()
-    _stdout_console().print("Which runtime(s) would you like to install for?")
+    _stdout_console().print(
+        human_message("Which runtime(s) would you like to install for?", locale=locale)
+    )
     for index, runtime in enumerate(registry.runtimes, start=1):
         _stdout_console().print(
             f"{index}. {runtime.display_name} ({runtime.support_tier.value})"
         )
-    answer = _prompt("Which runtime(s) would you like to install for? [1 2 3 4 5]: ")
+    answer = _prompt(
+        human_message(
+            "Which runtime(s) would you like to install for? [1 2 3 4 5]: ",
+            locale=locale,
+        )
+    )
     return _parse_runtime_index_selection(answer, registry.runtimes)
 
 
@@ -1167,18 +1194,14 @@ def _init_runtime_payload(
     registry = default_runtime_registry()
     selected = set(selected_runtime_ids)
     target_paths: dict[str, list[str]] = {}
-    for runtime in registry.runtimes:
-        if runtime.runtime_id.value not in selected:
+    for result in host_results:
+        if result.host_id not in selected:
             continue
-        paths: list[str] = []
-        for target in runtime.instruction_targets:
-            relative_path = str(target.relative_path)
-            if relative_path not in paths:
-                paths.append(relative_path)
-        for target in runtime.native_skill_targets:
-            if target.relative_path not in paths:
-                paths.append(target.relative_path)
-        target_paths[runtime.runtime_id.value] = paths
+        paths = target_paths.setdefault(result.host_id, [])
+        for change in result.planned_changes:
+            path = change.get("path")
+            if isinstance(path, str) and path not in paths:
+                paths.append(path)
 
     manual_steps_pending = [
         {"runtime_id": result.host_id, "step": step}
@@ -1699,20 +1722,23 @@ def _run_host_sync(
     return 0
 
 
-def _run_update(  # noqa: PLR0911, PLR0912, PLR0913
+def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
     *,
-    check_command: UpdateCheckCommandHandler,
+    check_command: UpdateCheckCommandHandler | None,
     migrate_command: UpdateMigrateCommandHandler | None,
     benchmarks_command: UpdateBenchmarksCommandHandler | None,
+    list_skills_command: ListSkillsCommandHandler | None,
+    update_skill_command: UpdateSkillCommandHandler | None,
     output_format: str,
     check: bool,
     migrate: bool,
     benchmarks: bool,
+    skills: bool,
     yes: bool,
 ) -> int:
-    if not any([check, migrate, benchmarks]):
+    if not any([check, migrate, benchmarks, skills]):
         check = True
-    selected_count = sum([check, migrate, benchmarks])
+    selected_count = sum([check, migrate, benchmarks, skills])
     if selected_count != 1:
         _print_expected_error(
             ValidationFailedError("Provide only one update option per execution."),
@@ -1722,6 +1748,8 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913
 
     try:
         if check:
+            if check_command is None:
+                raise RuntimeError("CLI update_check_command dependency was not configured.")
             result = check_command(UpdateCheckCommand(project_root=Path.cwd()))
             if output_format == "json":
                 print(json.dumps(_update_check_success_envelope(result), sort_keys=True))
@@ -1769,6 +1797,21 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913
                 print(json.dumps(_update_benchmarks_success_envelope(result), sort_keys=True))
             else:
                 _stdout_console().print(_format_human_update_benchmarks(result))
+            return 0
+
+        if skills:
+            if list_skills_command is None or update_skill_command is None:
+                raise RuntimeError("CLI skill update dependencies were not configured.")
+            result = _sync_active_skills_for_update(
+                list_skills_command,
+                update_skill_command,
+                output_format=output_format,
+                yes=yes,
+            )
+            if output_format == "json":
+                print(json.dumps(_update_skills_success_envelope(result), sort_keys=True))
+            else:
+                _stdout_console().print(_format_human_update_skills(result))
             return 0
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
@@ -2016,7 +2059,7 @@ def _run_skills_generate(
     return 0
 
 
-def _has_native_drift_warning(result: GenerateSkillResult) -> bool:
+def _has_native_drift_warning(result: GenerateSkillResult | UpdateSkillResult) -> bool:
     return any(
         "Warning: Native target has manual changes." in warning
         for warning in result.warnings
@@ -2084,6 +2127,7 @@ def _run_skills_update(  # noqa: PLR0913
     description: str | None,
     triggers: list[str] | None,
     file: Path | None,
+    yes: bool,
 ) -> int:
     try:
         raw_markdown = _read_skill_update_file(file) if file is not None else None
@@ -2097,8 +2141,25 @@ def _run_skills_update(  # noqa: PLR0913
                 if triggers is not None
                 else None,
                 raw_markdown=raw_markdown,
+                native_drift_decision=_default_native_drift_decision(output_format),
             )
         )
+        if _should_prompt_native_drift(result, output_format=output_format, yes=yes):
+            choice = _prompt_native_drift_decision()
+            if choice == "overwrite":
+                result = command(
+                    UpdateSkillCommand(
+                        latent_skill_id=latent_skill_id,
+                        origin="cli",
+                        name=name.strip() if name is not None else None,
+                        description=description.strip() if description is not None else None,
+                        triggers=[trigger.strip() for trigger in triggers or [] if trigger.strip()]
+                        if triggers is not None
+                        else None,
+                        raw_markdown=raw_markdown,
+                        native_drift_decision="overwrite",
+                    )
+                )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
         _print_expected_error(_map_skill_mutation_error(error, latent_skill_id), output_format)
         return 1
@@ -2117,6 +2178,84 @@ def _read_skill_update_file(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except OSError as error:
         raise StorageError(str(error)) from error
+
+
+def _default_native_drift_decision(output_format: str) -> NativeDriftDecision | None:
+    if output_format == "json" or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return "keep"
+    return None
+
+
+def _should_prompt_native_drift(
+    result: UpdateSkillResult,
+    *,
+    output_format: str,
+    yes: bool,
+) -> bool:
+    return (
+        output_format != "json"
+        and not yes
+        and sys.stdin.isatty()
+        and sys.stdout.isatty()
+        and _has_native_drift_warning(result)
+    )
+
+
+def _sync_active_skills_for_update(
+    list_command: ListSkillsCommandHandler,
+    update_command: UpdateSkillCommandHandler,
+    *,
+    output_format: str,
+    yes: bool,
+) -> list[UpdateSkillResult]:
+    list_command(ListSkillsCommand(status=LatentSkillStatus.active))
+    skill_ids = _active_project_skill_ids(Path.cwd())
+    results: list[UpdateSkillResult] = []
+    for skill_id in skill_ids:
+        result = update_command(
+            UpdateSkillCommand(
+                latent_skill_id=skill_id,
+                origin="cli_update_skills",
+                native_drift_decision=_default_native_drift_decision(output_format),
+            )
+        )
+        if _should_prompt_native_drift(result, output_format=output_format, yes=yes):
+            choice = _prompt_native_drift_decision()
+            if choice == "overwrite":
+                result = update_command(
+                    UpdateSkillCommand(
+                        latent_skill_id=skill_id,
+                        origin="cli_update_skills",
+                        native_drift_decision="overwrite",
+                    )
+                )
+        results.append(result)
+    return results
+
+
+def _active_project_skill_ids(project_root: Path) -> list[str]:
+    path = project_root / ".umem" / "memory" / "latent_skills.jsonl"
+    if not path.is_file():
+        return []
+    skill_ids: list[str] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise StorageError(str(error)) from error
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValidationFailedError(
+                f"Invalid latent skills store: {path.as_posix()}"
+            ) from error
+        if payload.get("status") == LatentSkillStatus.active.value and isinstance(
+            payload.get("id"), str
+        ):
+            skill_ids.append(payload["id"])
+    return skill_ids
 
 
 def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
@@ -2264,7 +2403,20 @@ def _skill_update_success_envelope(result: UpdateSkillResult) -> dict[str, Any]:
         "operation": "skills.update",
         "scope": result.latent_skill.scope.value,
         "data": _skill_mutation_payload(result),
-        "warnings": [],
+        "warnings": result.warnings,
+    }
+
+
+def _update_skills_success_envelope(results: list[UpdateSkillResult]) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "update.skills",
+        "scope": "project",
+        "data": {
+            "updated_count": len(results),
+            "skills": [_skill_mutation_payload(result) for result in results],
+        },
+        "warnings": [warning for result in results for warning in result.warnings],
     }
 
 
@@ -2988,6 +3140,19 @@ def _format_human_skill_mutation_success(
     rollback_hint = getattr(result, "rollback_hint", None)
     if rollback_hint:
         lines.append(f"Rollback: {rollback_hint}")
+    warnings = getattr(result, "warnings", [])
+    if warnings:
+        lines.append("Warnings:")
+        lines.extend(f"  - {warning}" for warning in warnings)
+    return "\n".join(lines)
+
+
+def _format_human_update_skills(results: list[UpdateSkillResult]) -> str:
+    lines = ["Operation: update.skills", f"Updated skills: {len(results)}"]
+    warnings = [warning for result in results for warning in result.warnings]
+    if warnings:
+        lines.append("Warnings:")
+        lines.extend(f"  - {warning}" for warning in warnings)
     return "\n".join(lines)
 
 

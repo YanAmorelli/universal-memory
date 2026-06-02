@@ -1,6 +1,6 @@
 # Story 5.6: Onboarding CLI de Seleção Multi-Runtime
 
-Status: review
+Status: done
 
 ## Reopened Scope
 
@@ -60,6 +60,12 @@ para que o setup inicial configure de forma coesa e limpa todos os agentes do me
 - [x] Persistir seleção de runtimes no TOML e definir comportamento claro para configs antigas com `[hosts]`.
 - [x] Garantir JSON puro com `runtimes_selected`, `runtimes_skipped`, `target_paths` e `manual_steps_pending`.
 - [x] Adicionar testes CLI para TTY/interativo, não-interativo, JSON, runtimes inválidos e compatibilidade com locale.
+
+### Review Findings
+
+- [x] [Review][Patch] `umem init --runtime opencode` reporta targets mas não configura o runtime [src/universal_memory/interfaces/cli/init_command.py:1200] — resolvido; JSON não reporta target paths inferidos/falsos e usa resultados reais dos configuradores disponíveis.
+- [x] [Review][Patch] JSON de `init` usa `audit_reference` placeholder e não reporta snapshot/audit por runtime target [src/universal_memory/interfaces/cli/init_command.py:2439] — resolvido no escopo atual; payload de runtimes deriva referências dos resultados reais e não infere targets sem mutação.
+- [x] [Review][Patch] Configs legadas `[hosts]` podem ser sobrescritas por todos os runtimes no `init` [src/universal_memory/application/onboarding/setup_project.py:107] — resolvido; `setup_project()` preserva seleção legada projetada quando não há seleção explícita.
 
 ## Dev Notes
 

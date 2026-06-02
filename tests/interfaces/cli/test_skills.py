@@ -186,6 +186,7 @@ def test_skills_update_accepts_metadata_options_and_file(
             description="Descricao Nova",
             triggers=["trigger A", "trigger B"],
             raw_markdown=markdown_file.read_text(encoding="utf-8"),
+            native_drift_decision="keep",
         )
     ]
     assert payload["operation"] == "skills.update"

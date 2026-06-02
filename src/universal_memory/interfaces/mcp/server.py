@@ -578,12 +578,14 @@ def configure_server(  # noqa: PLR0915
                     description=description.strip() if description is not None else None,
                     triggers=_normalize_triggers(triggers),
                     raw_markdown=raw_markdown,
+                    native_drift_decision="keep",
                 )
             )
             return _success_envelope(
                 operation="skills.update",
                 scope=result.latent_skill.scope.value,
                 data=_skill_mutation_payload(result),
+                warnings=result.warnings,
             )
         except Exception as error:
             return _mcp_tool_error(

@@ -15,6 +15,12 @@ PT_BR_MESSAGES = {
     "audit": "auditoria",
     "Operation cancelled by user.": "Operacao cancelada pelo usuario.",
     "Initializing project scaffold...": "Inicializando scaffold do projeto...",
+    "Which runtime(s) would you like to install for?": (
+        "Para quais runtime(s) voce quer instalar?"
+    ),
+    "Which runtime(s) would you like to install for? [1 2 3 4 5]: ": (
+        "Para quais runtime(s) voce quer instalar? [1 2 3 4 5]: "
+    ),
     "Configure host 'codex' (AGENTS.md support)? [Y/n]: ": (
         "Deseja configurar o host 'codex' (suporte a AGENTS.md)? [S/n]: "
     ),

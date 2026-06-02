@@ -178,11 +178,8 @@ def test_init_json_outputs_pure_parseable_payload_with_required_keys(
     ]
     assert payload["runtimes_skipped"] == []
     assert payload["target_paths"] == {
-        "antigravity": [".antigravity/rules/universal-memory.md", ".antigravity/rules"],
-        "claude_code": ["CLAUDE.md", ".claude/skills"],
+        "claude_code": ["CLAUDE.md"],
         "codex": ["AGENTS.md"],
-        "cursor": [".cursor/rules/universal-memory.mdc", ".cursor/rules"],
-        "opencode": ["AGENTS.md", ".opencode/skills"],
     }
     assert payload["manual_steps_pending"] == []
 
@@ -294,7 +291,8 @@ def test_init_human_interactive_prompts_for_runtime_indices(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert prompts == ["Which runtime(s) would you like to install for? [1 2 3 4 5]: "]
+    assert prompts == ["Para quais runtime(s) voce quer instalar? [1 2 3 4 5]: "]
+    assert "Para quais runtime(s) voce quer instalar?" in captured.out
     assert "1. Claude Code (tier_1)" in captured.out
     assert "2. OpenCode (tier_1)" in captured.out
     assert "3. Codex/OpenAI-class (tier_1)" in captured.out
@@ -437,6 +435,28 @@ def test_init_ci_environment_does_not_render_terminal_splash(
     assert exit_code == 0
     assert "USB" not in captured.out
     assert "\x1b[" not in captured.out
+
+
+@pytest.mark.parametrize("ci_value", ["false", "0", "no", "off"])
+def test_init_ci_falsy_values_do_not_suppress_terminal_splash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    ci_value: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CI", ci_value)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+
+    exit_code = cli_main(
+        ["init", "--runtime", "codex"], setup_project_command=_setup_project_command
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "USB" in captured.out
 
 
 def test_init_no_color_renders_plain_ascii_splash(
@@ -625,3 +645,19 @@ def test_init_expected_errors_use_cli_error_envelope(
     assert payload["error"]["code"] == "storage_error"
     assert "partial or corrupted" in payload["error"]["detail"]
     assert payload["error"]["audit_reference"] is None
+
+
+CLICK_USAGE_ERROR_EXIT_CODE = 2
+
+
+def test_click_exception_json_format_uses_error_envelope(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli_main(["--format", "json", "--bad-option"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == CLICK_USAGE_ERROR_EXIT_CODE
+    assert captured.err == ""
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "validation_failed"

@@ -279,7 +279,7 @@ class SyncInstructionsUseCase:
                     ],
                 )
             )
-        if not plans:
+        if not plans and host_ids:
             raise ValidationFailedError("Nenhum host suportado informado para sincronizacao.")
         return plans
 
@@ -376,10 +376,7 @@ class SyncInstructionsUseCase:
                 "Configuracao invalida: runtimes.enabled deve ser uma lista."
             )
         enabled = [str(host_id) for host_id in raw_enabled]
-        unsupported = [host_id for host_id in enabled if host_id not in DEFAULT_SYNC_HOSTS]
-        if unsupported:
-            raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
-        return enabled
+        return [host_id for host_id in enabled if host_id in DEFAULT_SYNC_HOSTS]
 
     def _instruction_targets(self, planned_changes: list[dict[str, str]]) -> list[str]:
         targets: list[str] = []

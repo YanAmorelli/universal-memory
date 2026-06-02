@@ -1,6 +1,6 @@
 # Story 4.6: Exibir Identidade Visual de Terminal de Forma Segura
 
-Status: review
+Status: done
 
 ## História
 
@@ -59,6 +59,7 @@ para que a ferramenta tenha uma identidade visual reconhecível sem quebrar auto
 
 ### Review Findings
 
+- [x] [Review][Patch] `CI=false`/`CI=0` suprimem o splash como se fossem CI ativo [src/universal_memory/interfaces/cli/init_command.py:958] — resolvido; valores falsy explícitos de `CI` não suprimem o splash e há cobertura dedicada.
 - [x] [Review][Patch] Splash pode emitir ANSI quando `TERM` esta ausente ou vazio [src/universal_memory/interfaces/cli/init_command.py:884] — resolvido; `TERM` ausente/vazio agora usa splash plain ASCII sem ANSI e ha teste dedicado.
 
 ## Contexto / Guardrails do Desenvolvedor

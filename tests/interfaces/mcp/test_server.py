@@ -30,6 +30,8 @@ from universal_memory.application.skills import (
     ProposeSkillDecision,
     ProposeSkillResult,
     SkillListItem,
+    UpdateSkillCommand,
+    UpdateSkillResult,
 )
 from universal_memory.bootstrap.mcp import build_server
 from universal_memory.domain import SecretDetectedError
@@ -163,6 +165,28 @@ def generated_skill_result() -> GenerateSkillResult:
         affected_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
+    )
+
+
+def updated_skill_result(*, warnings: list[str] | None = None) -> UpdateSkillResult:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id=SKILL_ID,
+        created_at=now,
+        updated_at=now,
+        name="TDD recorrente",
+        description="Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.active,
+        recurrence_count=3,
+        metadata={},
+    )
+    return UpdateSkillResult(
+        latent_skill=skill,
+        skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+        warnings=warnings or [],
     )
 
 
@@ -631,6 +655,46 @@ async def test_list_skills_tool_invokes_use_case_and_matches_cli_json_contract(
         },
         "warnings": [],
     }
+
+
+@pytest.mark.anyio
+async def test_update_skill_tool_defaults_to_keep_and_preserves_warnings(
+    tmp_path: Path,
+) -> None:
+    received: list[UpdateSkillCommand] = []
+
+    def update_skill(command: UpdateSkillCommand) -> UpdateSkillResult:
+        received.append(command)
+        return updated_skill_result(warnings=["Warning: Native target has manual changes."])
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            update_skill=update_skill,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool(
+        "update_skill",
+        {"latent_skill_id": SKILL_ID, "name": "TDD recorrente"},
+    )
+
+    assert received == [
+        UpdateSkillCommand(
+            latent_skill_id=SKILL_ID,
+            origin="mcp",
+            name="TDD recorrente",
+            native_drift_decision="keep",
+        )
+    ]
+    assert result.structured_content is not None
+    assert result.structured_content["operation"] == "skills.update"
+    assert result.structured_content["warnings"] == [
+        "Warning: Native target has manual changes."
+    ]
 
 
 @pytest.mark.anyio

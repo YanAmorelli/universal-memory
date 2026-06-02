@@ -188,6 +188,7 @@ async def test_update_skill_tool_passes_optional_metadata(tmp_path: Path) -> Non
             description="Descricao Nova",
             triggers=["trigger A", "trigger B"],
             raw_markdown="---\nname: Nome Novo\n---\n",
+            native_drift_decision="keep",
         )
     ]
     assert result.structured_content is not None
@@ -227,6 +228,7 @@ async def test_update_skill_tool_normalizes_inputs_like_cli(tmp_path: Path) -> N
             description="Descricao Nova",
             triggers=["trigger A", "trigger B"],
             raw_markdown=None,
+            native_drift_decision="keep",
         )
     ]
 

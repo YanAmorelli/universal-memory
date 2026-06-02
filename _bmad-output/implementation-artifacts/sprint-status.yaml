@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-01T23:27:13Z"
-last_updated: "2026-06-02T02:54:09Z"
+last_updated: "2026-06-02T14:31:01Z"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -48,7 +48,7 @@ development_status:
   1-3-definir-exce-es-e-ports-de-dom-nio: done
   1-4-criar-layout-local-umem-e-configura-o-toml: done
   1-5-implementar-inicializa-o-cli-m-nima: done
-  1-6-configurar-idioma-padr-o-e-locale: review
+  1-6-configurar-idioma-padr-o-e-locale: done
   epic-1-retrospective: optional
 
   epic-2: in-progress
@@ -74,23 +74,23 @@ development_status:
   4-3-implementar-matriz-de-paridade-cli-mcp: done
   4-4-mapear-erros-de-dom-nio-para-cli-e-json-rpc: done
   4-5-validar-conformidade-mcp-e-contratos-de-interface: done
-  4-6-exibir-identidade-visual-de-terminal-de-forma-segura: review
+  4-6-exibir-identidade-visual-de-terminal-de-forma-segura: done
   epic-4-retrospective: optional
 
   epic-5: in-progress
-  5-1-modelar-registro-de-runtimes-e-alvos: review
+  5-1-modelar-registro-de-runtimes-e-alvos: done
   5-2-configurar-host-codex-com-agents-md: done
   5-3-configurar-host-claude-code-com-claude-md: done
   5-4-validar-leitura-de-contexto-por-host: done
   5-5-sincronizar-regras-consolidadas-para-instru-es: done
-  5-6-onboarding-cli-de-sele-o-multi-runtime: review
-  5-7-atualiza-es-de-biblioteca-migra-o-de-schema-e-benchmarks: review
+  5-6-onboarding-cli-de-sele-o-multi-runtime: done
+  5-7-atualiza-es-de-biblioteca-migra-o-de-schema-e-benchmarks: done
   epic-5-retrospective: optional
 
   epic-6: in-progress
   6-1-registrar-latent-skills-por-recorr-ncia: done
   6-2-propor-cria-o-de-skill-com-aprova-o-expl-cita: done
-  6-3-gerar-skill-can-nica-e-instalar-em-targets-nativos: review
+  6-3-gerar-skill-can-nica-e-instalar-em-targets-nativos: done
   6-4-registrar-e-listar-skills: done
   6-5-ativar-desativar-e-editar-skills-com-seguran-a: done
   6-6-expor-gest-o-de-skills-por-cli-e-mcp: done

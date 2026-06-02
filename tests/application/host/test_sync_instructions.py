@@ -243,6 +243,53 @@ def test_sync_default_hosts_respects_enabled_hosts_from_project_config(
     assert not (tmp_path / "CLAUDE.md").exists()
 
 
+def test_sync_ignores_enabled_runtimes_without_legacy_instruction_support(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        '[runtimes]\nenabled = ["opencode", "cursor", "codex", "antigravity"]\n',
+        encoding="utf-8",
+    )
+    use_case = _use_case(
+        tmp_path,
+        [_rule("Shared Policy", "Use relative paths in specs, code and docs.", "shared_policy")],
+        repositories,
+    )
+
+    result = use_case.execute(SyncInstructionsCommand(apply=True))
+
+    assert result.host_ids == ["codex"]
+    assert (tmp_path / "AGENTS.md").exists()
+    assert not (tmp_path / "CLAUDE.md").exists()
+
+
+def test_sync_noops_when_config_has_only_unsupported_runtime_targets(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        '[runtimes]\nenabled = ["opencode", "cursor", "antigravity"]\n',
+        encoding="utf-8",
+    )
+    use_case = _use_case(
+        tmp_path,
+        [_rule("Shared Policy", "Use relative paths in specs, code and docs.", "shared_policy")],
+        repositories,
+    )
+
+    result = use_case.execute(SyncInstructionsCommand(apply=True))
+
+    assert result.host_ids == []
+    assert result.planned_changes == []
+    assert not (tmp_path / "AGENTS.md").exists()
+    assert not (tmp_path / "CLAUDE.md").exists()
+
+
 def test_sync_explicit_disabled_host_is_allowed_with_warning(
     tmp_path: Path,
     repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],

@@ -222,7 +222,7 @@ def test_deactivate_skill_disables_native_targets_and_keeps_canonical_skill(
                 "native_installations": [
                     {
                         "runtime": "opencode",
-                        "path": ".opencode/skills/tdd-recorrente/SKILL.md",
+                        "path": ".opencode/skills/tdd-recorrente",
                         "canonical_hash": "previous",
                         "target_hash": "previous",
                         "timestamp": "2026-01-01T00:00:00+00:00",
@@ -242,7 +242,8 @@ def test_deactivate_skill_disables_native_targets_and_keeps_canonical_skill(
 
     assert canonical.is_file()
     assert result.latent_skill.status == LatentSkillStatus.ignored
-    assert native.read_text(encoding="utf-8").startswith("# Universal Memory skill disabled")
+    assert result.affected_paths == [".opencode/skills/tdd-recorrente"]
+    assert not native.parent.exists()
 
 
 def test_activate_skill_requires_existing_valid_skill_file_and_audits(

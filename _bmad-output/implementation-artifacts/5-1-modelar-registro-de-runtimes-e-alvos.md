@@ -1,6 +1,6 @@
 # Story 5.1: Modelar Registro de Runtimes e Alvos
 
-Status: review
+Status: done
 
 ## Reopened Scope
 
@@ -58,6 +58,12 @@ para que cada runtime tenha caminhos, capabilities, tiers de suporte, instructio
 - [x] Garantir single-writer ownership para `AGENTS.md` no novo modelo.
 - [x] Adicionar testes de domínio/config para tiers, paths, targets, native skill targets e IDs estáveis.
 - [x] Atualizar documentação interna da story com qualquer decisão de migração de `[hosts]` para `[runtimes]`.
+
+### Review Findings
+
+- [x] [Review][Patch] `sync_instructions` quebra após `umem init` padrão com Runtime Registry completo [src/universal_memory/application/host/sync_instructions_use_case.py:366] — resolvido; sync legado filtra runtimes não suportados e opera apenas nos hosts sincronizáveis.
+- [x] [Review][Patch] Cursor/Antigravity burlam validação Pydantic com `InstructionTarget.model_construct()` [src/universal_memory/domain/entities/runtime.py:341] — resolvido; targets genéricos agora usam `RuntimeInstructionTarget` validado.
+- [x] [Review][Patch] Testes de native skill targets não cobrem Antigravity apesar do registry declarar target [tests/application/skills/test_generate_skill.py:270] — resolvido; cobertura inclui target nativo de Antigravity.
 
 ## Dev Notes
 

@@ -1,6 +1,6 @@
 # Story 6.3: Gerar Skill Canônica e Instalar em Targets Nativos
 
-Status: review
+Status: done
 
 ## Reopened Scope
 
@@ -67,6 +67,13 @@ para que a capacidade seja imediatamente utilizável pelos agentes compatíveis 
 - [x] Garantir snapshot antes de qualquer overwrite de target nativo.
 - [x] Adicionar testes para instalação em `.claude/skills/`, `.opencode/skills/` e `.cursor/rules/` conforme adapters disponíveis.
 - [x] Adicionar testes de drift, Keep, Overwrite, snapshot failure e desativação sem deletar canônico.
+
+### Review Findings
+
+- [x] [Review][Patch] `umem update --skills` não existe, então o AC4 não tem entrypoint obrigatório [src/universal_memory/interfaces/cli/init_command.py:336] — resolvido; `umem update --skills` sincroniza skills ativas com default seguro `keep`.
+- [x] [Review][Patch] `skills update` e MCP `update_skill` descartam warnings de drift e não exibem Keep/Overwrite [src/universal_memory/interfaces/cli/init_command.py:2078] — resolvido; warnings são preservados em CLI/MCP e o fluxo humano pergunta Keep/Overwrite quando há drift.
+- [x] [Review][Patch] Instalação nativa copia só `SKILL.md` e perde `scripts/`/`references/` aplicáveis [src/universal_memory/application/skills/native_skill_sync.py:60] — resolvido; `sync_directory` replica a árvore canônica permitida.
+- [x] [Review][Patch] Desativação ignora policy do adapter e sempre sobrescreve target com stub [src/universal_memory/application/skills/native_skill_sync.py:141] — resolvido; targets nativos são removidos conforme policy padrão do adapter, preservando o canônico.
 
 ## Dev Notes
 

@@ -126,14 +126,34 @@ def test_setup_project_preserves_existing_locale(tmp_path: Path) -> None:
 
     config = tomllib.loads(config_path.read_text(encoding="utf-8"))
     assert config["preferences"]["locale"] == "pt-BR"
-    assert config["runtimes"]["enabled"] == [
-        "claude_code",
-        "opencode",
-        "codex",
-        "cursor",
-        "antigravity",
-    ]
+    assert config["runtimes"]["enabled"] == ["codex"]
     assert config["hosts"]["enabled"] == ["codex"]
+
+
+def test_setup_project_without_selection_preserves_legacy_hosts_enabled(
+    tmp_path: Path,
+) -> None:
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.write_text(
+        '[project]\nname = ""\ncreated_by = "universal-memory"\n\n'
+        '[hosts]\nenabled = ["claude_code"]\n',
+        encoding="utf-8",
+    )
+
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+
+    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert config["runtimes"]["enabled"] == ["claude_code"]
+    assert config["hosts"]["enabled"] == ["claude_code"]
 
 
 def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path) -> None:

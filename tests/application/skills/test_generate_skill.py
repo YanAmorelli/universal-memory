@@ -268,12 +268,27 @@ def test_generate_skill_installs_native_targets_and_records_metadata(tmp_path: P
     result = use_case.execute(GenerateSkillCommand(latent_skill_id=skill.id, origin="test"))
 
     expected_paths = {
-        ".claude/skills/tdd-recorrente/SKILL.md",
-        ".opencode/skills/tdd-recorrente/SKILL.md",
-        ".cursor/rules/tdd-recorrente/SKILL.mdc",
+        ".claude/skills/tdd-recorrente",
+        ".opencode/skills/tdd-recorrente",
+        ".cursor/rules/tdd-recorrente",
     }
-    assert expected_paths.issubset(set(result.affected_paths))
+    expected_written_files = {
+        ".claude/skills/tdd-recorrente/SKILL.md",
+        ".claude/skills/tdd-recorrente/scripts/.gitkeep",
+        ".claude/skills/tdd-recorrente/references/.gitkeep",
+        ".opencode/skills/tdd-recorrente/SKILL.md",
+        ".opencode/skills/tdd-recorrente/scripts/.gitkeep",
+        ".opencode/skills/tdd-recorrente/references/.gitkeep",
+        ".cursor/rules/tdd-recorrente/SKILL.mdc",
+        ".cursor/rules/tdd-recorrente/scripts/.gitkeep",
+        ".cursor/rules/tdd-recorrente/references/.gitkeep",
+    }
+    assert expected_written_files.issubset(set(result.affected_paths))
     assert (tmp_path / ".claude" / "skills" / "tdd-recorrente" / "SKILL.md").is_file()
+    assert (tmp_path / ".claude" / "skills" / "tdd-recorrente" / "scripts" / ".gitkeep").is_file()
+    assert (
+        tmp_path / ".claude" / "skills" / "tdd-recorrente" / "references" / ".gitkeep"
+    ).is_file()
     assert (tmp_path / ".opencode" / "skills" / "tdd-recorrente" / "SKILL.md").is_file()
     assert (tmp_path / ".cursor" / "rules" / "tdd-recorrente" / "SKILL.mdc").is_file()
 
@@ -287,6 +302,7 @@ def test_generate_skill_installs_native_targets_and_records_metadata(tmp_path: P
     assert expected_paths.issubset({entry["path"] for entry in installations})
     assert all(entry["canonical_hash"] for entry in installations)
     assert all(entry["audit_reference"] for entry in installations)
+    assert all(entry["manifest"] for entry in installations)
 
 
 def test_generate_skill_keep_preserves_manual_native_drift(tmp_path: Path) -> None:
@@ -296,6 +312,8 @@ def test_generate_skill_keep_preserves_manual_native_drift(tmp_path: Path) -> No
     use_case.execute(GenerateSkillCommand(latent_skill_id=skill.id, origin="test"))
     native_path = tmp_path / ".opencode" / "skills" / "tdd-recorrente" / "SKILL.md"
     native_path.write_text("manual local workflow\n", encoding="utf-8")
+    native_script = tmp_path / ".opencode" / "skills" / "tdd-recorrente" / "scripts" / "local.sh"
+    native_script.write_text("custom helper\n", encoding="utf-8")
 
     result = use_case.execute(
         GenerateSkillCommand(
@@ -307,6 +325,7 @@ def test_generate_skill_keep_preserves_manual_native_drift(tmp_path: Path) -> No
     )
 
     assert native_path.read_text(encoding="utf-8") == "manual local workflow\n"
+    assert native_script.read_text(encoding="utf-8") == "custom helper\n"
     assert any(
         "Warning: Native target has manual changes." in warning for warning in result.warnings
     )

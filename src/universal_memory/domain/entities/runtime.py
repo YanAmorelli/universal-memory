@@ -53,6 +53,7 @@ class NativeSkillTarget(BaseModel):
     install_strategy: str
     drift_strategy: str
     rollback_policy: str
+    disable_policy: str = "remove"
 
     @field_validator("relative_path")
     @classmethod
@@ -64,7 +65,9 @@ class NativeSkillTarget(BaseModel):
             raise ValueError("relative_path must be a safe relative path")
         return value
 
-    @field_validator("format", "install_strategy", "drift_strategy", "rollback_policy")
+    @field_validator(
+        "format", "install_strategy", "drift_strategy", "rollback_policy", "disable_policy"
+    )
     @classmethod
     def validate_non_blank_contract_field(cls, value: str, info) -> str:
         stripped = value.strip()
@@ -338,19 +341,18 @@ def _claude_md_target() -> InstructionTarget:
     )
 
 
-def _cursor_rules_target() -> InstructionTarget:
-    return _generic_target("cursor_rules", ".cursor/rules/universal-memory.mdc")
+def _cursor_rules_target() -> RuntimeInstructionTarget:
+    return _runtime_instruction_target("cursor_rules", ".cursor/rules/universal-memory.mdc")
 
 
-def _antigravity_rules_target() -> InstructionTarget:
-    return _generic_target("antigravity_rules", ".antigravity/rules/universal-memory.md")
+def _antigravity_rules_target() -> RuntimeInstructionTarget:
+    return _runtime_instruction_target(
+        "antigravity_rules", ".antigravity/rules/universal-memory.md"
+    )
 
 
-def _generic_target(name: str, relative_path: str) -> InstructionTarget:
-    return InstructionTarget.model_construct(
-        id=str(uuid4()),
-        created_at=_now(),
-        updated_at=_now(),
+def _runtime_instruction_target(name: str, relative_path: str) -> RuntimeInstructionTarget:
+    return RuntimeInstructionTarget(
         name=name,
         relative_path=relative_path,
         ownership=InstructionTargetOwnership.delta_consumer,

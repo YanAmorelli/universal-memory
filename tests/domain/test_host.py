@@ -306,6 +306,17 @@ def test_runtime_registry_declares_paths_targets_and_native_skill_targets() -> N
     ]
 
 
+def test_runtime_registry_uses_validated_runtime_targets_for_tier_2_rules() -> None:
+    registry = default_runtime_registry()
+    cursor_target = registry.get(RuntimeId.cursor).instruction_targets[0]
+    antigravity_target = registry.get(RuntimeId.antigravity).instruction_targets[0]
+
+    assert cursor_target.name == "cursor_rules"
+    assert cursor_target.relative_path == ".cursor/rules/universal-memory.mdc"
+    assert antigravity_target.name == "antigravity_rules"
+    assert antigravity_target.relative_path == ".antigravity/rules/universal-memory.md"
+
+
 def test_runtime_registry_enforces_single_agents_md_writer() -> None:
     registry = default_runtime_registry()
 

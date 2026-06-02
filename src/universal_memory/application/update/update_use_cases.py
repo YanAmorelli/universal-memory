@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 import tomli_w
+from pydantic import BaseModel, ValidationError
 
 from universal_memory import __version__
 from universal_memory.application.security import (
@@ -16,7 +17,13 @@ from universal_memory.application.security import (
     SafeWriteResult,
 )
 from universal_memory.domain import InvalidConfigError, StorageError, ValidationFailedError
-from universal_memory.domain.entities import AuditEventScope
+from universal_memory.domain.entities import (
+    AuditEventScope,
+    ContextSummary,
+    Fact,
+    LatentSkill,
+    Rule,
+)
 
 try:
     import tomllib
@@ -30,6 +37,8 @@ MEMORY_FILES = (
     "latent_skills.jsonl",
     "context_summaries.jsonl",
 )
+LEGACY_MEMORY_FILES = tuple(filename.removesuffix("l") for filename in MEMORY_FILES)
+ALL_MEMORY_FILES = (*MEMORY_FILES, *LEGACY_MEMORY_FILES)
 MEMORY_ALLOWED_FIELDS: dict[str, set[str]] = {
     "facts.jsonl": {
         "schema_version",
@@ -80,6 +89,12 @@ MEMORY_ALLOWED_FIELDS: dict[str, set[str]] = {
         "scope",
         "metadata",
     },
+}
+MEMORY_MODELS: dict[str, type[BaseModel]] = {
+    "facts": Fact,
+    "rules": Rule,
+    "latent_skills": LatentSkill,
+    "context_summaries": ContextSummary,
 }
 
 
@@ -243,31 +258,60 @@ class UpdateCheckUseCase:
         warnings.append("Project config schema_version is not an integer.")
         return None
 
-    def _read_memory_versions(self, memory_root: Path, warnings: list[str]) -> dict[str, list[int]]:
+    def _read_memory_versions(  # noqa: PLR0912
+        self, memory_root: Path, warnings: list[str]
+    ) -> dict[str, list[int]]:
         versions_by_file: dict[str, list[int]] = {}
         if not memory_root.exists():
             warnings.append("Memory directory is missing at .umem/memory/.")
             return versions_by_file
-        for filename in MEMORY_FILES:
+        for filename in ALL_MEMORY_FILES:
             path = memory_root / filename
             if not path.exists():
                 continue
             found: set[int] = set()
-            try:
-                lines = path.read_text(encoding="utf-8").splitlines()
-            except OSError as error:
-                warnings.append(f"Could not read .umem/memory/{filename}: {error}")
-                continue
-            for line_number, line in enumerate(lines, start=1):
-                if not line.strip():
-                    continue
+            records: list[tuple[int, Any]] = []
+            if filename.endswith(".jsonl"):
                 try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError:
-                    warnings.append(f"corrupt JSONL line in .umem/memory/{filename}:{line_number}.")
+                    lines = path.read_text(encoding="utf-8").splitlines()
+                except OSError as error:
+                    warnings.append(f"Could not read .umem/memory/{filename}: {error}")
                     continue
-                raw_version = payload.get("schema_version") if isinstance(payload, dict) else None
+                for line_number, line in enumerate(lines, start=1):
+                    if not line.strip():
+                        continue
+                    try:
+                        records.append((line_number, json.loads(line)))
+                    except json.JSONDecodeError:
+                        warnings.append(
+                            f"corrupt JSONL line in .umem/memory/{filename}:{line_number}."
+                        )
+            else:
+                try:
+                    records = _read_memory_records(path, filename)
+                except OSError as error:
+                    warnings.append(f"Could not read .umem/memory/{filename}: {error}")
+                    continue
+                except json.JSONDecodeError as error:
+                    warnings.append(f"corrupt JSON in .umem/memory/{filename}: {error}.")
+                    versions_by_file[filename] = sorted(found)
+                    continue
+                except TypeError as error:
+                    warnings.append(f"Invalid memory file .umem/memory/{filename}: {error}.")
+                    versions_by_file[filename] = sorted(found)
+                    continue
+            for line_number, payload in records:
+                if not isinstance(payload, dict):
+                    warnings.append(
+                        f"Invalid memory record in .umem/memory/{filename}:{line_number}."
+                    )
+                    continue
+                raw_version = payload.get("schema_version")
                 version = raw_version if type(raw_version) is int else 0
+                if raw_version is not None and type(raw_version) is not int:
+                    warnings.append(
+                        f".umem/memory/{filename}:{line_number} schema_version is not an integer."
+                    )
                 if version > TARGET_SCHEMA_VERSION:
                     warnings.append(f".umem/memory/{filename} has schema newer than supported.")
                 found.add(version)
@@ -286,6 +330,39 @@ class UpdateCheckUseCase:
         if needs_migration:
             warnings.append("Legacy [hosts] config will be migrated to [runtimes].")
         return needs_migration
+
+
+def _read_memory_records(path: Path, filename: str) -> list[tuple[int, Any]]:
+    if filename.endswith(".jsonl"):
+        records: list[tuple[int, Any]] = []
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if not line.strip():
+                continue
+            records.append((line_number, json.loads(line)))
+        return records
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(raw, list):
+        return list(enumerate(raw, start=1))
+    if isinstance(raw, dict):
+        return [(1, raw)]
+    raise TypeError("expected a JSON object or array")
+
+
+def _memory_model_for(filename: str) -> type[BaseModel]:
+    stem = Path(filename).stem
+    model = MEMORY_MODELS.get(stem)
+    if model is None:  # pragma: no cover - guarded by ALL_MEMORY_FILES
+        raise ValidationFailedError(f"Unsupported memory file .umem/memory/{filename}.")
+    return model
+
+
+def _validate_memory_payload(filename: str, payload: dict[str, Any], line_number: int) -> None:
+    try:
+        _memory_model_for(filename).model_validate(payload)
+    except ValidationError as error:
+        raise ValidationFailedError(
+            f"Invalid migrated memory record in .umem/memory/{filename}:{line_number}: {error}"
+        ) from error
 
 
 class UpdateMigrateUseCase:
@@ -394,47 +471,69 @@ class UpdateMigrateUseCase:
 
     def _plan_memory_migrations(self, memory_root: Path) -> list[tuple[str, str]]:
         planned: list[tuple[str, str]] = []
-        for filename in MEMORY_FILES:
+        for filename in ALL_MEMORY_FILES:
             path = memory_root / filename
             if not path.exists():
                 continue
-            migrated_lines: list[str] = []
             changed = False
             try:
-                lines = path.read_text(encoding="utf-8").splitlines()
+                records = _read_memory_records(path, filename)
             except OSError as error:
                 raise StorageError(f"Failed to read .umem/memory/{filename}: {error}") from error
-            for line_number, line in enumerate(lines, start=1):
-                if not line.strip():
-                    continue
-                try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError as error:
-                    raise StorageError(
-                        f"Corrupt JSONL line in .umem/memory/{filename}:{line_number}: {error}"
-                    ) from error
+            except json.JSONDecodeError as error:
+                raise StorageError(f"Corrupt JSON in .umem/memory/{filename}: {error}") from error
+            except TypeError as error:
+                raise ValidationFailedError(
+                    f"Invalid memory file .umem/memory/{filename}: {error}."
+                ) from error
+            migrated_records: list[dict[str, Any]] = []
+            for line_number, payload in records:
                 if not isinstance(payload, dict):
                     raise ValidationFailedError(
                         f"Invalid memory record in .umem/memory/{filename}:{line_number}."
                     )
-                migrated = self._migrate_memory_payload(filename, payload)
+                migrated = self._migrate_memory_payload(filename, payload, line_number)
                 changed = changed or migrated != payload
-                migrated_lines.append(json.dumps(migrated, sort_keys=True, separators=(",", ":")))
+                migrated_records.append(migrated)
             if changed:
-                planned.append((f".umem/memory/{filename}", f"{'\n'.join(migrated_lines)}\n"))
+                force_list = filename.endswith(".json") and self._json_memory_file_is_list(path)
+                planned.append((
+                    f".umem/memory/{filename}",
+                    self._render_memory_records(filename, migrated_records, force_list=force_list),
+                ))
         return planned
 
-    def _migrate_memory_payload(self, filename: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _json_memory_file_is_list(self, path: Path) -> bool:
+        try:
+            return isinstance(json.loads(path.read_text(encoding="utf-8")), list)
+        except json.JSONDecodeError as error:
+            raise StorageError(f"Corrupt JSON in {path}: {error}") from error
+
+    def _render_memory_records(
+        self, filename: str, records: list[dict[str, Any]], *, force_list: bool = False
+    ) -> str:
+        if filename.endswith(".jsonl"):
+            lines = [
+                json.dumps(record, sort_keys=True, separators=(",", ":")) for record in records
+            ]
+            return f"{'\n'.join(lines)}\n"
+        content: Any = records if force_list or len(records) != 1 else records[0]
+        return f"{json.dumps(content, indent=2, sort_keys=True)}\n"
+
+    def _migrate_memory_payload(
+        self, filename: str, payload: dict[str, Any], line_number: int
+    ) -> dict[str, Any]:
         raw_version = payload.get("schema_version", 0)
         if type(raw_version) is not int:
             raise ValidationFailedError(
-                f".umem/memory/{filename} schema_version must be an integer."
+                f".umem/memory/{filename}:{line_number} schema_version must be an integer."
             )
         if raw_version > TARGET_SCHEMA_VERSION:
             raise ValidationFailedError(f"Cannot downgrade .umem/memory/{filename}.")
         if raw_version == TARGET_SCHEMA_VERSION:
+            _validate_memory_payload(filename, payload, line_number)
             return payload
-        allowed = MEMORY_ALLOWED_FIELDS[filename]
+        allowed = MEMORY_ALLOWED_FIELDS[f"{Path(filename).stem}.jsonl"]
         migrated = {key: value for key, value in payload.items() if key in allowed}
         raw_metadata = migrated.get("metadata")
         metadata = cast(dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
@@ -443,6 +542,7 @@ class UpdateMigrateUseCase:
             metadata = {**metadata, **extras}
             migrated["metadata"] = metadata
         migrated["schema_version"] = TARGET_SCHEMA_VERSION
+        _validate_memory_payload(filename, migrated, line_number)
         return migrated
 
     def _safe_write_command(

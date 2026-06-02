@@ -36,6 +36,7 @@ from universal_memory.infrastructure.security import (
 
 MIN_BENCHMARK_FACT_COUNT = 1000
 MIN_BENCHMARK_QUERY_COUNT = 30
+VALID_CREATED_AT = "2026-05-01T00:00:00Z"
 
 
 def _safe_write(project_root: Path) -> SafeWriteUseCase:
@@ -64,6 +65,20 @@ def _init_project(project_root: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def _legacy_fact_payload(
+    fact_id: str = "00000000-0000-4000-8000-000000000001",
+) -> dict[str, object]:
+    return {
+        "id": fact_id,
+        "created_at": VALID_CREATED_AT,
+        "updated_at": VALID_CREATED_AT,
+        "content": "Preserve me",
+        "scope": "project",
+        "source": "test",
+        "status": "active",
+    }
 
 
 def test_update_check_is_read_only_and_reports_required_fields(tmp_path: Path) -> None:
@@ -177,6 +192,29 @@ def test_update_migrate_preserves_config_and_memory_custom_fields(tmp_path: Path
     assert result.snapshot_references
 
 
+def test_update_migrate_migrates_legacy_json_with_snapshot_and_audit(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    legacy_json = tmp_path / ".umem" / "memory" / "facts.json"
+    payload = _legacy_fact_payload()
+    payload["custom_field"] = "safe-extra"
+    legacy_json.write_text(json.dumps([payload], sort_keys=True), encoding="utf-8")
+
+    check = UpdateCheckUseCase(installed_version="test-version").execute(
+        UpdateCheckCommand(project_root=tmp_path)
+    )
+    result = UpdateMigrateUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+        UpdateMigrateCommand(project_root=tmp_path)
+    )
+
+    migrated = json.loads(legacy_json.read_text(encoding="utf-8"))
+    assert check.memory_schema_versions["facts.json"] == [0]
+    assert migrated[0]["schema_version"] == 1
+    assert migrated[0]["metadata"]["custom_field"] == "safe-extra"
+    assert ".umem/memory/facts.json" in result.migrated_files
+    assert result.audit_reference
+    assert result.snapshot_references
+
+
 def test_update_migrate_updates_explicit_legacy_config_schema(tmp_path: Path) -> None:
     _init_project(tmp_path)
     config_path = tmp_path / ".umem" / "config.toml"
@@ -197,7 +235,7 @@ def test_update_migrate_updates_explicit_legacy_config_schema(tmp_path: Path) ->
 def test_update_migrate_prepares_all_snapshots_before_any_rewrite(tmp_path: Path) -> None:
     _init_project(tmp_path)
     facts = tmp_path / ".umem" / "memory" / "facts.jsonl"
-    facts.write_text('{"id":"fact"}\n', encoding="utf-8")
+    facts.write_text(json.dumps(_legacy_fact_payload()) + "\n", encoding="utf-8")
     calls: list[str] = []
 
     class RecordingSafeWrite:
@@ -250,7 +288,7 @@ def test_update_migrate_rolls_back_committed_files_when_later_commit_fails(
     _init_project(tmp_path)
     config_path = tmp_path / ".umem" / "config.toml"
     facts_path = tmp_path / ".umem" / "memory" / "facts.jsonl"
-    facts_path.write_text('{"id":"fact"}\n', encoding="utf-8")
+    facts_path.write_text(json.dumps(_legacy_fact_payload()) + "\n", encoding="utf-8")
     original_config = config_path.read_bytes()
 
     class FailingCommitSafeWrite:
@@ -329,10 +367,21 @@ def test_update_migrate_rejects_boolean_memory_schema_version(tmp_path: Path) ->
         )
 
 
+def test_update_migrate_rejects_incomplete_jsonl_after_model_validation(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    facts_path = tmp_path / ".umem" / "memory" / "facts.jsonl"
+    facts_path.write_text('{"id":"00000000-0000-4000-8000-000000000001"}\n', encoding="utf-8")
+
+    with pytest.raises(ValidationFailedError):
+        UpdateMigrateUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+            UpdateMigrateCommand(project_root=tmp_path)
+        )
+
+
 def test_update_migrate_invalid_jsonl_aborts_without_rewrite(tmp_path: Path) -> None:
     _init_project(tmp_path)
     facts = tmp_path / ".umem" / "memory" / "facts.jsonl"
-    original = '{"id":"ok"}\n{broken\n'
+    original = json.dumps(_legacy_fact_payload()) + "\n{broken\n"
     facts.write_text(original, encoding="utf-8")
 
     with pytest.raises(StorageError):
