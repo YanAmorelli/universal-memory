@@ -1,7 +1,3 @@
-from pathlib import Path
-
-from universal_memory.infrastructure.config.toml_loader import load_config
-
 DEFAULT_LOCALE = "en"
 PT_BR_LOCALE = "pt-BR"
 
@@ -42,17 +38,6 @@ def normalize_locale(value: object) -> str:
     if normalized.lower() == "pt-br":
         return PT_BR_LOCALE
     return DEFAULT_LOCALE
-
-
-def project_locale(project_root: Path) -> str:
-    try:
-        loaded = load_config(project_root)
-    except Exception:
-        return DEFAULT_LOCALE
-    preferences = loaded.merged.get("preferences")
-    if not isinstance(preferences, dict):
-        return DEFAULT_LOCALE
-    return normalize_locale(preferences.get("locale"))
 
 
 def human_message(message: str, *, locale: str = DEFAULT_LOCALE, **kwargs: object) -> str:

@@ -54,6 +54,13 @@ para que a saída da CLI, instruções geradas e templates de skills sejam consi
 - [x] Executar `uv run pytest` completo.
 - [x] Executar `uv run ruff check .` e `uv run pyright`.
 
+### Review Findings
+
+- [x] [Review][Patch] Help humano padrao ainda expõe textos em portugues, violando English-first [src/universal_memory/interfaces/cli/init_command.py:237] — resolvido; CLI/help/saidas humanas publicas migradas para ingles canonico por padrao, mantendo overlay explicito `pt-BR`.
+- [x] [Review][Patch] Fallback de erro humano usa `pt-BR` quando nenhum locale foi resolvido [src/universal_memory/interfaces/cli/init_command.py:2685] — resolvido; fallback sem locale explicito agora e `en`.
+- [x] [Review][Patch] Catalogo de mensagens importa infraestrutura diretamente na camada CLI [src/universal_memory/interfaces/cli/message_catalog.py:3] — resolvido; resolucao de locale movida para bootstrap via `locale_resolver`, mantendo catalogo puro.
+- [x] [Review][Patch] Erro de hosts nao suportados nao aplica overlay `pt-BR` no detalhe humano [src/universal_memory/interfaces/cli/init_command.py:991] — resolvido; detalhe humano usa `human_message(...)` e JSON permanece canonico em ingles.
+
 ## Dev Notes
 
 - **Escopo desta story:** configurar idioma default e comportamento de locale. Não implementar splash visual (Story 4.6), não implementar update/migração completa de schema (Story 5.7) e não refatorar todo o CLI além do necessário para os ACs.

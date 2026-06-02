@@ -73,7 +73,7 @@ PUBLIC_MCP_TOOLS = {
     "host_setup": {"host_id": "codex", "force": True},
     "host_check": {"host_id": "codex"},
     "sync_instructions": {"host_ids": ["codex", "claude_code"], "apply": True},
-    "propose_skill": {"latent_skill_id": FACT_ID, "decision": "sim"},
+    "propose_skill": {"latent_skill_id": FACT_ID, "decision": "yes"},
     "generate_skill": {"latent_skill_id": FACT_ID},
     "list_skills": {},
     "get_skill_detail": {"name_or_id": "TDD recorrente"},

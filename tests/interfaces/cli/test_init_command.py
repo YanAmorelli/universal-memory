@@ -3,13 +3,18 @@ import socket
 import subprocess
 import sys
 import tomllib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from universal_memory.__main__ import main
 from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
+from universal_memory.application.memory import PurgeFactResult
 from universal_memory.application.onboarding.setup_project import setup_project
+from universal_memory.application.skills import ProposeSkillDecision, ProposeSkillResult
+from universal_memory.application.update import UpdateCheckResult
+from universal_memory.domain.entities import LatentSkill, LatentSkillScope, LatentSkillStatus
 from universal_memory.infrastructure.config import (
     LocalConfigValidationPort,
     LocalProjectLayoutPort,
@@ -48,6 +53,96 @@ def test_init_in_clean_directory_creates_layout_with_human_output(
     assert (tmp_path / ".umem" / "memory").is_dir()
     config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
     assert config["preferences"]["locale"] == "en"
+
+
+def test_cli_help_uses_english_text_by_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli_main(["--help"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Manage memory facts" in captured.out
+    assert "Inspect audit events" in captured.out
+    assert "Gerenciar" not in captured.out
+    assert "auditoria" not in captured.out
+
+
+def test_expected_human_errors_default_to_english(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli_main(
+        ["facts", "purge"],
+        facts_purge_command=lambda _command: PurgeFactResult(
+            purged_count=0,
+            affected_ids=[],
+            audit_reference="audit-ref",
+        ),
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Provide exactly one option" in captured.err
+    assert "Informe exatamente" not in captured.err
+
+
+def test_update_conflicting_options_error_defaults_to_english(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli_main(
+        ["update", "--check", "--migrate"],
+        update_check_command=lambda _command: UpdateCheckResult(
+            installed_version="test",
+            target_schema_version=1,
+            project_config_schema_version=None,
+            memory_schema_versions={},
+            benchmarks_status="missing",
+            updates_available=False,
+            migration_required=False,
+        ),
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Provide only one update option per execution" in captured.err
+    assert "Informe apenas" not in captured.err
+
+
+def test_skills_propose_accepts_english_decision_alias(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    seen: list[ProposeSkillDecision] = []
+
+    def propose(command):
+        seen.append(command.decision)
+        return ProposeSkillResult(
+            latent_skill=LatentSkill(
+                id="00000000-0000-4000-8000-000000000001",
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                updated_at=datetime(2026, 1, 1, tzinfo=UTC),
+                name="Skill",
+                description="Description",
+                scope=LatentSkillScope.project,
+                status=LatentSkillStatus.ignored,
+            ),
+            proposal={
+                "suggested_name": "Skill",
+                "purpose": "Purpose",
+                "evidence": [],
+                "scope": "project",
+            },
+            accepted=True,
+            audit_reference="audit-ref",
+        )
+
+    exit_code = cli_main(
+        ["skills", "propose", "latent-1", "--decision", "yes"],
+        propose_skill_command=propose,
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen == [ProposeSkillDecision.sim]
 
 
 def test_init_json_outputs_pure_parseable_payload_with_required_keys(
@@ -206,6 +301,7 @@ def test_init_human_interactive_renders_terminal_splash(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
     monkeypatch.setattr(
@@ -307,6 +403,27 @@ def test_init_no_color_renders_plain_ascii_splash(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "umem" in captured.out
+    assert "USB" in captured.out
+    assert "\x1b[" not in captured.out
+
+
+def test_init_missing_term_renders_plain_ascii_splash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr(
+        "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
+    )
+
+    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
     assert "USB" in captured.out
     assert "\x1b[" not in captured.out
 

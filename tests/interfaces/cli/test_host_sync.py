@@ -111,11 +111,11 @@ def test_host_sync_human_dry_run_displays_plan_and_dry_run_concluido(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "Plano de sincronizacao de instrucoes" in captured.out
-    assert "Escopo" in captured.out
+    assert "Instruction synchronization plan" in captured.out
+    assert "Scope" in captured.out
     assert "project" in captured.out
     assert (
-        "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos." in captured.out
+        "Dry-run completed. No changes were applied to the filesystem." in captured.out
     )
 
 
@@ -155,6 +155,6 @@ def test_host_sync_human_apply_interactive_confirmation_no(
 
     captured = capsys.readouterr()
     assert exit_code == 1
-    assert "Sincronizacao de instrucoes cancelada." in captured.out
+    assert "Instruction synchronization cancelled." in captured.out
     assert len(calls) == 1
     assert calls[0].apply is False

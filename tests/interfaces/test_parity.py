@@ -230,7 +230,7 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
                 "json",
             ],
             "propose_skill",
-            {"latent_skill_id": "11111111-1111-4111-8111-111111111111", "decision": "sim"},
+            {"latent_skill_id": "11111111-1111-4111-8111-111111111111", "decision": "yes"},
         ),
         (
             [

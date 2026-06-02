@@ -93,7 +93,7 @@ from universal_memory.domain.entities import (
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
-from universal_memory.interfaces.cli.message_catalog import human_message, project_locale
+from universal_memory.interfaces.cli.message_catalog import DEFAULT_LOCALE, human_message
 from universal_memory.interfaces.errors import (
     DOMAIN_ERROR_TYPES,
     error_descriptor,
@@ -134,6 +134,7 @@ UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
 UpdateCheckCommandHandler = Callable[[UpdateCheckCommand], UpdateCheckResult]
 UpdateMigrateCommandHandler = Callable[[UpdateMigrateCommand], UpdateMigrateResult]
 UpdateBenchmarksCommandHandler = Callable[[UpdateBenchmarksCommand], UpdateBenchmarksResult]
+LocaleResolver = Callable[[], str]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
@@ -186,6 +187,7 @@ def main(  # noqa: PLR0913
     update_check_command: UpdateCheckCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    locale_resolver: LocaleResolver | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -212,6 +214,7 @@ def main(  # noqa: PLR0913
         update_check_command=update_check_command,
         update_migrate_command=update_migrate_command,
         update_benchmarks_command=update_benchmarks_command,
+        locale_resolver=locale_resolver,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
@@ -258,13 +261,14 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     update_check_command: UpdateCheckCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    locale_resolver: LocaleResolver | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
-    facts_app = typer.Typer(help="Gerenciar fatos de memoria")
-    audit_app = typer.Typer(help="Inspecionar eventos de auditoria")
-    snapshots_app = typer.Typer(help="Inspecionar snapshots")
-    host_app = typer.Typer(help="Configurar hosts de agente")
-    skills_app = typer.Typer(help="Gerenciar skills")
+    facts_app = typer.Typer(help="Manage memory facts")
+    audit_app = typer.Typer(help="Inspect audit events")
+    snapshots_app = typer.Typer(help="Inspect snapshots")
+    host_app = typer.Typer(help="Configure agent hosts")
+    skills_app = typer.Typer(help="Manage skills")
 
     app.add_typer(facts_app, name="facts")
     app.add_typer(audit_app, name="audit")
@@ -309,6 +313,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 yes=yes,
                 host_setup_command=host_setup_command,
                 host_check_command=host_check_command,
+                locale_resolver=locale_resolver,
             )
         )
 
@@ -324,14 +329,14 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @app.command("update")
     def update(  # noqa: PLR0913
         ctx: typer.Context,
-        check: Annotated[bool, typer.Option("--check", help="Verificar status local.")] = False,
+        check: Annotated[bool, typer.Option("--check", help="Check local update status.")] = False,
         migrate: Annotated[
             bool,
-            typer.Option("--migrate", help="Migrar config e memoria para o schema atual."),
+            typer.Option("--migrate", help="Migrate config and memory to the current schema."),
         ] = False,
         benchmarks: Annotated[
             bool,
-            typer.Option("--benchmarks", help="Atualizar benchmarks locais offline."),
+            typer.Option("--benchmarks", help="Update local benchmarks offline."),
         ] = False,
         yes: YesOption = False,
         output_format: OutputFormatOption = None,
@@ -359,17 +364,17 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str,
             typer.Option(
                 "--scope",
-                help="Escopo de contexto.",
+                help="Context scope.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
         max_size_chars: Annotated[
             int,
-            typer.Option("--max-size-chars", min=1, help="Limite maximo do contexto em chars."),
+            typer.Option("--max-size-chars", min=1, help="Maximum context size in chars."),
         ] = DEFAULT_CONTEXT_MAX_SIZE_CHARS,
         agent_session_key: Annotated[
             str | None,
-            typer.Option("--agent-session-key", help="Chave de sessao do agente."),
+            typer.Option("--agent-session-key", help="Agent session key."),
         ] = None,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -389,18 +394,18 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @app.command("remember")
     def remember(
         ctx: typer.Context,
-        content: Annotated[str, typer.Argument(help="Conteudo do fato a gravar.")],
+        content: Annotated[str, typer.Argument(help="Fact content to store.")],
         scope: Annotated[
             str,
             typer.Option(
                 "--scope",
-                help="Escopo do fato.",
+                help="Fact scope.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
         tags: Annotated[
             list[str] | None,
-            typer.Option("--tag", help="Tag do fato. Pode ser usada multiplas vezes."),
+            typer.Option("--tag", help="Fact tag. May be used multiple times."),
         ] = None,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -424,7 +429,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str | None,
             typer.Option(
                 "--scope",
-                help="Filtro de escopo.",
+                help="Scope filter.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = None,
@@ -432,7 +437,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str | None,
             typer.Option(
                 "--status",
-                help="Filtro de status.",
+                help="Status filter.",
                 click_type=click.Choice(
                     ["active", "stale", "archived", "purged"], case_sensitive=False
                 ),
@@ -455,12 +460,12 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @facts_app.command("purge")
     def facts_purge(
         ctx: typer.Context,
-        id: Annotated[str | None, typer.Option("--id", help="ID do fato para purgar.")] = None,
+        id: Annotated[str | None, typer.Option("--id", help="Fact ID to purge.")] = None,
         scope: Annotated[
             str | None,
             typer.Option(
                 "--scope",
-                help="Escopo para purgar.",
+                help="Scope to purge.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = None,
@@ -472,7 +477,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             raise RuntimeError(msg)
         if (id is None and scope is None) or (id is not None and scope is not None):
             _print_expected_error(
-                ValidationFailedError("Informe exatamente uma opcao: --id ou --scope."),
+                ValidationFailedError("Provide exactly one option: --id or --scope."),
                 output_format=_effective_format(ctx, output_format),
             )
             raise typer.Exit(code=1)
@@ -510,7 +515,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str,
             typer.Option(
                 "--scope",
-                help="Filtro de escopo.",
+                help="Scope filter.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
@@ -534,7 +539,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str,
             typer.Option(
                 "--scope",
-                help="Filtro de escopo.",
+                help="Scope filter.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
@@ -558,7 +563,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str,
             typer.Option(
                 "--scope",
-                help="Escopo para rollback.",
+                help="Rollback scope.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
@@ -584,13 +589,13 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @host_app.command("setup")
     def host_setup(  # noqa: PLR0913
         ctx: typer.Context,
-        host_id: Annotated[str, typer.Argument(help="Host a configurar.")],
+        host_id: Annotated[str, typer.Argument(help="Host to configure.")],
         yes: YesOption = False,
         max_lines: Annotated[
-            int, typer.Option("--max-lines", help="Limite maximo de linhas.")
+            int, typer.Option("--max-lines", help="Maximum line count.")
         ] = 100,
         max_chars: Annotated[
-            int, typer.Option("--max-chars", help="Limite maximo de caracteres.")
+            int, typer.Option("--max-chars", help="Maximum character count.")
         ] = 4000,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -611,12 +616,12 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @host_app.command("check")
     def host_check(
         ctx: typer.Context,
-        host_id: Annotated[str, typer.Argument(help="Host a validar.")],
+        host_id: Annotated[str, typer.Argument(help="Host to validate.")],
         max_lines: Annotated[
-            int, typer.Option("--max-lines", help="Limite maximo de linhas.")
+            int, typer.Option("--max-lines", help="Maximum line count.")
         ] = 100,
         max_chars: Annotated[
-            int, typer.Option("--max-chars", help="Limite maximo de caracteres.")
+            int, typer.Option("--max-chars", help="Maximum character count.")
         ] = 4000,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -640,13 +645,13 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             bool,
             typer.Option(
                 "--apply/--no-apply",
-                help="Aplicar a sincronizacao ou apenas exibir preview.",
+                help="Apply synchronization or only show a preview.",
             ),
         ] = False,
         yes: YesOption = False,
         host_id: Annotated[
             list[str] | None,
-            typer.Option("--host", help="Host a sincronizar. Pode ser usado multiplas vezes."),
+            typer.Option("--host", help="Host to synchronize. May be used multiple times."),
         ] = None,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -666,14 +671,21 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("propose")
     def skills_propose(
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        latent_skill_id: Annotated[str, typer.Argument(help="Latent skill ID.")],
         decision: Annotated[
             str | None,
             typer.Option(
                 "--decision",
-                help="Decisao explicita: sim, sempre ou nao.",
+                help="Explicit decision: yes, always, or no.",
                 click_type=click.Choice(
-                    ["sim", "s", "sempre", "e", "nao", "não", "n"], case_sensitive=False
+                    [
+                        "yes",
+                        "y",
+                        "always",
+                        "no",
+                        "n",
+                    ],
+                    case_sensitive=False,
                 ),
             ),
         ] = None,
@@ -708,7 +720,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("detail")
     def skills_detail(
         ctx: typer.Context,
-        name_or_id: Annotated[str, typer.Argument(help="Nome ou ID da skill.")],
+        name_or_id: Annotated[str, typer.Argument(help="Skill name or ID.")],
         output_format: OutputFormatOption = None,
     ) -> None:
         if get_skill_detail_command is None:
@@ -725,13 +737,13 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("generate")
     def skills_generate(
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill aprovada.")],
+        latent_skill_id: Annotated[str, typer.Argument(help="Approved latent skill ID.")],
         yes: YesOption = False,
         update_existing: Annotated[
             bool,
             typer.Option(
                 "--update-existing",
-                help="Atualizar skill existente em vez de criar slug alternativo.",
+                help="Update an existing skill instead of creating an alternate slug.",
             ),
         ] = False,
         output_format: OutputFormatOption = None,
@@ -752,7 +764,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("activate")
     def skills_activate(
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        latent_skill_id: Annotated[str, typer.Argument(help="Latent skill ID.")],
         output_format: OutputFormatOption = None,
     ) -> None:
         if activate_skill_command is None:
@@ -769,7 +781,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("deactivate")
     def skills_deactivate(
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        latent_skill_id: Annotated[str, typer.Argument(help="Latent skill ID.")],
         output_format: OutputFormatOption = None,
     ) -> None:
         if deactivate_skill_command is None:
@@ -786,19 +798,19 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("update")
     def skills_update(  # noqa: PLR0913
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
-        name: Annotated[str | None, typer.Option("--name", help="Novo nome da skill.")] = None,
+        latent_skill_id: Annotated[str, typer.Argument(help="Latent skill ID.")],
+        name: Annotated[str | None, typer.Option("--name", help="New skill name.")] = None,
         description: Annotated[
             str | None,
-            typer.Option("--description", help="Nova descricao da skill."),
+            typer.Option("--description", help="New skill description."),
         ] = None,
         trigger: Annotated[
             list[str] | None,
-            typer.Option("--trigger", help="Gatilho da skill. Pode ser usado multiplas vezes."),
+            typer.Option("--trigger", help="Skill trigger. May be used multiple times."),
         ] = None,
         file: Annotated[
             Path | None,
-            typer.Option("--file", help="Arquivo markdown com novo conteudo da skill."),
+            typer.Option("--file", help="Markdown file with new skill content."),
         ] = None,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -847,6 +859,7 @@ def build_main(  # noqa: PLR0913
     update_check_command: UpdateCheckCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    locale_resolver: LocaleResolver | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -880,6 +893,7 @@ def build_main(  # noqa: PLR0913
             update_check_command=update_check_command,
             update_migrate_command=update_migrate_command,
             update_benchmarks_command=update_benchmarks_command,
+            locale_resolver=locale_resolver,
         )
 
     return configured_main
@@ -941,7 +955,8 @@ def _ci_environment_enabled() -> bool:
 def _terminal_color_enabled() -> bool:
     if "NO_COLOR" in os.environ:
         return False
-    return os.environ.get("TERM", "") != "dumb"
+    term = os.environ.get("TERM", "")
+    return bool(term) and term != "dumb"
 
 
 def _should_render_init_splash(output_format: str) -> bool:
@@ -969,7 +984,7 @@ def _confirm(prompt: str, default: bool = False) -> bool:
     val = answer.strip().lower()
     if not val:
         return default
-    return val in {"s", "sim", "y", "yes"}
+    return val in {"y", "yes"}
 
 
 def _run_init(  # noqa: PLR0913
@@ -980,8 +995,10 @@ def _run_init(  # noqa: PLR0913
     yes: bool = False,
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
+    locale_resolver: LocaleResolver | None = None,
 ) -> int:
-    locale = project_locale(Path.cwd()) if output_format != "json" else "en"
+    resolve_locale = locale_resolver or (lambda: DEFAULT_LOCALE)
+    locale = resolve_locale() if output_format != "json" else DEFAULT_LOCALE
     try:
         if _should_render_init_splash(output_format):
             _render_init_splash()
@@ -998,7 +1015,7 @@ def _run_init(  # noqa: PLR0913
                 human_message("Initializing project scaffold...", locale=locale), spinner="dots"
             ):
                 result = _execute_setup_project(command, Path.cwd(), host_ids)
-            locale = project_locale(Path.cwd())
+            locale = resolve_locale()
         host_results = _configure_init_hosts(
             host_ids,
             output_format=output_format,
@@ -1063,7 +1080,7 @@ def _selected_init_hosts(
     locale: str = "en",
 ) -> list[str]:
     if hosts:
-        return _normalize_supported_hosts(hosts)
+        return _normalize_supported_hosts(hosts, locale=locale)
     if output_format == "json" or yes:
         return list(DEFAULT_ENABLED_HOST_IDS)
     if not sys.stdin.isatty():
@@ -1084,7 +1101,7 @@ def _selected_init_hosts(
     return selected
 
 
-def _normalize_supported_hosts(hosts: list[str]) -> list[str]:
+def _normalize_supported_hosts(hosts: list[str], *, locale: str = DEFAULT_LOCALE) -> list[str]:
     normalized: list[str] = []
     for host_id in hosts:
         cleaned = host_id.strip().lower()
@@ -1092,7 +1109,9 @@ def _normalize_supported_hosts(hosts: list[str]) -> list[str]:
             normalized.append(cleaned)
     unsupported = [host_id for host_id in normalized if host_id not in DEFAULT_ENABLED_HOST_IDS]
     if unsupported:
-        raise ValidationFailedError(f"Unsupported hosts: {', '.join(unsupported)}")
+        raise ValidationFailedError(
+            human_message("Unsupported hosts: {hosts}", locale=locale, hosts=", ".join(unsupported))
+        )
     return normalized
 
 
@@ -1291,13 +1310,13 @@ def _run_facts_purge(
     try:
         if output_format == "json" and not yes:
             raise ValidationFailedError(
-                "A flag --yes / -y e obrigatoria para executar purge com saida JSON."
+                "The --yes / -y flag is required to run purge with JSON output."
             )
         if output_format != "json":
             _stdout_console().print(_format_human_purge_preview(id=id, scope=scope))
             if not yes:
-                if not _confirm("Confirmar purga permanente? [y/N]: ", default=False):
-                    _stdout_console().print("Purga cancelada.")
+                if not _confirm("Confirm permanent purge? [y/N]: ", default=False):
+                    _stdout_console().print("Purge cancelled.")
                     return 1
 
         result = command(PurgeFactCommand(id=id, scope=scope, origin="cli"))
@@ -1326,12 +1345,12 @@ def _run_facts_hygiene(
     try:
         if output_format != "json":
             _stdout_console().print(
-                "[yellow]Aviso: A execucao de fatos higiene ira otimizar e limpar "
-                "o contexto de memoria, podendo arquivar fatos obsoletos.[/yellow]"
+                "[yellow]Warning: facts hygiene will optimize and clean memory context, "
+                "and may archive obsolete facts.[/yellow]"
             )
             if not yes:
-                if not _confirm("Deseja prosseguir com a higiene? [s/N]: ", default=False):
-                    _stdout_console().print("Higiene cancelada.")
+                if not _confirm("Proceed with hygiene? [y/N]: ", default=False):
+                    _stdout_console().print("Hygiene cancelled.")
                     return 1
 
         if output_format == "json":
@@ -1417,20 +1436,20 @@ def _run_rollback(
     try:
         if output_format == "json" and not yes:
             raise SnapshotFailedError(
-                "A flag --yes / -y e obrigatoria para executar rollback com saida JSON."
+                "The --yes / -y flag is required to run rollback with JSON output."
             )
         preview = rollback_preview_command(scope)
         if output_format != "json":
             _stdout_console().print(_format_human_rollback_preview(preview))
             if not yes:
-                if not _confirm("Deseja prosseguir com o rollback? [s/N]: ", default=False):
-                    _stdout_console().print("Rollback cancelado.")
+                if not _confirm("Proceed with rollback? [y/N]: ", default=False):
+                    _stdout_console().print("Rollback cancelled.")
                     return 1
 
         if output_format == "json":
             result = command(RollbackCommand(scope=scope, origin="cli"))
         else:
-            with _stderr_console().status("Restaurando snapshot (rollback)...", spinner="dots"):
+            with _stderr_console().status("Restoring snapshot (rollback)...", spinner="dots"):
                 result = command(RollbackCommand(scope=scope, origin="cli"))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
@@ -1459,7 +1478,7 @@ def _run_host_setup(  # noqa: PLR0913
     try:
         if output_format == "json" and not yes:
             raise ValidationFailedError(
-                "A flag --yes / -y e obrigatoria para executar host setup com saida JSON."
+                "The --yes / -y flag is required to run host setup with JSON output."
             )
         if output_format != "json":
             preview = command(
@@ -1473,8 +1492,8 @@ def _run_host_setup(  # noqa: PLR0913
             )
             _stdout_console().print(_format_human_host_plan(preview, operation="setup"))
             if not yes:
-                if not _confirm("Aplicar configuracao do host? [s/N]: ", default=False):
-                    _stdout_console().print("Setup de host cancelado.")
+                if not _confirm("Apply host configuration? [y/N]: ", default=False):
+                    _stdout_console().print("Host setup cancelled.")
                     return 1
 
         result = command(
@@ -1556,7 +1575,7 @@ def _run_host_sync(
     try:
         if apply and output_format == "json" and not yes:
             raise ValidationFailedError(
-                "A flag --yes / -y e obrigatoria para executar host sync com saida JSON."
+                "The --yes / -y flag is required to run host sync with JSON output."
             )
         if apply and output_format != "json":
             preview = command(
@@ -1568,8 +1587,8 @@ def _run_host_sync(
             )
             _stdout_console().print(_format_human_sync_plan(preview))
             if not yes:
-                if not _confirm("Aplicar sincronizacao de instrucoes? [s/N]: ", default=False):
-                    _stdout_console().print("Sincronizacao de instrucoes cancelada.")
+                if not _confirm("Apply instruction synchronization? [y/N]: ", default=False):
+                    _stdout_console().print("Instruction synchronization cancelled.")
                     return 1
 
         result = command(
@@ -1618,7 +1637,7 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913
     selected_count = sum([check, migrate, benchmarks])
     if selected_count != 1:
         _print_expected_error(
-            ValidationFailedError("Informe apenas uma opcao de update por execucao."),
+            ValidationFailedError("Provide only one update option per execution."),
             output_format=output_format,
         )
         return 1
@@ -1637,13 +1656,13 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913
                 raise RuntimeError("CLI update_migrate_command dependency was not configured.")
             if output_format == "json" and not yes:
                 raise ValidationFailedError(
-                    "A flag --yes / -y e obrigatoria para executar update --migrate com saida JSON."
+                    "The --yes / -y flag is required to run update --migrate with JSON output."
                 )
             if output_format != "json":
                 _stdout_console().print(_format_human_update_mutation_plan("update.migrate"))
                 if not yes:
-                    if not _confirm("Aplicar migracao de schema? [s/N]: ", default=False):
-                        _stdout_console().print("Migracao cancelada.")
+                    if not _confirm("Apply schema migration? [y/N]: ", default=False):
+                        _stdout_console().print("Migration cancelled.")
                         return 1
             result = migrate_command(UpdateMigrateCommand(project_root=Path.cwd(), origin="cli"))
             if output_format == "json":
@@ -1657,14 +1676,13 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913
                 raise RuntimeError("CLI update_benchmarks_command dependency was not configured.")
             if output_format == "json" and not yes:
                 raise ValidationFailedError(
-                    "A flag --yes / -y e obrigatoria para executar update --benchmarks "
-                    "com saida JSON."
+                    "The --yes / -y flag is required to run update --benchmarks with JSON output."
                 )
             if output_format != "json":
                 _stdout_console().print(_format_human_update_mutation_plan("update.benchmarks"))
                 if not yes:
-                    if not _confirm("Atualizar benchmarks locais? [s/N]: ", default=False):
-                        _stdout_console().print("Atualizacao de benchmarks cancelada.")
+                    if not _confirm("Update local benchmarks? [y/N]: ", default=False):
+                        _stdout_console().print("Benchmark update cancelled.")
                         return 1
             result = benchmarks_command(
                 UpdateBenchmarksCommand(project_root=Path.cwd(), origin="cli")
@@ -1726,7 +1744,7 @@ def _run_skills_detail(
 
 def _map_skill_read_error(error: Exception) -> Exception:
     if isinstance(error, KeyError):
-        return ValidationFailedError("Skill nao encontrada.")
+        return ValidationFailedError("Skill not found.")
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
     if isinstance(error, OSError) and not isinstance(error, DOMAIN_ERROR_TYPES):
@@ -1741,13 +1759,13 @@ def _prompt_skills_decision(
 ) -> ProposeSkillResult | None:
     _stdout_console().print(_format_human_skill_proposal(result))
     try:
-        answer = input("Decisao [Sim/Sempre/Não]: ")
+        answer = input("Decision [yes/always/no]: ")
     except (EOFError, KeyboardInterrupt):
-        _stdout_console().print("\nCancelado.")
+        _stdout_console().print("\nCancelled.")
         return None
     prompted_decision = _skill_decision(answer)
     if prompted_decision is None:
-        raise ValidationFailedError("Decisao invalida fornecida. Use Sim, Sempre ou Não.")
+        raise ValidationFailedError("Invalid decision provided. Use yes, always, or no.")
     return command(
         ProposeSkillCommand(
             latent_skill_id=latent_skill_id,
@@ -1760,7 +1778,7 @@ def _prompt_skills_decision(
 def _map_propose_error(error: Exception, latent_skill_id: str) -> Exception:
     if isinstance(error, KeyError):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
@@ -1780,10 +1798,10 @@ def _run_skills_propose(
     try:
         resolved_decision = ProposeSkillDecision.sim if yes and decision is None else decision
         if resolved_decision is None and not sys.stdin.isatty():
-            raise ValidationFailedError("Ambiente nao-TTY exige --decision ou --yes.")
+            raise ValidationFailedError("Non-TTY environment requires --decision or --yes.")
         if output_format == "json" and resolved_decision is None:
             raise ValidationFailedError(
-                "Informe --decision ou --yes para executar skills propose com saida JSON."
+                "Provide --decision or --yes to run skills propose with JSON output."
             )
         if resolved_decision is not None:
             result = command(
@@ -1818,31 +1836,31 @@ def _prompt_generate_collision(
 ) -> tuple[bool, int]:
     if update_existing:
         _stdout_console().print(
-            f"[bold yellow]AVISO: O diretorio da skill '{result.slug}' "
-            "ja existe e sera SOBRESCRITO![/bold yellow]"
+            f"[bold yellow]WARNING: skill directory '{result.slug}' "
+            "already exists and will be overwritten![/bold yellow]"
         )
-        if not _confirm("Confirmar sobreescrita e geracao? [s/N]: ", default=False):
-            _stdout_console().print("Geracao de skill cancelada.")
+        if not _confirm("Confirm overwrite and generation? [y/N]: ", default=False):
+            _stdout_console().print("Skill generation cancelled.")
             return False, 1
         return True, 0
 
     _stdout_console().print(
-        f"[bold yellow]Conflito: O diretorio da skill '{result.slug}' ja existe.[/bold yellow]"
+        f"[bold yellow]Conflict: skill directory '{result.slug}' already exists.[/bold yellow]"
     )
     _stdout_console().print(
-        f"Sugestao alternativa proposta pelo sistema: '{result.suggested_slug}'"
+        f"Alternative suggestion proposed by the system: '{result.suggested_slug}'"
     )
     choice = ""
     prompt_msg = (
-        "O que deseja fazer? [u] Atualizar existente, "
-        "[a] Usar slug alternativo proposto, [c] Cancelar [u/a/C]: "
+        "What do you want to do? [u] Update existing, "
+        "[a] Use proposed alternate slug, [c] Cancel [u/a/C]: "
     )
     while choice not in {"u", "a", "c"}:
         choice = input(prompt_msg).strip().lower()
         if not choice:
             choice = "c"
     if choice == "c":
-        _stdout_console().print("Geracao de skill cancelada.")
+        _stdout_console().print("Skill generation cancelled.")
         return False, 1
     return choice == "u", 0
 
@@ -1858,11 +1876,13 @@ def _run_skills_generate(
     try:
         if output_format == "json" and not yes:
             raise ValidationFailedError(
-                "A flag --yes / -y e obrigatoria para executar skills generate com saida JSON."
+                "The --yes / -y flag is required to run skills generate with JSON output."
             )
         if output_format != "json":
             if not yes and (not sys.stdin.isatty() or not sys.stdout.isatty()):
-                raise ValidationFailedError("Ambiente nao-TTY exige --yes para gerar skill.")
+                raise ValidationFailedError(
+                    "Non-TTY environment requires --yes to generate a skill."
+                )
 
             # Perform a dry_run to get real resolved paths and check for collision
             dry_run_result = command(
@@ -1882,8 +1902,8 @@ def _run_skills_generate(
                     )
                     if code != 0:
                         return code
-                elif not _confirm("Gerar estrutura da skill? [s/N]: ", default=False):
-                    _stdout_console().print("Geracao de skill cancelada.")
+                elif not _confirm("Generate skill structure? [y/N]: ", default=False):
+                    _stdout_console().print("Skill generation cancelled.")
                     return 1
 
         result = command(
@@ -1981,7 +2001,7 @@ def _run_skills_update(  # noqa: PLR0913
 
 def _read_skill_update_file(path: Path) -> str:
     if not path.is_file():
-        raise ValidationFailedError(f"Arquivo markdown nao encontrado: {path.as_posix()}")
+        raise ValidationFailedError(f"Markdown file not found: {path.as_posix()}")
     try:
         return path.read_text(encoding="utf-8")
     except OSError as error:
@@ -1991,13 +2011,13 @@ def _read_skill_update_file(path: Path) -> str:
 def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
     if isinstance(error, KeyError):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     if isinstance(error, StorageError) and str(error) == (
         f"Latent skill not found: {latent_skill_id}"
     ):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
@@ -2009,7 +2029,7 @@ def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Excepti
 def _map_generate_error(error: Exception, latent_skill_id: str) -> Exception:
     if isinstance(error, KeyError):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
@@ -2428,19 +2448,19 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
     if not result.initialized:
         return "\n".join(
             [
-                "Memoria local nao inicializada.",
-                f"Projeto: {result.project_path}",
-                f"Proxima acao: {result.recommended_action}",
+                "Local memory is not initialized.",
+                f"Project: {result.project_path}",
+                f"Next action: {result.recommended_action}",
             ]
         )
 
     lines = [
-        "Memoria local inicializada.",
-        f"Projeto: {result.project_path}",
-        f"Tamanho aproximado: {result.approximate_size_bytes} bytes",
-        f"Ultimo health check: {result.last_health_check}",
-        f"Regras ativas: {result.active_rules_count}",
-        f"Skills registradas: {result.registered_skills_count}",
+        "Local memory initialized.",
+        f"Project: {result.project_path}",
+        f"Approximate size: {result.approximate_size_bytes} bytes",
+        f"Last health check: {result.last_health_check}",
+        f"Active rules: {result.active_rules_count}",
+        f"Registered skills: {result.registered_skills_count}",
         "Hosts:",
     ]
     for host, validation in result.host_validation.items():
@@ -2449,12 +2469,12 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
         audit_reference = validation.get("audit_reference")
         suffix_parts = []
         if method:
-            suffix_parts.append(f"metodo={method}")
+            suffix_parts.append(f"method={method}")
         if audit_reference:
-            suffix_parts.append(f"auditoria={audit_reference}")
+            suffix_parts.append(f"audit={audit_reference}")
         suffix = f" ({', '.join(suffix_parts)})" if suffix_parts else ""
         lines.append(f"- {host}: {status}{suffix}")
-    lines.append("Fatos por escopo/status:")
+    lines.append("Facts by scope/status:")
     for scope, counts in result.fact_counts.items():
         rendered_counts = ", ".join(f"{status}: {count}" for status, count in counts.items())
         lines.append(f"- {scope} {rendered_counts}")
@@ -2464,12 +2484,12 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
 def _format_human_context_output(result: AssembleContextSummaryResult) -> str:
     summary = result.context_summary
     lines = [
-        "Contexto montado.",
-        f"Resumo do projeto: {summary.project_summary or '(vazio)'}",
-        f"Preferencias universais: {summary.universal_preferences or '(vazio)'}",
-        f"Regras ativas: {summary.active_rules or '(vazio)'}",
-        "Fontes: "
-        f"{', '.join(result.included_fact_ids) if result.included_fact_ids else '(nenhuma)'}",
+        "Context assembled.",
+        f"Project summary: {summary.project_summary or '(empty)'}",
+        f"Universal preferences: {summary.universal_preferences or '(empty)'}",
+        f"Active rules: {summary.active_rules or '(empty)'}",
+        "Sources: "
+        f"{', '.join(result.included_fact_ids) if result.included_fact_ids else '(none)'}",
     ]
     return "\n".join(lines)
 
@@ -2480,48 +2500,48 @@ def _format_human_update_check(result: UpdateCheckResult) -> str:
         for name, versions in sorted(result.memory_schema_versions.items())
     )
     lines = [
-        "Update check concluido.",
-        "Escopo: project",
-        f"Versao instalada: {result.installed_version}",
-        f"Schema alvo: {result.target_schema_version}",
-        f"Schema do config: {result.project_config_schema_version or 'legacy'}",
-        f"Schemas de memoria: {memory or '(nenhum arquivo encontrado)'}",
+        "Update check completed.",
+        "Scope: project",
+        f"Installed version: {result.installed_version}",
+        f"Target schema: {result.target_schema_version}",
+        f"Config schema: {result.project_config_schema_version or 'legacy'}",
+        f"Memory schemas: {memory or '(no files found)'}",
         f"Benchmarks: {result.benchmarks_status}",
-        f"Updates disponiveis: {result.updates_available}",
-        f"Migracao necessaria: {str(result.migration_required).lower()}",
+        f"Updates available: {result.updates_available}",
+        f"Migration required: {str(result.migration_required).lower()}",
     ]
     if result.warnings:
         lines.append("Warnings:")
         lines.extend(f"- {warning}" for warning in result.warnings)
-    lines.append("Proxima acao: umem update --migrate --yes, se migracao for necessaria.")
+    lines.append("Next action: umem update --migrate --yes, if migration is required.")
     return "\n".join(lines)
 
 
 def _format_human_update_mutation_plan(operation: str) -> str:
     return "\n".join(
         [
-            f"Operacao: {operation}",
-            "Escopo: project",
-            "Snapshot: criado pelo pipeline seguro antes de cada gravacao.",
-            "Auditoria: evento de mutacao segura esperado.",
-            "Padrao: nao confirmar.",
+            f"Operation: {operation}",
+            "Scope: project",
+            "Snapshot: created by the safe pipeline before each write.",
+            "Audit: safe mutation event expected.",
+            "Default: do not confirm.",
         ]
     )
 
 
 def _format_human_update_migrate(result: UpdateMigrateResult) -> str:
     lines = [
-        "Migracao concluida.",
-        "Escopo: project",
-        f"Schema alvo: {result.target_schema_version}",
-        "Arquivos migrados:",
+        "Migration completed.",
+        "Scope: project",
+        f"Target schema: {result.target_schema_version}",
+        "Migrated files:",
     ]
     lines.extend(f"- {path}" for path in result.migrated_files)
-    snapshots = ", ".join(result.snapshot_references) if result.snapshot_references else "(nenhum)"
+    snapshots = ", ".join(result.snapshot_references) if result.snapshot_references else "(none)"
     lines.extend(
         [
             f"Snapshots: {snapshots}",
-            f"Auditoria: {result.audit_reference or '(nenhuma alteracao)'}",
+            f"Audit: {result.audit_reference or '(no changes)'}",
         ]
     )
     if result.warnings:
@@ -2532,15 +2552,15 @@ def _format_human_update_migrate(result: UpdateMigrateResult) -> str:
 
 def _format_human_update_benchmarks(result: UpdateBenchmarksResult) -> str:
     lines = [
-        "Benchmarks atualizados.",
-        "Escopo: project",
-        f"Arquivo: {result.retrieval_results_path}",
-        f"Fatos sinteticos: {result.fact_count}",
+        "Benchmarks updated.",
+        "Scope: project",
+        f"File: {result.retrieval_results_path}",
+        f"Synthetic facts: {result.fact_count}",
         f"Queries: {result.query_count}",
-        f"Estrategia default: {result.selected_default_strategy}",
+        f"Default strategy: {result.selected_default_strategy}",
         f"p95 latency ms: {result.p95_latency_ms}",
         f"Snapshot: {result.snapshot_reference}",
-        f"Auditoria: {result.audit_reference}",
+        f"Audit: {result.audit_reference}",
     ]
     if result.warnings:
         lines.append("Warnings:")
@@ -2552,26 +2572,26 @@ def _format_human_remember_output(result: RememberFactResult) -> str:
     fact = result.fact
     return "\n".join(
         [
-            "Fato salvo.",
+            "Fact saved.",
             f"ID: {fact.id}",
-            f"Escopo: {fact.scope.value}",
+            f"Scope: {fact.scope.value}",
             f"Status: {fact.status.value}",
-            f"Tags: {', '.join(fact.tags) if fact.tags else '(nenhuma)'}",
-            f"Auditoria: {result.audit_reference}",
+            f"Tags: {', '.join(fact.tags) if fact.tags else '(none)'}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
 
 def _format_human_facts_list_output(result: ListFactsResult) -> Table | str:
     if not result.facts:
-        return "Nenhum fato encontrado."
+        return "No facts found."
 
-    table = Table(title="Fatos:", show_header=True)
+    table = Table(title="Facts:", show_header=True)
     table.add_column("ID")
-    table.add_column("Escopo")
+    table.add_column("Scope")
     table.add_column("Status")
-    table.add_column("Fonte")
-    table.add_column("Conteudo")
+    table.add_column("Source")
+    table.add_column("Content")
     for fact in result.facts:
         table.add_row(
             fact.id,
@@ -2584,15 +2604,15 @@ def _format_human_facts_list_output(result: ListFactsResult) -> Table | str:
 
 
 def _format_human_purge_preview(*, id: str | None, scope: FactScope | None) -> str:
-    target = f"ID: {id}" if id is not None else f"Escopo: {scope.value if scope else 'n/a'}"
+    target = f"ID: {id}" if id is not None else f"Scope: {scope.value if scope else 'n/a'}"
     return "\n".join(
         [
-            "Purga permanente selecionada:",
+            "Permanent purge selected:",
             target,
-            "Caminho afetado: .umem/memory/facts.jsonl",
-            "Snapshot: criado pelo pipeline seguro quando configurado",
-            "Auditoria: evento de mutacao segura esperado",
-            "Padrao: nao confirmar.",
+            "Affected path: .umem/memory/facts.jsonl",
+            "Snapshot: created by the safe pipeline when configured",
+            "Audit: safe mutation event expected",
+            "Default: do not confirm.",
         ]
     )
 
@@ -2600,10 +2620,10 @@ def _format_human_purge_preview(*, id: str | None, scope: FactScope | None) -> s
 def _format_human_purge_success(result: PurgeFactResult) -> str:
     return "\n".join(
         [
-            "Purga concluida.",
-            f"Itens purgados: {result.purged_count}",
-            f"IDs afetados: {', '.join(result.affected_ids)}",
-            f"Auditoria: {result.audit_reference}",
+            "Purge completed.",
+            f"Purged items: {result.purged_count}",
+            f"Affected IDs: {', '.join(result.affected_ids)}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
@@ -2611,25 +2631,25 @@ def _format_human_purge_success(result: PurgeFactResult) -> str:
 def _format_human_hygiene_success(result: ContextHygieneResult) -> str:
     return "\n".join(
         [
-            "Higiene de contexto concluida.",
-            f"Fatos marcados como stale: {result.stale_count}",
-            f"Fatos arquivados: {result.archived_count}",
-            f"Auditoria: {result.audit_reference}",
+            "Context hygiene completed.",
+            f"Facts marked stale: {result.stale_count}",
+            f"Facts archived: {result.archived_count}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
 
 def _format_human_audit_output(result: ListAuditLogResult) -> Table | str:
     if not result.events:
-        return "Nenhum evento de auditoria encontrado."
+        return "No audit events found."
 
-    table = Table(title="Eventos de auditoria:", show_header=True)
+    table = Table(title="Audit events:", show_header=True)
     table.add_column("Timestamp")
-    table.add_column("Escopo")
-    table.add_column("Origem")
-    table.add_column("Acao")
-    table.add_column("Resultado")
-    table.add_column("Auditoria")
+    table.add_column("Scope")
+    table.add_column("Origin")
+    table.add_column("Action")
+    table.add_column("Result")
+    table.add_column("Audit")
     table.add_column("Snapshot")
     for event in result.events:
         table.add_row(
@@ -2646,16 +2666,16 @@ def _format_human_audit_output(result: ListAuditLogResult) -> Table | str:
 
 def _format_human_snapshots_output(result: ListSnapshotsResult) -> Table | str:
     if not result.snapshots:
-        return "Nenhum snapshot encontrado."
+        return "No snapshots found."
 
     table = Table(title="Snapshots:", show_header=True)
     table.add_column("Timestamp")
-    table.add_column("Escopo")
-    table.add_column("Origem")
-    table.add_column("Acao")
-    table.add_column("Arquivo")
+    table.add_column("Scope")
+    table.add_column("Origin")
+    table.add_column("Action")
+    table.add_column("File")
     table.add_column("Hash")
-    table.add_column("Manifesto")
+    table.add_column("Manifest")
     for snapshot in result.snapshots:
         table.add_row(
             snapshot.timestamp,
@@ -2672,12 +2692,12 @@ def _format_human_snapshots_output(result: ListSnapshotsResult) -> Table | str:
 def _format_human_rollback_preview(snapshot: Snapshot) -> str:
     return "\n".join(
         [
-            "Rollback selecionado:",
-            f"Escopo: {snapshot.scope.value}",
+            "Rollback selected:",
+            f"Scope: {snapshot.scope.value}",
             f"Snapshot: {snapshot.id}",
             f"Timestamp: {snapshot.timestamp.isoformat()}",
-            f"Acao original: {snapshot.action}",
-            f"Arquivo: {snapshot.relative_path}",
+            f"Original action: {snapshot.action}",
+            f"File: {snapshot.relative_path}",
         ]
     )
 
@@ -2685,11 +2705,11 @@ def _format_human_rollback_preview(snapshot: Snapshot) -> str:
 def _format_human_rollback_success(result: RollbackResult) -> str:
     return "\n".join(
         [
-            "Rollback concluido.",
-            f"Escopo: {result.scope.value}",
+            "Rollback completed.",
+            f"Scope: {result.scope.value}",
             f"Snapshot: {result.snapshot_reference}",
-            f"Arquivos restaurados: {', '.join(result.restored_paths)}",
-            f"Auditoria: {result.audit_reference}",
+            f"Restored files: {', '.join(result.restored_paths)}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
@@ -2702,11 +2722,11 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
     config_path = "~/.config/umem/config.toml" if is_global else ".umem/config.toml"
 
     lines = [
-        "Operacao: skills.propose",
-        f"Escopo: {scope}",
-        f"Nome sugerido: {result.proposal['suggested_name']}",
-        f"Proposito: {result.proposal['purpose']}",
-        "Evidencias:",
+        "Operation: skills.propose",
+        f"Scope: {scope}",
+        f"Suggested name: {result.proposal['suggested_name']}",
+        f"Purpose: {result.proposal['purpose']}",
+        "Evidence:",
     ]
     evidence = result.proposal.get("evidence", [])
     lines.extend(f"  - {item}" for item in evidence)
@@ -2714,20 +2734,20 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
     lines.extend(
         [
             "",
-            "Caminhos relativos afetados:",
-            f"  - Decisao Sim: {skill_path}",
-            f"  - Decisao Sempre: {skill_path} E {config_path}",
-            f"  - Decisao Nao: {skill_path}",
+            "Affected relative paths:",
+            f"  - Decision yes: {skill_path}",
+            f"  - Decision always: {skill_path} AND {config_path}",
+            f"  - Decision no: {skill_path}",
             "",
-            "Snapshot: Um snapshot de seguranca sera criado antes de qualquer gravacao.",
-            "Evento de auditoria esperado: propose_skill_decision ou "
-            "update_skill_auto_approval (para Sempre).",
-            "Opcoes: Sim, Sempre, Não",
+            "Snapshot: a safety snapshot will be created before any write.",
+            "Expected audit event: propose_skill_decision or "
+            "update_skill_auto_approval (for always).",
+            "Options: yes, always, no",
         ]
     )
 
     if result.audit_reference:
-        lines.append(f"Auditoria: {result.audit_reference}")
+        lines.append(f"Audit: {result.audit_reference}")
     if result.snapshot_reference:
         lines.append(f"Snapshot: {result.snapshot_reference}")
     return "\n".join(lines)
@@ -2735,19 +2755,19 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
 
 def _format_human_skill_list(result: ListSkillsResult) -> Table | str:
     if not result.skills:
-        lines = ["Nenhuma skill registrada."]
+        lines = ["No skills registered."]
         if result.recommended_action:
             lines.append(result.recommended_action)
         return "\n".join(lines)
 
-    table = Table(title="Skills registradas")
-    table.add_column("Nome")
-    table.add_column("Escopo")
+    table = Table(title="Registered skills")
+    table.add_column("Name")
+    table.add_column("Scope")
     table.add_column("Status")
-    table.add_column("Caminho relativo")
-    table.add_column("Origem")
-    table.add_column("Criada em")
-    table.add_column("Atualizada em")
+    table.add_column("Relative path")
+    table.add_column("Origin")
+    table.add_column("Created at")
+    table.add_column("Updated at")
     status_styles = {
         "active": "green",
         "candidate": "yellow",
@@ -2768,18 +2788,18 @@ def _format_human_skill_list(result: ListSkillsResult) -> Table | str:
 
 def _format_human_skill_detail(result: GetSkillDetailResult) -> str:
     lines = [
-        "Operacao: skills.detail",
-        f"Nome: {result.name}",
-        f"Escopo: {result.scope}",
+        "Operation: skills.detail",
+        f"Name: {result.name}",
+        f"Scope: {result.scope}",
         f"Status: {result.status}",
-        f"Caminho relativo: {result.relative_path or '-'}",
-        "Gatilhos:",
+        f"Relative path: {result.relative_path or '-'}",
+        "Triggers:",
     ]
     lines.extend(f"  - {trigger}" for trigger in result.triggers)
     lines.extend(
         [
-            f"Auditoria: {result.audit_reference}",
-            f"References carregadas: {str(result.references_loaded).lower()}",
+            f"Audit: {result.audit_reference}",
+            f"References loaded: {str(result.references_loaded).lower()}",
         ]
     )
     return "\n".join(lines)
@@ -2787,10 +2807,10 @@ def _format_human_skill_detail(result: GetSkillDetailResult) -> str:
 
 def _format_human_skill_generate_plan(result: GenerateSkillResult) -> str:
     lines = [
-        "Operacao: skills.generate",
-        f"Escopo: {result.latent_skill.scope.value}",
+        "Operation: skills.generate",
+        f"Scope: {result.latent_skill.scope.value}",
         f"Latent skill: {result.latent_skill.id}",
-        "Caminhos relativos afetados:",
+        "Affected relative paths:",
         f"  - {result.skill_file}",
     ]
     metadata = result.latent_skill.metadata or {}
@@ -2800,9 +2820,9 @@ def _format_human_skill_generate_plan(result: GenerateSkillResult) -> str:
         lines.append(f"  - {result.skill_dir}/references/.gitkeep")
     lines.extend(
         [
-            "Snapshot: criado pelo pipeline seguro antes de cada gravacao.",
-            "Auditoria: evento generate_skill esperado.",
-            "Padrao: nao confirmar.",
+            "Snapshot: created by the safe pipeline before each write.",
+            "Audit: generate_skill event expected.",
+            "Default: do not confirm.",
         ]
     )
     return "\n".join(lines)
@@ -2810,21 +2830,21 @@ def _format_human_skill_generate_plan(result: GenerateSkillResult) -> str:
 
 def _format_human_skill_generate_success(result: GenerateSkillResult) -> str:
     lines = [
-        "Operacao: skills.generate",
-        f"Escopo: {result.latent_skill.scope.value}",
-        f"Nome: {result.latent_skill.name}",
+        "Operation: skills.generate",
+        f"Scope: {result.latent_skill.scope.value}",
+        f"Name: {result.latent_skill.name}",
         f"Slug: {result.slug}",
-        "Caminhos relativos afetados:",
+        "Affected relative paths:",
     ]
     lines.extend(f"  - {path}" for path in result.affected_paths)
     lines.extend(
         [
             f"Snapshot: {result.snapshot_reference}",
-            f"Auditoria: {result.audit_reference}",
+            f"Audit: {result.audit_reference}",
         ]
     )
     if result.collision_detected and result.suggested_slug and result.suggested_slug != result.slug:
-        lines.append(f"Colisao: slug alternativo usado ({result.suggested_slug}).")
+        lines.append(f"Collision: alternate slug used ({result.suggested_slug}).")
     return "\n".join(lines)
 
 
@@ -2840,18 +2860,18 @@ def _format_human_skill_mutation_success(
         affected_paths.insert(0, skill_file)
 
     lines = [
-        f"Operacao: {operation}",
-        f"Escopo: {skill.scope.value}",
+        f"Operation: {operation}",
+        f"Scope: {skill.scope.value}",
         f"Latent skill: {skill.id}",
-        f"Nome: {skill.name}",
+        f"Name: {skill.name}",
         f"Status: {skill.status.value}",
-        "Caminhos relativos afetados:",
+        "Affected relative paths:",
     ]
     lines.extend(f"  - {path}" for path in affected_paths)
     lines.extend(
         [
             f"Snapshot: {result.snapshot_reference}",
-            f"Auditoria: {result.audit_reference}",
+            f"Audit: {result.audit_reference}",
         ]
     )
     rollback_hint = getattr(result, "rollback_hint", None)
@@ -2868,14 +2888,14 @@ def _latent_skill_store_path(scope: Any) -> str:
 
 def _format_human_host_plan(result: ConfigureHostResult, *, operation: str) -> Table | str:
     if not result.planned_changes:
-        return f"Nenhuma alteracao planejada para host {result.host_id}."
+        return f"No changes planned for host {result.host_id}."
 
-    table = Table(title=f"Plano de {operation} do host {result.host_id}", show_header=True)
-    table.add_column("Alvo")
-    table.add_column("Acao")
-    table.add_column("Caminho")
+    table = Table(title=f"Host {operation} plan for {result.host_id}", show_header=True)
+    table.add_column("Target")
+    table.add_column("Action")
+    table.add_column("Path")
     table.add_column("Snapshot")
-    table.add_column("Auditoria")
+    table.add_column("Audit")
     for change in result.planned_changes:
         table.add_row(
             change["target"],
@@ -2896,48 +2916,48 @@ def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -
         }
         style = status_styles.get(result.validation_status, "white")
         lines = [
-            "[bold]Host check concluido.[/bold]",
+            "[bold]Host check completed.[/bold]",
             f"Host: {result.host_id}",
-            f"Alvos: {', '.join(result.instruction_targets)}",
-            f"Validacao: [{style}]{result.validation_status}[/{style}]",
-            f"Auditoria: {result.audit_reference}",
+            f"Targets: {', '.join(result.instruction_targets)}",
+            f"Validation: [{style}]{result.validation_status}[/{style}]",
+            f"Audit: {result.audit_reference}",
         ]
         if result.warnings:
             if result.validation_status == "failure":
-                lines.append("Erros de Validação:")
+                lines.append("Validation errors:")
             else:
-                lines.append("Alertas:")
+                lines.append("Warnings:")
             lines.extend(f"- {warning}" for warning in result.warnings)
         return Panel.fit("\n".join(lines), border_style=style)
 
-    changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
+    changes = ", ".join(change["path"] for change in result.planned_changes) or "(none)"
     return "\n".join(
         [
-            f"Host {operation} concluido.",
+            f"Host {operation} completed.",
             f"Host: {result.host_id}",
-            f"Alvos: {', '.join(result.instruction_targets)}",
-            f"Arquivos: {changes}",
-            f"Validacao: {result.validation_status}",
-            f"Auditoria: {result.audit_reference}",
+            f"Targets: {', '.join(result.instruction_targets)}",
+            f"Files: {changes}",
+            f"Validation: {result.validation_status}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
 
 def _format_human_sync_success(result: SyncInstructionsResult) -> str:
-    changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
+    changes = ", ".join(change["path"] for change in result.planned_changes) or "(none)"
     msg = (
-        "Host sync concluido."
+        "Host sync completed."
         if result.validation_status == "success"
-        else "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos."
+        else "Dry-run completed. No changes were applied to the filesystem."
     )
     return "\n".join(
         [
             msg,
             f"Hosts: {', '.join(result.host_ids)}",
-            f"Alvos: {', '.join(result.instruction_targets)}",
-            f"Arquivos: {changes}",
-            f"Validacao: {result.validation_status}",
-            f"Auditoria: {result.audit_reference}",
+            f"Targets: {', '.join(result.instruction_targets)}",
+            f"Files: {changes}",
+            f"Validation: {result.validation_status}",
+            f"Audit: {result.audit_reference}",
             f"Snapshots: {result.snapshot_reference}",
         ]
     )
@@ -2945,15 +2965,15 @@ def _format_human_sync_success(result: SyncInstructionsResult) -> str:
 
 def _format_human_sync_plan(result: SyncInstructionsResult) -> Table | str:
     if not result.planned_changes:
-        return "Nenhuma alteracao planejada para sincronizacao de instrucoes."
+        return "No changes planned for instruction synchronization."
 
-    table = Table(title="Plano de sincronizacao de instrucoes", show_header=True)
-    table.add_column("Alvo")
-    table.add_column("Acao")
-    table.add_column("Caminho")
-    table.add_column("Escopo")
+    table = Table(title="Instruction synchronization plan", show_header=True)
+    table.add_column("Target")
+    table.add_column("Action")
+    table.add_column("Path")
+    table.add_column("Scope")
     table.add_column("Snapshot")
-    table.add_column("Auditoria")
+    table.add_column("Audit")
     for change in result.planned_changes:
         table.add_row(
             change["target"],
@@ -2973,7 +2993,7 @@ def _recovery_hint(error: Exception) -> str:
 def _print_expected_error(
     error: Exception, output_format: str, *, locale: str | None = None
 ) -> None:
-    message_locale = "en" if output_format == "json" else (locale or "pt-BR")
+    message_locale = DEFAULT_LOCALE if output_format == "json" else (locale or DEFAULT_LOCALE)
     payload = {
         "ok": False,
         "error": error_payload(error, message_locale=message_locale),
@@ -3049,10 +3069,10 @@ def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
     if value is None:
         return None
     normalized = value.strip().casefold()
-    if normalized in {"s", "sim", "y", "yes"}:
+    if normalized in {"y", "yes"}:
         return ProposeSkillDecision.sim
-    if normalized in {"e", "sempre", "always"}:
+    if normalized == "always":
         return ProposeSkillDecision.sempre
-    if normalized in {"n", "nao", "não", "no"}:
+    if normalized in {"n", "no"}:
         return ProposeSkillDecision.nao
     return None

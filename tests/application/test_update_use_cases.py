@@ -3,10 +3,15 @@ from __future__ import annotations
 import json
 import tomllib
 from pathlib import Path
+from typing import cast
 
 import pytest
 
-from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
+from universal_memory.application.security import (
+    PreparedSafeWrite,
+    SafeWriteCommand,
+    SafeWriteUseCase,
+)
 from universal_memory.application.update import (
     TARGET_SCHEMA_VERSION,
     UpdateBenchmarksCommand,
@@ -16,7 +21,13 @@ from universal_memory.application.update import (
     UpdateMigrateCommand,
     UpdateMigrateUseCase,
 )
-from universal_memory.domain import SnapshotFailedError, StorageError
+from universal_memory.domain import (
+    InvalidConfigError,
+    SnapshotFailedError,
+    StorageError,
+    ValidationFailedError,
+)
+from universal_memory.domain.entities import Snapshot
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
     LocalAuditLogRepository,
@@ -82,6 +93,20 @@ def test_update_check_is_read_only_and_reports_required_fields(tmp_path: Path) -
         path: (path.read_bytes(), path.stat().st_mtime_ns)
         for path in [tmp_path / ".umem" / "config.toml", facts, result_file]
     } == before
+
+
+def test_update_check_treats_boolean_config_schema_as_invalid(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.write_text("schema_version = true\n", encoding="utf-8")
+
+    result = UpdateCheckUseCase(installed_version="test-version").execute(
+        UpdateCheckCommand(project_root=tmp_path)
+    )
+
+    assert result.project_config_schema_version is None
+    assert result.migration_required is True
+    assert any("schema_version is not an integer" in warning for warning in result.warnings)
 
 
 def test_update_migrate_preserves_config_and_memory_custom_fields(tmp_path: Path) -> None:
@@ -151,6 +176,156 @@ def test_update_migrate_preserves_config_and_memory_custom_fields(tmp_path: Path
     assert result.snapshot_references
 
 
+def test_update_migrate_updates_explicit_legacy_config_schema(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.write_text(
+        'schema_version = 0\n\n[hosts]\nenabled = ["codex"]\n',
+        encoding="utf-8",
+    )
+
+    UpdateMigrateUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+        UpdateMigrateCommand(project_root=tmp_path)
+    )
+
+    assert tomllib.loads(config_path.read_text(encoding="utf-8"))["schema_version"] == 1
+
+
+def test_update_migrate_prepares_all_snapshots_before_any_rewrite(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    facts = tmp_path / ".umem" / "memory" / "facts.jsonl"
+    facts.write_text('{"id":"fact"}\n', encoding="utf-8")
+    calls: list[str] = []
+
+    class RecordingSafeWrite:
+        def prepare(self, command: SafeWriteCommand) -> PreparedSafeWrite:
+            calls.append(f"prepare:{command.relative_path}")
+            return PreparedSafeWrite(
+                command=command,
+                relative_path=command.relative_path,
+                target_path=tmp_path / command.relative_path,
+                snapshot=cast(Snapshot, object()),
+                previous_bytes=(tmp_path / command.relative_path).read_bytes()
+                if (tmp_path / command.relative_path).exists()
+                else b"",
+                previous_file_existed=(tmp_path / command.relative_path).exists(),
+            )
+
+        def commit_prepared(self, prepared: PreparedSafeWrite):
+            calls.append(f"commit:{prepared.relative_path}")
+            return type(
+                "Result",
+                (),
+                {
+                    "relative_path": prepared.relative_path,
+                    "audit_reference": f"audit:{prepared.relative_path}",
+                    "snapshot_reference": f"snapshot:{prepared.relative_path}",
+                },
+            )()
+
+        def execute(self, command: SafeWriteCommand):
+            raise AssertionError("migrations should use prepare/commit_prepared")
+
+        def rollback_prepared(self, prepared: PreparedSafeWrite) -> None:
+            raise AssertionError("unexpected rollback")
+
+    UpdateMigrateUseCase(safe_write_use_case=RecordingSafeWrite()).execute(  # type: ignore[arg-type]
+        UpdateMigrateCommand(project_root=tmp_path)
+    )
+
+    first_commit = next(index for index, call in enumerate(calls) if call.startswith("commit:"))
+    assert all(call.startswith("prepare:") for call in calls[:first_commit])
+    assert calls[:first_commit] == [
+        "prepare:.umem/config.toml",
+        "prepare:.umem/memory/facts.jsonl",
+    ]
+
+
+def test_update_migrate_rolls_back_committed_files_when_later_commit_fails(
+    tmp_path: Path,
+) -> None:
+    _init_project(tmp_path)
+    config_path = tmp_path / ".umem" / "config.toml"
+    facts_path = tmp_path / ".umem" / "memory" / "facts.jsonl"
+    facts_path.write_text('{"id":"fact"}\n', encoding="utf-8")
+    original_config = config_path.read_bytes()
+
+    class FailingCommitSafeWrite:
+        def prepare(self, command: SafeWriteCommand) -> PreparedSafeWrite:
+            target_path = tmp_path / command.relative_path
+            return PreparedSafeWrite(
+                command=command,
+                relative_path=command.relative_path,
+                target_path=target_path,
+                snapshot=cast(Snapshot, object()),
+                previous_bytes=target_path.read_bytes() if target_path.exists() else b"",
+                previous_file_existed=target_path.exists(),
+            )
+
+        def commit_prepared(self, prepared: PreparedSafeWrite):
+            if prepared.relative_path == ".umem/memory/facts.jsonl":
+                raise StorageError("write failed")
+            prepared.target_path.write_text(prepared.command.content, encoding="utf-8")
+            return type(
+                "Result",
+                (),
+                {
+                    "relative_path": prepared.relative_path,
+                    "audit_reference": f"audit:{prepared.relative_path}",
+                    "snapshot_reference": f"snapshot:{prepared.relative_path}",
+                },
+            )()
+
+        def rollback_prepared(self, prepared: PreparedSafeWrite) -> None:
+            if prepared.previous_file_existed:
+                prepared.target_path.write_bytes(prepared.previous_bytes)
+            else:
+                prepared.target_path.unlink(missing_ok=True)
+
+        def execute(self, command: SafeWriteCommand):
+            raise AssertionError("unexpected execute")
+
+    with pytest.raises(StorageError):
+        UpdateMigrateUseCase(safe_write_use_case=FailingCommitSafeWrite()).execute(  # type: ignore[arg-type]
+            UpdateMigrateCommand(project_root=tmp_path)
+        )
+
+    assert config_path.read_bytes() == original_config
+
+
+def test_update_migrate_rejects_invalid_config_schema_type(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.write_text('schema_version = "0"\n', encoding="utf-8")
+
+    with pytest.raises(InvalidConfigError):
+        UpdateMigrateUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+            UpdateMigrateCommand(project_root=tmp_path)
+        )
+
+
+def test_update_migrate_rejects_boolean_config_schema_version(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.write_text("schema_version = true\n", encoding="utf-8")
+
+    with pytest.raises(InvalidConfigError):
+        UpdateMigrateUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+            UpdateMigrateCommand(project_root=tmp_path)
+        )
+
+
+def test_update_migrate_rejects_boolean_memory_schema_version(tmp_path: Path) -> None:
+    _init_project(tmp_path)
+    facts_path = tmp_path / ".umem" / "memory" / "facts.jsonl"
+    facts_path.write_text('{"id":"fact","schema_version":true}\n', encoding="utf-8")
+
+    with pytest.raises(ValidationFailedError):
+        UpdateMigrateUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+            UpdateMigrateCommand(project_root=tmp_path)
+        )
+
+
 def test_update_migrate_invalid_jsonl_aborts_without_rewrite(tmp_path: Path) -> None:
     _init_project(tmp_path)
     facts = tmp_path / ".umem" / "memory" / "facts.jsonl"
@@ -170,10 +345,19 @@ def test_update_migrate_snapshot_failure_preserves_original(tmp_path: Path) -> N
     original = (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8")
 
     class FailingSafeWrite:
-        def execute(self, command: SafeWriteCommand):
+        def prepare(self, command: SafeWriteCommand):
             if command.relative_path == ".umem/config.toml":
                 raise SnapshotFailedError("snapshot failed")
             raise AssertionError("unexpected write")
+
+        def commit_prepared(self, prepared: PreparedSafeWrite):
+            raise AssertionError("unexpected commit")
+
+        def rollback_prepared(self, prepared: PreparedSafeWrite) -> None:
+            raise AssertionError("unexpected rollback")
+
+        def execute(self, command: SafeWriteCommand):
+            raise AssertionError("unexpected execute")
 
     with pytest.raises(SnapshotFailedError):
         UpdateMigrateUseCase(safe_write_use_case=FailingSafeWrite()).execute(  # type: ignore[arg-type]

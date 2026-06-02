@@ -442,7 +442,8 @@ def configure_server(  # noqa: PLR0915
     @server.tool(name="propose_skill")
     def propose_skill(
         latent_skill_id: str,
-        decision: Literal["sim", "s", "sempre", "e", "nao", "não", "n"] | None = None,
+        decision: Literal["yes", "y", "always", "no", "n"]
+        | None = None,
     ) -> ToolResponse:
         """Review or decide a latent skill proposal.
 
@@ -815,13 +816,13 @@ def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
     if value is None:
         return None
     normalized = value.strip().casefold()
-    if normalized in {"s", "sim", "y", "yes"}:
+    if normalized in {"y", "yes"}:
         return ProposeSkillDecision.sim
-    if normalized in {"e", "sempre", "always"}:
+    if normalized == "always":
         return ProposeSkillDecision.sempre
-    if normalized in {"n", "nao", "não", "no"}:
+    if normalized in {"n", "no"}:
         return ProposeSkillDecision.nao
-    raise ValidationFailedError("decision must be 'sim', 'sempre' or 'nao'.")
+    raise ValidationFailedError("decision must be 'yes', 'always' or 'no'.")
 
 
 def _error_envelope(error: Exception) -> dict[str, Any]:
@@ -860,7 +861,7 @@ def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Excepti
         f"Latent skill not found: {latent_skill_id}"
     ):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     return error
 

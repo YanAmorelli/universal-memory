@@ -48,6 +48,7 @@ from universal_memory.infrastructure.config import (
     LocalConfigValidationPort,
     LocalProjectLayoutPort,
 )
+from universal_memory.infrastructure.config.toml_loader import load_config
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
     LocalAuditLogRepository,
@@ -60,6 +61,7 @@ from universal_memory.infrastructure.storage import (
     LocalRuleRepository,
 )
 from universal_memory.interfaces.cli import build_main
+from universal_memory.interfaces.cli.message_catalog import DEFAULT_LOCALE, normalize_locale
 
 
 class EmptyRuleRepository(RuleRepository):
@@ -217,12 +219,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         safe_write_use_case=safe_write_use_case,
     )
 
+    def locale_resolver() -> str:
+        try:
+            loaded = load_config(project_root)
+        except Exception:
+            return DEFAULT_LOCALE
+        preferences = loaded.merged.get("preferences")
+        if not isinstance(preferences, dict):
+            return DEFAULT_LOCALE
+        return normalize_locale(preferences.get("locale"))
+
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
         snapshots = snapshot_repository.list(scope=scope, status=SnapshotStatus.created)
         if not snapshots:
             raise SnapshotFailedError(
-                "Nenhum snapshot encontrado para o escopo solicitado. "
-                "Hint: execute uma mutacao segura antes de tentar rollback."
+                "No snapshot found for the requested scope. "
+                "Hint: run a safe mutation before trying rollback."
             )
 
         def _normalize_datetime(dt: datetime) -> datetime:
@@ -258,5 +270,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         update_check_command=update_check_use_case.execute,
         update_migrate_command=update_migrate_use_case.execute,
         update_benchmarks_command=update_benchmarks_use_case.execute,
+        locale_resolver=locale_resolver,
     )
     return configured_main(argv)

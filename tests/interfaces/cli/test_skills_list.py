@@ -76,7 +76,7 @@ def test_skills_list_empty_human_output_suggests_actionable_next_step(capsys) ->
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "Nenhuma skill registrada" in output
+    assert "No skills registered" in output
     assert "umem remember" in output
     assert "umem skills list" in output
     assert "umem skills propose" not in output

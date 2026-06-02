@@ -128,10 +128,10 @@ def test_skills_deactivate_human_output_shows_audit_and_snapshot(capsys) -> None
     output = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "Operacao: skills.deactivate" in output
-    assert "Escopo: project" in output
+    assert "Operation: skills.deactivate" in output
+    assert "Scope: project" in output
     assert ".umem/memory/latent_skills.jsonl" in output
-    assert "Auditoria: audit-2" in output
+    assert "Audit: audit-2" in output
     assert "Snapshot: snapshot-2" in output
 
 
@@ -201,7 +201,7 @@ def test_skills_update_missing_file_returns_validation_error(capsys) -> None:
     output = capsys.readouterr().err
 
     assert exit_code == 1
-    assert "Arquivo markdown nao encontrado: missing.md" in output
+    assert "Markdown file not found: missing.md" in output
 
 
 def test_skills_mutation_errors_are_mapped_to_safe_json(capsys) -> None:

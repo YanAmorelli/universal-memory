@@ -57,6 +57,10 @@ para que a ferramenta tenha uma identidade visual reconhecível sem quebrar auto
 - [x] Garantir que `--format json`, MCP e testes de paridade não sejam alterados por esta story.
 - [x] Executar testes focados e validação geral mínima antes de marcar a story como concluída.
 
+### Review Findings
+
+- [x] [Review][Patch] Splash pode emitir ANSI quando `TERM` esta ausente ou vazio [src/universal_memory/interfaces/cli/init_command.py:884] — resolvido; `TERM` ausente/vazio agora usa splash plain ASCII sem ANSI e ha teste dedicado.
+
 ## Contexto / Guardrails do Desenvolvedor
 
 ### Fonte funcional da story

@@ -54,7 +54,7 @@ def test_skills_generate_human_output_shows_plan_and_prompts(monkeypatch, capsys
         seen.append(command)
         return make_result()
 
-    monkeypatch.setattr("builtins.input", lambda _prompt: "s")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
     exit_code = cli_main(
@@ -68,10 +68,10 @@ def test_skills_generate_human_output_shows_plan_and_prompts(monkeypatch, capsys
         GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=True),
         GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=False),
     ]
-    assert "Operacao: skills.generate" in output
+    assert "Operation: skills.generate" in output
     assert ".umem/skills/tdd-recorrente/SKILL.md" in output
     assert "Snapshot: snapshot-" in output
-    assert "Auditoria: audit-" in output
+    assert "Audit: audit-" in output
 
 
 def test_skills_generate_yes_runs_without_prompt(capsys, monkeypatch) -> None:
@@ -156,7 +156,7 @@ def test_skills_generate_non_tty_requires_yes(capsys, monkeypatch) -> None:
     output = capsys.readouterr().err
 
     assert exit_code == 1
-    assert "Ambiente nao-TTY exige --yes para gerar skill." in output
+    assert "Non-TTY environment requires --yes to generate a skill." in output
 
 
 def test_skills_generate_user_cancels(monkeypatch, capsys) -> None:
@@ -177,7 +177,7 @@ def test_skills_generate_user_cancels(monkeypatch, capsys) -> None:
     output = capsys.readouterr().out
 
     assert exit_code == 1
-    assert "Geracao de skill cancelada." in output
+    assert "Skill generation cancelled." in output
     assert seen == [
         GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=True),
     ]

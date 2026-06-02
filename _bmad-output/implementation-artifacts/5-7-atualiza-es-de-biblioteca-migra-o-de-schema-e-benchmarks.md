@@ -108,9 +108,15 @@ para que eu nao perca meu historico de uso, fatos ou regras customizadas.
   - [x] Criar testes de application para check read-only, migracao de config, migracao de JSONL e falhas de snapshot/storage.
   - [x] Criar testes CLI para `umem update --check`, `--migrate`, `--benchmarks` e combinacoes com `--format json`.
   - [x] Criar teste garantindo que `--check` nao altera mtimes/conteudo dos arquivos locais.
-  - [x] Criar teste garantindo preservacao de fatos/regras/custom fields ao migrar fixture legado.
-  - [x] Atualizar ou adicionar testes de benchmark para validar integracao por CLI sem rede.
-  - [x] Rodar `uv run pytest`, `uv run ruff check .` e `uv run pyright` antes de marcar done.
+- [x] Criar teste garantindo preservacao de fatos/regras/custom fields ao migrar fixture legado.
+- [x] Atualizar ou adicionar testes de benchmark para validar integracao por CLI sem rede.
+- [x] Rodar `uv run pytest`, `uv run ruff check .` e `uv run pyright` antes de marcar done.
+
+### Review Findings
+
+- [x] [Review][Patch] Migracao de config com `schema_version = 0` preserva o schema antigo em vez de migrar para o alvo [src/universal_memory/application/update/update_use_cases.py:328] — resolvido; merge corrigido e teste com schema legado explicito adicionado.
+- [x] [Review][Patch] Migracao pode deixar projeto parcialmente migrado se uma escrita posterior falhar [src/universal_memory/application/update/update_use_cases.py:281] — resolvido; migracao prepara snapshots antes do primeiro commit e aplica rollback reverso dos writes ja commitados quando commit posterior falha.
+- [x] [Review][Patch] Testes nao cobrem schema anterior explicito nem schema invalido [tests/application/test_update_use_cases.py:80] — resolvido; adicionada cobertura para schema legado explicito, tipo invalido string, boolean em config/check e boolean em JSONL.
 
 ## Contexto/Guardrails do Desenvolvedor
 

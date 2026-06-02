@@ -70,7 +70,7 @@ def test_skills_propose_global_output_uses_umem_config_path(capsys) -> None:
         return make_result(decision=command.decision, scope=LatentSkillScope.global_)
 
     exit_code = cli_main(
-        ["skills", "propose", "skill-1", "--decision", "sempre"],
+        ["skills", "propose", "skill-1", "--decision", "always"],
         propose_skill_command=propose,
     )
     output = capsys.readouterr().out
@@ -88,7 +88,7 @@ def test_skills_propose_human_output_shows_proposal_and_choices(capsys) -> None:
         return make_result(decision=command.decision)
 
     exit_code = cli_main(
-        ["skills", "propose", "skill-1", "--decision", "sim"],
+        ["skills", "propose", "skill-1", "--decision", "yes"],
         propose_skill_command=propose,
     )
     output = capsys.readouterr().out
@@ -100,9 +100,9 @@ def test_skills_propose_human_output_shows_proposal_and_choices(capsys) -> None:
     assert "Usuario pede sempre ciclo red green refactor" in output
     assert "project" in output
     assert "Pedido em story anterior" in output
-    assert "Sim" in output
-    assert "Sempre" in output
-    assert "Não" in output
+    assert "yes" in output
+    assert "always" in output
+    assert "no" in output
 
 
 def test_skills_propose_accepts_interactive_sim(monkeypatch, capsys) -> None:
@@ -114,7 +114,7 @@ def test_skills_propose_accepts_interactive_sim(monkeypatch, capsys) -> None:
             return make_result(requires_decision=True)
         return make_result(decision=command.decision)
 
-    monkeypatch.setattr("builtins.input", lambda _prompt: "s")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "yes")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
     exit_code = cli_main(["skills", "propose", "skill-1"], propose_skill_command=propose)
@@ -165,7 +165,7 @@ def test_skills_propose_json_is_pure_success_envelope(capsys) -> None:
             "auto_approval_recorded": False,
             "audit_reference": "audit-1",
             "snapshot_reference": "snapshot-1",
-            "choices": ["Sim", "Sempre", "Não"],
+            "choices": ["yes", "always", "no"],
             "requires_decision": False,
             "evidence": ["Pedido em story anterior", "Pedido em review"],
         },
@@ -184,7 +184,7 @@ def test_skills_propose_raises_key_error_when_skill_not_found(capsys) -> None:
     output = capsys.readouterr().err
 
     assert exit_code == 1
-    assert "Latent skill 'skill-not-found' nao encontrada no repositorio." in output
+    assert "Latent skill 'skill-not-found' not found in the repository." in output
 
 
 def test_skills_propose_non_tty_requires_decision(capsys, monkeypatch) -> None:
@@ -200,4 +200,4 @@ def test_skills_propose_non_tty_requires_decision(capsys, monkeypatch) -> None:
     output = capsys.readouterr().err
 
     assert exit_code == 1
-    assert "Ambiente nao-TTY exige --decision ou --yes." in output
+    assert "Non-TTY environment requires --decision or --yes." in output

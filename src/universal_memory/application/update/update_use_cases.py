@@ -10,7 +10,11 @@ from typing import Any, Protocol, cast
 import tomli_w
 
 from universal_memory import __version__
-from universal_memory.application.security import SafeWriteCommand, SafeWriteResult
+from universal_memory.application.security import (
+    PreparedSafeWrite,
+    SafeWriteCommand,
+    SafeWriteResult,
+)
 from universal_memory.domain import InvalidConfigError, StorageError, ValidationFailedError
 from universal_memory.domain.entities import AuditEventScope
 
@@ -81,6 +85,12 @@ MEMORY_ALLOWED_FIELDS: dict[str, set[str]] = {
 
 class SafeWritePort(Protocol):
     def execute(self, command: SafeWriteCommand) -> SafeWriteResult: ...
+
+    def prepare(self, command: SafeWriteCommand) -> PreparedSafeWrite: ...
+
+    def commit_prepared(self, prepared: PreparedSafeWrite) -> SafeWriteResult: ...
+
+    def rollback_prepared(self, prepared: PreparedSafeWrite) -> None: ...
 
 
 BenchmarkRunner = Callable[[Path], dict[str, object]]
@@ -222,7 +232,7 @@ class UpdateCheckUseCase:
         raw = data.get("schema_version")
         if raw is None:
             return None
-        if isinstance(raw, int):
+        if type(raw) is int:
             if raw > TARGET_SCHEMA_VERSION:
                 warnings.append("Project config schema_version is newer than supported.")
             return raw
@@ -253,7 +263,7 @@ class UpdateCheckUseCase:
                     warnings.append(f"corrupt JSONL line in .umem/memory/{filename}:{line_number}.")
                     continue
                 raw_version = payload.get("schema_version") if isinstance(payload, dict) else None
-                version = raw_version if isinstance(raw_version, int) else 0
+                version = raw_version if type(raw_version) is int else 0
                 if version > TARGET_SCHEMA_VERSION:
                     warnings.append(f".umem/memory/{filename} has schema newer than supported.")
                 found.add(version)
@@ -274,29 +284,40 @@ class UpdateMigrateUseCase:
         planned_memory = self._plan_memory_migrations(root / ".umem" / "memory")
         planned_config = self._plan_config_migration(config_path)
 
+        planned_writes: list[SafeWriteCommand] = []
+        if planned_config is not None:
+            planned_writes.append(
+                self._safe_write_command(
+                    relative_path=".umem/config.toml",
+                    content=planned_config,
+                    origin=command.origin,
+                    action="update_migrate_config",
+                )
+            )
+
+        for relative_path, content in planned_memory:
+            planned_writes.append(
+                self._safe_write_command(
+                    relative_path=relative_path,
+                    content=content,
+                    origin=command.origin,
+                    action="update_migrate_memory",
+                )
+            )
+
+        prepared_writes = [self.safe_write_use_case.prepare(write) for write in planned_writes]
         migrated_files: list[str] = []
         audit_refs: list[str] = []
         snapshot_refs: list[str] = []
-
-        if planned_config is not None:
-            result = self._safe_write(
-                relative_path=".umem/config.toml",
-                content=planned_config,
-                origin=command.origin,
-                action="update_migrate_config",
-            )
-            migrated_files.append(".umem/config.toml")
-            audit_refs.append(result.audit_reference)
-            snapshot_refs.append(result.snapshot_reference)
-
-        for relative_path, content in planned_memory:
-            result = self._safe_write(
-                relative_path=relative_path,
-                content=content,
-                origin=command.origin,
-                action="update_migrate_memory",
-            )
-            migrated_files.append(relative_path)
+        committed_writes: list[PreparedSafeWrite] = []
+        for prepared in prepared_writes:
+            try:
+                result = self.safe_write_use_case.commit_prepared(prepared)
+            except Exception as error:
+                self._rollback_committed_writes(committed_writes, error)
+                raise
+            committed_writes.append(prepared)
+            migrated_files.append(result.relative_path)
             audit_refs.append(result.audit_reference)
             snapshot_refs.append(result.snapshot_reference)
 
@@ -307,6 +328,19 @@ class UpdateMigrateUseCase:
             snapshot_references=snapshot_refs,
             warnings=warnings,
         )
+
+    def _rollback_committed_writes(
+        self,
+        committed_writes: list[PreparedSafeWrite],
+        original_error: Exception,
+    ) -> None:
+        for prepared in reversed(committed_writes):
+            try:
+                self.safe_write_use_case.rollback_prepared(prepared)
+            except Exception as rollback_error:
+                original_error.add_note(
+                    f"Rollback failed for {prepared.relative_path}: {rollback_error}"
+                )
 
     def _plan_config_migration(self, path: Path) -> str | None:
         data: dict[str, Any]
@@ -321,11 +355,13 @@ class UpdateMigrateUseCase:
         else:
             data = {}
         raw_version = data.get("schema_version")
+        if raw_version is not None and type(raw_version) is not int:
+            raise InvalidConfigError("config schema_version must be an integer.")
         if raw_version == TARGET_SCHEMA_VERSION:
             return None
-        if isinstance(raw_version, int) and raw_version > TARGET_SCHEMA_VERSION:
+        if raw_version is not None and raw_version > TARGET_SCHEMA_VERSION:
             raise InvalidConfigError("Cannot downgrade config schema_version.")
-        migrated = {"schema_version": TARGET_SCHEMA_VERSION, **data}
+        migrated = {**data, "schema_version": TARGET_SCHEMA_VERSION}
         rendered = tomli_w.dumps(migrated)
         try:
             tomllib.loads(rendered)
@@ -367,7 +403,11 @@ class UpdateMigrateUseCase:
 
     def _migrate_memory_payload(self, filename: str, payload: dict[str, Any]) -> dict[str, Any]:
         raw_version = payload.get("schema_version", 0)
-        if isinstance(raw_version, int) and raw_version > TARGET_SCHEMA_VERSION:
+        if type(raw_version) is not int:
+            raise ValidationFailedError(
+                f".umem/memory/{filename} schema_version must be an integer."
+            )
+        if raw_version > TARGET_SCHEMA_VERSION:
             raise ValidationFailedError(f"Cannot downgrade .umem/memory/{filename}.")
         if raw_version == TARGET_SCHEMA_VERSION:
             return payload
@@ -382,22 +422,20 @@ class UpdateMigrateUseCase:
         migrated["schema_version"] = TARGET_SCHEMA_VERSION
         return migrated
 
-    def _safe_write(
+    def _safe_write_command(
         self,
         *,
         relative_path: str,
         content: str,
         origin: str,
         action: str,
-    ) -> SafeWriteResult:
-        return self.safe_write_use_case.execute(
-            SafeWriteCommand(
-                relative_path=relative_path,
-                content=content,
-                scope=AuditEventScope.project,
-                origin=origin,
-                action=action,
-            )
+    ) -> SafeWriteCommand:
+        return SafeWriteCommand(
+            relative_path=relative_path,
+            content=content,
+            scope=AuditEventScope.project,
+            origin=origin,
+            action=action,
         )
 
 

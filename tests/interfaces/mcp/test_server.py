@@ -485,7 +485,7 @@ async def test_propose_skill_without_decision_returns_proposal_for_follow_up(
             "auto_approval_recorded": False,
             "audit_reference": "",
             "snapshot_reference": "",
-            "choices": ["Sim", "Sempre", "Não"],
+            "choices": ["yes", "always", "no"],
             "requires_decision": True,
             "evidence": ["Pedido em story anterior", "Pedido em review"],
         },
@@ -515,7 +515,7 @@ async def test_propose_skill_with_decision_invokes_use_case_and_matches_cli_json
 
     result = await server.call_tool(
         "propose_skill",
-        {"latent_skill_id": SKILL_ID, "decision": "sempre"},
+        {"latent_skill_id": SKILL_ID, "decision": "always"},
     )
 
     assert received == [

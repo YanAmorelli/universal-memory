@@ -29,6 +29,16 @@ class SafeWriteCommand:
     action: str
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedSafeWrite:
+    command: SafeWriteCommand
+    relative_path: str
+    target_path: Path
+    snapshot: Snapshot
+    previous_bytes: bytes
+    previous_file_existed: bool
+
+
 class SafeWriteUseCase:
     def __init__(
         self,
@@ -44,6 +54,10 @@ class SafeWriteUseCase:
         self.audit_log_repository = audit_log_repository
 
     def execute(self, command: SafeWriteCommand) -> SafeWriteResult:
+        prepared = self.prepare(command)
+        return self.commit_prepared(prepared)
+
+    def prepare(self, command: SafeWriteCommand) -> PreparedSafeWrite:
         relative_path = self._validate_relative_path(command.relative_path)
 
         try:
@@ -89,6 +103,20 @@ class SafeWriteUseCase:
                 audit_err.add_note("Audit failure suppressed during snapshot failure")
             raise
 
+        return PreparedSafeWrite(
+            command=command,
+            relative_path=relative_path,
+            target_path=target_path,
+            snapshot=snapshot,
+            previous_bytes=previous_bytes,
+            previous_file_existed=previous_file_existed,
+        )
+
+    def commit_prepared(self, prepared: PreparedSafeWrite) -> SafeWriteResult:
+        command = prepared.command
+        relative_path = prepared.relative_path
+        target_path = prepared.target_path
+        snapshot = prepared.snapshot
         try:
             self._atomic_write(target_path, command.content)
         except BaseException:
@@ -124,6 +152,12 @@ class SafeWriteUseCase:
             audit_reference=audit_ref,
             snapshot_reference=snapshot.id,
         )
+
+    def rollback_prepared(self, prepared: PreparedSafeWrite) -> None:
+        if prepared.previous_file_existed:
+            self._atomic_write_bytes(prepared.target_path, prepared.previous_bytes)
+        else:
+            prepared.target_path.unlink(missing_ok=True)
 
     def _validate_relative_path(self, value: str) -> str:
         normalized = value.replace("\\", "/")
@@ -175,6 +209,16 @@ class SafeWriteUseCase:
         temp_path = target_path.with_name(f"{target_path.name}.{uuid4()}.tmp")
         try:
             temp_path.write_text(content, encoding="utf-8")
+            os.replace(temp_path, target_path)
+        except BaseException:
+            temp_path.unlink(missing_ok=True)
+            raise
+
+    def _atomic_write_bytes(self, target_path: Path, content: bytes) -> None:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = target_path.with_name(f"{target_path.name}.{uuid4()}.tmp")
+        try:
+            temp_path.write_bytes(content)
             os.replace(temp_path, target_path)
         except BaseException:
             temp_path.unlink(missing_ok=True)

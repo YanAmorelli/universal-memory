@@ -59,11 +59,11 @@ def test_rollback_yes_restores_snapshot_and_prints_human_details(
     assert exit_code == 0
     assert captured.err == ""
     assert (tmp_path / ".umem" / "memory" / "facts.jsonl").read_bytes() == b"previous state\n"
-    assert "Rollback concluido" in captured.out
-    assert "Escopo: project" in captured.out
+    assert "Rollback completed" in captured.out
+    assert "Scope: project" in captured.out
     assert f"Snapshot: {snapshot.id}" in captured.out
-    assert "Acao original: safe_write" in captured.out
-    assert "Arquivo: .umem/memory/facts.jsonl" in captured.out
+    assert "Original action: safe_write" in captured.out
+    assert "File: .umem/memory/facts.jsonl" in captured.out
 
 
 def test_rollback_json_success_outputs_strict_envelope(
@@ -131,14 +131,14 @@ def test_rollback_interactive_confirmation_accepts_yes(
     monkeypatch.chdir(tmp_path)
     seed_snapshot(tmp_path)
     prompts: list[str] = []
-    monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or "s")
+    monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or "y")
 
     exit_code = main(["rollback", "--scope", "project"])
 
     assert exit_code == 0
-    assert prompts == ["Deseja prosseguir com o rollback? [s/N]: "]
+    assert prompts == ["Proceed with rollback? [y/N]: "]
     assert (tmp_path / ".umem" / "memory" / "facts.jsonl").read_bytes() == b"previous state\n"
-    assert "Rollback concluido" in capsys.readouterr().out
+    assert "Rollback completed" in capsys.readouterr().out
 
 
 def test_rollback_interactive_confirmation_declines_without_writing(
@@ -155,7 +155,7 @@ def test_rollback_interactive_confirmation_declines_without_writing(
     captured = capsys.readouterr()
     assert exit_code == 1
     assert (tmp_path / ".umem" / "memory" / "facts.jsonl").read_bytes() == b"current state\n"
-    assert "Rollback cancelado" in captured.out
+    assert "Rollback cancelled" in captured.out
 
 
 def test_rollback_json_failure_uses_standard_error_envelope(
@@ -173,4 +173,4 @@ def test_rollback_json_failure_uses_standard_error_envelope(
     assert captured.err == ""
     assert payload["ok"] is False
     assert payload["error"]["code"] == "snapshot_failed"
-    assert "Nenhum snapshot" in payload["error"]["detail"]
+    assert "No snapshot" in payload["error"]["detail"]
