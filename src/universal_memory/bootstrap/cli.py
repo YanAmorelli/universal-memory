@@ -26,6 +26,11 @@ from universal_memory.application.skills import (
     ProposeSkillUseCase,
     UpdateSkillUseCase,
 )
+from universal_memory.application.update import (
+    UpdateBenchmarksUseCase,
+    UpdateCheckUseCase,
+    UpdateMigrateUseCase,
+)
 from universal_memory.domain import SnapshotFailedError
 from universal_memory.domain.entities import (
     LatentSkill,
@@ -206,6 +211,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         project_root=project_root,
         repository=latent_skill_repository,
     )
+    update_check_use_case = UpdateCheckUseCase()
+    update_migrate_use_case = UpdateMigrateUseCase(safe_write_use_case=safe_write_use_case)
+    update_benchmarks_use_case = UpdateBenchmarksUseCase(
+        safe_write_use_case=safe_write_use_case,
+    )
 
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
         snapshots = snapshot_repository.list(scope=scope, status=SnapshotStatus.created)
@@ -245,5 +255,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         activate_skill_command=_activate_skill_use_case.execute,
         deactivate_skill_command=_deactivate_skill_use_case.execute,
         update_skill_command=_update_skill_use_case.execute,
+        update_check_command=update_check_use_case.execute,
+        update_migrate_command=update_migrate_use_case.execute,
+        update_benchmarks_command=update_benchmarks_use_case.execute,
     )
     return configured_main(argv)

@@ -1,6 +1,6 @@
 # Story 5.7: Atualizacoes de Biblioteca, Migracao de Schema e Benchmarks
 
-Status: ready-for-dev
+Status: review
 
 ## Historia
 
@@ -61,56 +61,56 @@ para que eu nao perca meu historico de uso, fatos ou regras customizadas.
 
 ## Tarefas
 
-- [ ] **Tarefa 1: Definir contrato de update e schema alvo (AC: 1, 2)**
-  - [ ] Criar DTOs/commands/results em `application` para verificacao, migracao e atualizacao de benchmarks.
-  - [ ] Definir constante unica para o schema alvo atual, inicialmente `1`, alinhada aos modelos existentes que ja persistem `schema_version` nas entidades.
-  - [ ] Ler versao instalada via `universal_memory.__version__` ou `importlib.metadata.version("universal-memory")`, sem duplicar parsing de `pyproject.toml` em runtime.
-  - [ ] Representar `updates_available` como `false` ou `unknown` quando so houver metadados locais; nao inventar integracao remota.
+- [x] **Tarefa 1: Definir contrato de update e schema alvo (AC: 1, 2)**
+  - [x] Criar DTOs/commands/results em `application` para verificacao, migracao e atualizacao de benchmarks.
+  - [x] Definir constante unica para o schema alvo atual, inicialmente `1`, alinhada aos modelos existentes que ja persistem `schema_version` nas entidades.
+  - [x] Ler versao instalada via `universal_memory.__version__` ou `importlib.metadata.version("universal-memory")`, sem duplicar parsing de `pyproject.toml` em runtime.
+  - [x] Representar `updates_available` como `false` ou `unknown` quando so houver metadados locais; nao inventar integracao remota.
 
-- [ ] **Tarefa 2: Implementar `UpdateCheckUseCase` read-only (AC: 1, 2, 8)**
-  - [ ] Verificar existencia de `.umem/`, `.umem/config.toml`, `.umem/memory/` e `.umem/benchmarks/retrieval-results.json` sem criar arquivos.
-  - [ ] Ler `schema_version` do config TOML quando existir; tratar ausencia como schema legado suportado.
-  - [ ] Inspecionar arquivos `.umem/memory/facts.jsonl`, `rules.jsonl`, `latent_skills.jsonl` e `context_summaries.jsonl` quando existirem, computando versoes encontradas sem descartar linhas invalidas.
-  - [ ] Retornar warnings seguros para arquivos ausentes, config invalido, linhas corruptas ou schemas acima do suportado.
+- [x] **Tarefa 2: Implementar `UpdateCheckUseCase` read-only (AC: 1, 2, 8)**
+  - [x] Verificar existencia de `.umem/`, `.umem/config.toml`, `.umem/memory/` e `.umem/benchmarks/retrieval-results.json` sem criar arquivos.
+  - [x] Ler `schema_version` do config TOML quando existir; tratar ausencia como schema legado suportado.
+  - [x] Inspecionar arquivos `.umem/memory/facts.jsonl`, `rules.jsonl`, `latent_skills.jsonl` e `context_summaries.jsonl` quando existirem, computando versoes encontradas sem descartar linhas invalidas.
+  - [x] Retornar warnings seguros para arquivos ausentes, config invalido, linhas corruptas ou schemas acima do suportado.
 
-- [ ] **Tarefa 3: Implementar migracao segura de config TOML (AC: 3, 5)**
-  - [ ] Estender `toml_loader.py` ou criar componente dedicado em `infrastructure/config/` para aplicar migracoes TOML preservando chaves desconhecidas.
-  - [ ] Adicionar `schema_version = 1` ao config do projeto quando ausente, mantendo `[project]`, `[hosts]`, `[preferences]` e quaisquer tabelas customizadas.
-  - [ ] Usar `SafeWriteUseCase` para escrever `.umem/config.toml` durante `--migrate`; nao usar escrita direta para migracoes automaticas.
-  - [ ] Validar config apos renderizacao e antes de considerar a migracao concluida.
+- [x] **Tarefa 3: Implementar migracao segura de config TOML (AC: 3, 5)**
+  - [x] Estender `toml_loader.py` ou criar componente dedicado em `infrastructure/config/` para aplicar migracoes TOML preservando chaves desconhecidas.
+  - [x] Adicionar `schema_version = 1` ao config do projeto quando ausente, mantendo `[project]`, `[hosts]`, `[preferences]` e quaisquer tabelas customizadas.
+  - [x] Usar `SafeWriteUseCase` para escrever `.umem/config.toml` durante `--migrate`; nao usar escrita direta para migracoes automaticas.
+  - [x] Validar config apos renderizacao e antes de considerar a migracao concluida.
 
-- [ ] **Tarefa 4: Implementar migracao segura dos arquivos de memoria (AC: 4, 5)**
-  - [ ] Reutilizar hooks `migrate(target_version)` ja existentes nos repositories, ampliando-os para migracoes reais quando necessario.
-  - [ ] Suportar pelo menos os arquivos atualmente usados pelo codigo: `.umem/memory/facts.jsonl`, `.umem/memory/rules.jsonl`, `.umem/memory/latent_skills.jsonl` e `.umem/memory/context_summaries.jsonl` quando presentes.
-  - [ ] Tratar a divergencia documental `.json` vs implementacao `.jsonl` explicitamente: a historia deve preservar os arquivos reais `.jsonl` existentes e nao renomear dados do usuario sem requisito adicional.
-  - [ ] Para linhas invalidas, bloquear a migracao daquele arquivo com erro acionavel ou preservar a linha em quarentena auditada; nao apagar silenciosamente.
-  - [ ] Garantir snapshot por arquivo antes de qualquer substituicao.
+- [x] **Tarefa 4: Implementar migracao segura dos arquivos de memoria (AC: 4, 5)**
+  - [x] Reutilizar hooks `migrate(target_version)` ja existentes nos repositories, ampliando-os para migracoes reais quando necessario.
+  - [x] Suportar pelo menos os arquivos atualmente usados pelo codigo: `.umem/memory/facts.jsonl`, `.umem/memory/rules.jsonl`, `.umem/memory/latent_skills.jsonl` e `.umem/memory/context_summaries.jsonl` quando presentes.
+  - [x] Tratar a divergencia documental `.json` vs implementacao `.jsonl` explicitamente: a historia deve preservar os arquivos reais `.jsonl` existentes e nao renomear dados do usuario sem requisito adicional.
+  - [x] Para linhas invalidas, bloquear a migracao daquele arquivo com erro acionavel ou preservar a linha em quarentena auditada; nao apagar silenciosamente.
+  - [x] Garantir snapshot por arquivo antes de qualquer substituicao.
 
-- [ ] **Tarefa 5: Integrar atualizacao de benchmarks locais (AC: 6, 7, 8)**
-  - [ ] Reutilizar `benchmarks/retrieval.py::run_benchmark(project_root=...)` para gerar `.umem/benchmarks/retrieval-results.json`.
-  - [ ] Se o arquivo de resultados existente tiver conteudo customizado, criar snapshot antes de sobrescrever.
-  - [ ] Retornar metricas principais do payload ja produzido pelo benchmark: `fact_count`, `query_count`, `selected_default_strategy` e p95 da estrategia selecionada.
-  - [ ] Manter execucao offline e sem dependencias novas de rede/modelos.
+- [x] **Tarefa 5: Integrar atualizacao de benchmarks locais (AC: 6, 7, 8)**
+  - [x] Reutilizar `benchmarks/retrieval.py::run_benchmark(project_root=...)` para gerar `.umem/benchmarks/retrieval-results.json`.
+  - [x] Se o arquivo de resultados existente tiver conteudo customizado, criar snapshot antes de sobrescrever.
+  - [x] Retornar metricas principais do payload ja produzido pelo benchmark: `fact_count`, `query_count`, `selected_default_strategy` e p95 da estrategia selecionada.
+  - [x] Manter execucao offline e sem dependencias novas de rede/modelos.
 
-- [ ] **Tarefa 6: Expor CLI `umem update` (AC: 1, 2, 3, 6, 7, 8)**
-  - [ ] Adicionar subcomando ou comando Typer `umem update` em `interfaces/cli/init_command.py` preservando os comandos existentes de `skills update`.
-  - [ ] Suportar flags `--check`, `--migrate`, `--benchmarks`, `--format json` e `--yes` quando confirmacao humana for necessaria.
-  - [ ] Definir comportamento seguro quando nenhuma flag for passada: preferir `--check` read-only ou retornar ajuda acionavel, sem migrar implicitamente.
-  - [ ] Em saida humana, seguir `devex-interaction-spec.md`: resultado, escopo, caminhos relativos, referencias de auditoria para mutacoes e proxima acao util.
-  - [ ] Em JSON, usar envelope padrao `{ "ok": true, "operation": "update...", "scope": "project", "data": ..., "warnings": [] }`.
+- [x] **Tarefa 6: Expor CLI `umem update` (AC: 1, 2, 3, 6, 7, 8)**
+  - [x] Adicionar subcomando ou comando Typer `umem update` em `interfaces/cli/init_command.py` preservando os comandos existentes de `skills update`.
+  - [x] Suportar flags `--check`, `--migrate`, `--benchmarks`, `--format json` e `--yes` quando confirmacao humana for necessaria.
+  - [x] Definir comportamento seguro quando nenhuma flag for passada: preferir `--check` read-only ou retornar ajuda acionavel, sem migrar implicitamente.
+  - [x] Em saida humana, seguir `devex-interaction-spec.md`: resultado, escopo, caminhos relativos, referencias de auditoria para mutacoes e proxima acao util.
+  - [x] Em JSON, usar envelope padrao `{ "ok": true, "operation": "update...", "scope": "project", "data": ..., "warnings": [] }`.
 
-- [ ] **Tarefa 7: Composicao/bootstrap (AC: todos)**
-  - [ ] Instanciar use cases de update em `src/universal_memory/bootstrap/cli.py` com `SafeWriteUseCase`, repositories e benchmark runner necessarios.
-  - [ ] Evitar import de `infrastructure` dentro de `domain`; se algum use case em `application` precisar de I/O concreto, introduzir port simples ou manter a composicao no bootstrap.
-  - [ ] Nao expor MCP nesta historia a menos que a matriz de paridade do projeto ja exija update como capacidade publica; se nao expor MCP, documentar como excecao temporaria por FR33 ser explicitamente CLI.
+- [x] **Tarefa 7: Composicao/bootstrap (AC: todos)**
+  - [x] Instanciar use cases de update em `src/universal_memory/bootstrap/cli.py` com `SafeWriteUseCase`, repositories e benchmark runner necessarios.
+  - [x] Evitar import de `infrastructure` dentro de `domain`; se algum use case em `application` precisar de I/O concreto, introduzir port simples ou manter a composicao no bootstrap.
+  - [x] Nao expor MCP nesta historia a menos que a matriz de paridade do projeto ja exija update como capacidade publica; se nao expor MCP, documentar como excecao temporaria por FR33 ser explicitamente CLI.
 
-- [ ] **Tarefa 8: Testes automatizados e validacao (AC: todos)**
-  - [ ] Criar testes de application para check read-only, migracao de config, migracao de JSONL e falhas de snapshot/storage.
-  - [ ] Criar testes CLI para `umem update --check`, `--migrate`, `--benchmarks` e combinacoes com `--format json`.
-  - [ ] Criar teste garantindo que `--check` nao altera mtimes/conteudo dos arquivos locais.
-  - [ ] Criar teste garantindo preservacao de fatos/regras/custom fields ao migrar fixture legado.
-  - [ ] Atualizar ou adicionar testes de benchmark para validar integracao por CLI sem rede.
-  - [ ] Rodar `uv run pytest`, `uv run ruff check .` e `uv run pyright` antes de marcar done.
+- [x] **Tarefa 8: Testes automatizados e validacao (AC: todos)**
+  - [x] Criar testes de application para check read-only, migracao de config, migracao de JSONL e falhas de snapshot/storage.
+  - [x] Criar testes CLI para `umem update --check`, `--migrate`, `--benchmarks` e combinacoes com `--format json`.
+  - [x] Criar teste garantindo que `--check` nao altera mtimes/conteudo dos arquivos locais.
+  - [x] Criar teste garantindo preservacao de fatos/regras/custom fields ao migrar fixture legado.
+  - [x] Atualizar ou adicionar testes de benchmark para validar integracao por CLI sem rede.
+  - [x] Rodar `uv run pytest`, `uv run ruff check .` e `uv run pyright` antes de marcar done.
 
 ## Contexto/Guardrails do Desenvolvedor
 
@@ -185,13 +185,63 @@ para que eu nao perca meu historico de uso, fatos ou regras customizadas.
 
 ## Checklist de Validacao
 
-- [ ] `umem update --check` existe, e read-only e retorna versao/schema/status local.
-- [ ] `umem update --check --format json` retorna JSON puro com campos obrigatorios.
-- [ ] `umem update --migrate` adiciona/atualiza schema alvo com snapshot, auditoria e preservacao de dados.
-- [ ] Migracao de `.umem/config.toml` preserva `[hosts]`, `[preferences]` e tabelas customizadas.
-- [ ] Migracao de memoria preserva fatos, regras, latent skills e resumos existentes sem perda silenciosa.
-- [ ] Falhas de snapshot/storage/validacao abortam sem corromper arquivos.
-- [ ] `umem update --benchmarks` reutiliza `benchmarks/retrieval.py` e atualiza `.umem/benchmarks/retrieval-results.json` com snapshot/auditoria quando sobrescreve.
-- [ ] Todos os fluxos funcionam offline.
-- [ ] O comando nao altera `sprint-status.yaml` nem artefatos BMad fora desta historia.
-- [ ] `uv run pytest`, `uv run ruff check .` e `uv run pyright` passam.
+- [x] `umem update --check` existe, e read-only e retorna versao/schema/status local.
+- [x] `umem update --check --format json` retorna JSON puro com campos obrigatorios.
+- [x] `umem update --migrate` adiciona/atualiza schema alvo com snapshot, auditoria e preservacao de dados.
+- [x] Migracao de `.umem/config.toml` preserva `[hosts]`, `[preferences]` e tabelas customizadas.
+- [x] Migracao de memoria preserva fatos, regras, latent skills e resumos existentes sem perda silenciosa.
+- [x] Falhas de snapshot/storage/validacao abortam sem corromper arquivos.
+- [x] `umem update --benchmarks` reutiliza `benchmarks/retrieval.py` e atualiza `.umem/benchmarks/retrieval-results.json` com snapshot/auditoria quando sobrescreve.
+- [x] Todos os fluxos funcionam offline.
+- [x] O comando nao altera `sprint-status.yaml` nem artefatos BMad fora desta historia.
+- [x] `uv run pytest`, `uv run ruff check .` e `uv run pyright` passam.
+
+## Dev Agent Record
+
+### Implementation Plan
+
+- Criar contrato `application.update` com comandos/resultados para check, migrate e benchmarks, mantendo schema alvo unico `TARGET_SCHEMA_VERSION = 1` e versao instalada via `universal_memory.__version__`.
+- Implementar `UpdateCheckUseCase` estritamente read-only, sem `ensure_project_layout`, sem benchmark e sem escrita.
+- Implementar `UpdateMigrateUseCase` com pre-validacao de config/memoria antes de qualquer escrita e mutacoes via `SafeWriteUseCase` para snapshot, atomic write e auditoria.
+- Implementar `UpdateBenchmarksUseCase` gerando payload offline em diretorio temporario e gravando `.umem/benchmarks/retrieval-results.json` apenas via `SafeWriteUseCase`.
+- Expor `umem update` na CLI com JSON puro, saida humana, confirmacao `--yes` para mutacoes e default seguro para `--check`.
+- Compor use cases no bootstrap da CLI sem expor MCP nesta historia; excecao temporaria: FR33 e explicitamente CLI.
+
+### Debug Log
+
+- Teste RED inicial falhou por ausencia de `universal_memory.application.update`, confirmando lacuna da story.
+- Primeira suite focada revelou asserts de TOML acoplados a formatacao de `tomli_w`; testes foram ajustados para validacao semantica.
+- `uv run pytest` completo inicialmente revelou regressao no subprocesso `python -m universal_memory init` causada por import top-level de `benchmarks`; corrigido com import lazy.
+- Verificacao manual fora do repo revelou que `benchmarks.retrieval` nao era resolvido em instalacao/editable fora do cwd; adicionado pacote `src/benchmarks` com runner offline empacotado equivalente.
+- `sprint-status.yaml` nao foi lido nem alterado, conforme guardrail do usuario.
+
+### Completion Notes
+
+- `umem update --check` implementado como leitura local offline com campos JSON obrigatorios, warnings seguros e `updates_available=false`.
+- `umem update --migrate` migra config TOML e JSONL de memoria para schema 1, preservando chaves/tabelas customizadas e campos extras seguros em `metadata`.
+- Linhas JSONL invalidas bloqueiam migracao com `StorageError`, sem descarte silencioso.
+- Mutacoes de config, memoria e benchmarks usam `SafeWriteUseCase`, criando snapshot e auditoria antes da substituicao.
+- `umem update --benchmarks` executa benchmark offline, retorna metricas principais e grava resultados via pipeline seguro.
+- O comando geral `umem update` nao conflita com `umem skills update`; sem flags, faz `--check` read-only.
+
+### Validation Results
+
+- `uv run pytest` - passou, 406 passed.
+- `uv run ruff check .` - passou, All checks passed.
+- `uv run pyright` - passou, 0 errors, 0 warnings.
+
+## File List
+
+- `src/benchmarks/__init__.py`
+- `src/benchmarks/retrieval.py`
+- `src/universal_memory/application/update/__init__.py`
+- `src/universal_memory/application/update/update_use_cases.py`
+- `src/universal_memory/bootstrap/cli.py`
+- `src/universal_memory/interfaces/cli/init_command.py`
+- `tests/application/test_update_use_cases.py`
+- `tests/interfaces/cli/test_update_command.py`
+- `_bmad-output/implementation-artifacts/5-7-atualiza-es-de-biblioteca-migra-o-de-schema-e-benchmarks.md`
+
+## Change Log
+
+- 2026-06-01: Implementado comando `umem update` com `--check`, `--migrate`, `--benchmarks`, JSON puro, schema alvo 1, migracao segura, benchmark offline empacotado e cobertura automatizada.

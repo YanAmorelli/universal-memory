@@ -66,6 +66,14 @@ from universal_memory.application.skills import (
     UpdateSkillCommand,
     UpdateSkillResult,
 )
+from universal_memory.application.update import (
+    UpdateBenchmarksCommand,
+    UpdateBenchmarksResult,
+    UpdateCheckCommand,
+    UpdateCheckResult,
+    UpdateMigrateCommand,
+    UpdateMigrateResult,
+)
 from universal_memory.domain import (
     ConfigValidationPort,
     ProjectLayoutPort,
@@ -123,6 +131,9 @@ GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailR
 ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResult]
 DeactivateSkillCommandHandler = Callable[[DeactivateSkillCommand], DeactivateSkillResult]
 UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
+UpdateCheckCommandHandler = Callable[[UpdateCheckCommand], UpdateCheckResult]
+UpdateMigrateCommandHandler = Callable[[UpdateMigrateCommand], UpdateMigrateResult]
+UpdateBenchmarksCommandHandler = Callable[[UpdateBenchmarksCommand], UpdateBenchmarksResult]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
@@ -172,6 +183,9 @@ def main(  # noqa: PLR0913
     activate_skill_command: ActivateSkillCommandHandler | None = None,
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
+    update_check_command: UpdateCheckCommandHandler | None = None,
+    update_migrate_command: UpdateMigrateCommandHandler | None = None,
+    update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -195,6 +209,9 @@ def main(  # noqa: PLR0913
         activate_skill_command=activate_skill_command,
         deactivate_skill_command=deactivate_skill_command,
         update_skill_command=update_skill_command,
+        update_check_command=update_check_command,
+        update_migrate_command=update_migrate_command,
+        update_benchmarks_command=update_benchmarks_command,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
@@ -238,6 +255,9 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     activate_skill_command: ActivateSkillCommandHandler | None = None,
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
+    update_check_command: UpdateCheckCommandHandler | None = None,
+    update_migrate_command: UpdateMigrateCommandHandler | None = None,
+    update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
     facts_app = typer.Typer(help="Gerenciar fatos de memoria")
@@ -299,6 +319,37 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             raise RuntimeError(msg)
         raise typer.Exit(
             code=_run_status(status_command, output_format=_effective_format(ctx, output_format))
+        )
+
+    @app.command("update")
+    def update(  # noqa: PLR0913
+        ctx: typer.Context,
+        check: Annotated[bool, typer.Option("--check", help="Verificar status local.")] = False,
+        migrate: Annotated[
+            bool,
+            typer.Option("--migrate", help="Migrar config e memoria para o schema atual."),
+        ] = False,
+        benchmarks: Annotated[
+            bool,
+            typer.Option("--benchmarks", help="Atualizar benchmarks locais offline."),
+        ] = False,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if update_check_command is None:
+            msg = "CLI update_check_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_update(
+                check_command=update_check_command,
+                migrate_command=update_migrate_command,
+                benchmarks_command=update_benchmarks_command,
+                output_format=_effective_format(ctx, output_format),
+                check=check,
+                migrate=migrate,
+                benchmarks=benchmarks,
+                yes=yes,
+            )
         )
 
     @app.command("context")
@@ -793,6 +844,9 @@ def build_main(  # noqa: PLR0913
     activate_skill_command: ActivateSkillCommandHandler | None = None,
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
+    update_check_command: UpdateCheckCommandHandler | None = None,
+    update_migrate_command: UpdateMigrateCommandHandler | None = None,
+    update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -823,6 +877,9 @@ def build_main(  # noqa: PLR0913
             activate_skill_command=activate_skill_command,
             deactivate_skill_command=deactivate_skill_command,
             update_skill_command=update_skill_command,
+            update_check_command=update_check_command,
+            update_migrate_command=update_migrate_command,
+            update_benchmarks_command=update_benchmarks_command,
         )
 
     return configured_main
@@ -1545,6 +1602,91 @@ def _run_host_sync(
     return 0
 
 
+def _run_update(  # noqa: PLR0911, PLR0912, PLR0913
+    *,
+    check_command: UpdateCheckCommandHandler,
+    migrate_command: UpdateMigrateCommandHandler | None,
+    benchmarks_command: UpdateBenchmarksCommandHandler | None,
+    output_format: str,
+    check: bool,
+    migrate: bool,
+    benchmarks: bool,
+    yes: bool,
+) -> int:
+    if not any([check, migrate, benchmarks]):
+        check = True
+    selected_count = sum([check, migrate, benchmarks])
+    if selected_count != 1:
+        _print_expected_error(
+            ValidationFailedError("Informe apenas uma opcao de update por execucao."),
+            output_format=output_format,
+        )
+        return 1
+
+    try:
+        if check:
+            result = check_command(UpdateCheckCommand(project_root=Path.cwd()))
+            if output_format == "json":
+                print(json.dumps(_update_check_success_envelope(result), sort_keys=True))
+            else:
+                _stdout_console().print(_format_human_update_check(result))
+            return 0
+
+        if migrate:
+            if migrate_command is None:
+                raise RuntimeError("CLI update_migrate_command dependency was not configured.")
+            if output_format == "json" and not yes:
+                raise ValidationFailedError(
+                    "A flag --yes / -y e obrigatoria para executar update --migrate com saida JSON."
+                )
+            if output_format != "json":
+                _stdout_console().print(_format_human_update_mutation_plan("update.migrate"))
+                if not yes:
+                    if not _confirm("Aplicar migracao de schema? [s/N]: ", default=False):
+                        _stdout_console().print("Migracao cancelada.")
+                        return 1
+            result = migrate_command(UpdateMigrateCommand(project_root=Path.cwd(), origin="cli"))
+            if output_format == "json":
+                print(json.dumps(_update_migrate_success_envelope(result), sort_keys=True))
+            else:
+                _stdout_console().print(_format_human_update_migrate(result))
+            return 0
+
+        if benchmarks:
+            if benchmarks_command is None:
+                raise RuntimeError("CLI update_benchmarks_command dependency was not configured.")
+            if output_format == "json" and not yes:
+                raise ValidationFailedError(
+                    "A flag --yes / -y e obrigatoria para executar update --benchmarks "
+                    "com saida JSON."
+                )
+            if output_format != "json":
+                _stdout_console().print(_format_human_update_mutation_plan("update.benchmarks"))
+                if not yes:
+                    if not _confirm("Atualizar benchmarks locais? [s/N]: ", default=False):
+                        _stdout_console().print("Atualizacao de benchmarks cancelada.")
+                        return 1
+            result = benchmarks_command(
+                UpdateBenchmarksCommand(project_root=Path.cwd(), origin="cli")
+            )
+            if output_format == "json":
+                print(json.dumps(_update_benchmarks_success_envelope(result), sort_keys=True))
+            else:
+                _stdout_console().print(_format_human_update_benchmarks(result))
+            return 0
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except (ValidationError, ValueError) as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+
+    return 1
+
+
 def _run_skills_list(
     command: ListSkillsCommandHandler,
     *,
@@ -2133,6 +2275,36 @@ def _host_success_envelope(
     }
 
 
+def _update_check_success_envelope(result: UpdateCheckResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "update.check",
+        "scope": "project",
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
+def _update_migrate_success_envelope(result: UpdateMigrateResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "update.migrate",
+        "scope": "project",
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
+def _update_benchmarks_success_envelope(result: UpdateBenchmarksResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "update.benchmarks",
+        "scope": "project",
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
     project_root = result.project_path
     return {
@@ -2299,6 +2471,80 @@ def _format_human_context_output(result: AssembleContextSummaryResult) -> str:
         "Fontes: "
         f"{', '.join(result.included_fact_ids) if result.included_fact_ids else '(nenhuma)'}",
     ]
+    return "\n".join(lines)
+
+
+def _format_human_update_check(result: UpdateCheckResult) -> str:
+    memory = ", ".join(
+        f"{name}: {versions or ['legacy']}"
+        for name, versions in sorted(result.memory_schema_versions.items())
+    )
+    lines = [
+        "Update check concluido.",
+        "Escopo: project",
+        f"Versao instalada: {result.installed_version}",
+        f"Schema alvo: {result.target_schema_version}",
+        f"Schema do config: {result.project_config_schema_version or 'legacy'}",
+        f"Schemas de memoria: {memory or '(nenhum arquivo encontrado)'}",
+        f"Benchmarks: {result.benchmarks_status}",
+        f"Updates disponiveis: {result.updates_available}",
+        f"Migracao necessaria: {str(result.migration_required).lower()}",
+    ]
+    if result.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in result.warnings)
+    lines.append("Proxima acao: umem update --migrate --yes, se migracao for necessaria.")
+    return "\n".join(lines)
+
+
+def _format_human_update_mutation_plan(operation: str) -> str:
+    return "\n".join(
+        [
+            f"Operacao: {operation}",
+            "Escopo: project",
+            "Snapshot: criado pelo pipeline seguro antes de cada gravacao.",
+            "Auditoria: evento de mutacao segura esperado.",
+            "Padrao: nao confirmar.",
+        ]
+    )
+
+
+def _format_human_update_migrate(result: UpdateMigrateResult) -> str:
+    lines = [
+        "Migracao concluida.",
+        "Escopo: project",
+        f"Schema alvo: {result.target_schema_version}",
+        "Arquivos migrados:",
+    ]
+    lines.extend(f"- {path}" for path in result.migrated_files)
+    snapshots = ", ".join(result.snapshot_references) if result.snapshot_references else "(nenhum)"
+    lines.extend(
+        [
+            f"Snapshots: {snapshots}",
+            f"Auditoria: {result.audit_reference or '(nenhuma alteracao)'}",
+        ]
+    )
+    if result.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in result.warnings)
+    return "\n".join(lines)
+
+
+def _format_human_update_benchmarks(result: UpdateBenchmarksResult) -> str:
+    lines = [
+        "Benchmarks atualizados.",
+        "Escopo: project",
+        f"Arquivo: {result.retrieval_results_path}",
+        f"Fatos sinteticos: {result.fact_count}",
+        f"Queries: {result.query_count}",
+        f"Estrategia default: {result.selected_default_strategy}",
+        f"p95 latency ms: {result.p95_latency_ms}",
+        f"Snapshot: {result.snapshot_reference}",
+        f"Auditoria: {result.audit_reference}",
+    ]
+    if result.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in result.warnings)
     return "\n".join(lines)
 
 
