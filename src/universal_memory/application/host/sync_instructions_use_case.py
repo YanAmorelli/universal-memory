@@ -87,8 +87,15 @@ class SyncInstructionsUseCase:
         plans = self._plan_commands(host_ids, all_blocks, command)
 
         results = []
-        for host_id, blocks in plans:
-            results.append(self._execute_host_plan(host_id, blocks, command))
+        for host_id, blocks, shared_manifest_available in plans:
+            results.append(
+                self._execute_host_plan(
+                    host_id,
+                    blocks,
+                    command,
+                    shared_manifest_available=shared_manifest_available,
+                )
+            )
 
         planned_changes = self._unique_changes(
             change for result in results for change in result.planned_changes
@@ -119,6 +126,8 @@ class SyncInstructionsUseCase:
         host_id: str,
         blocks: list[InstructionBlock],
         command: SyncInstructionsCommand,
+        *,
+        shared_manifest_available: bool | None,
     ) -> ConfigureHostResult:
         host = self.configure_host_use_case.host_for(host_id)
         target = self.configure_host_use_case.primary_target_for(host)
@@ -126,6 +135,7 @@ class SyncInstructionsUseCase:
             host_id=host_id,
             apply=command.apply,
             instruction_blocks=blocks,
+            shared_manifest_available=shared_manifest_available,
             max_managed_lines=command.max_managed_lines,
             max_managed_chars=command.max_managed_chars,
             origin=command.origin,
@@ -254,8 +264,8 @@ class SyncInstructionsUseCase:
         host_ids: list[str],
         blocks: list[InstructionBlock],
         command: SyncInstructionsCommand,
-    ) -> list[tuple[str, list[InstructionBlock]]]:
-        plans: list[tuple[str, list[InstructionBlock]]] = []
+    ) -> list[tuple[str, list[InstructionBlock], bool | None]]:
+        plans: list[tuple[str, list[InstructionBlock], bool | None]] = []
         should_write_agents = "codex" in host_ids and any(
             block.resolved_classification
             in {
@@ -267,16 +277,20 @@ class SyncInstructionsUseCase:
             for block in blocks
         )
         if should_write_agents:
-            plans.append(("codex", blocks))
+            plans.append(("codex", blocks, None))
         if "claude_code" in host_ids:
+            claude_classifications = set(CLAUDE_SUPPORTED_CLASSIFICATIONS)
+            if not should_write_agents:
+                claude_classifications.add(InstructionClassification.shared_policy)
             plans.append(
                 (
                     "claude_code",
                     [
                         block
                         for block in blocks
-                        if block.resolved_classification in CLAUDE_SUPPORTED_CLASSIFICATIONS
+                        if block.resolved_classification in claude_classifications
                     ],
+                    should_write_agents,
                 )
             )
         if not plans and host_ids:

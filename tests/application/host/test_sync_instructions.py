@@ -243,6 +243,33 @@ def test_sync_default_hosts_respects_enabled_hosts_from_project_config(
     assert not (tmp_path / "CLAUDE.md").exists()
 
 
+def test_sync_claude_without_agents_md_keeps_shared_policy_in_claude_md(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('[runtimes]\nenabled = ["claude_code"]\n', encoding="utf-8")
+    use_case = _use_case(
+        tmp_path,
+        [
+            _rule("Shared Policy", "Use relative paths in specs, code and docs.", "shared_policy"),
+            _rule("Claude Delta", "Claude-only note.", "provider_delta"),
+        ],
+        repositories,
+    )
+
+    result = use_case.execute(SyncInstructionsCommand(apply=True))
+
+    claude_content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert result.host_ids == ["claude_code"]
+    assert not (tmp_path / "AGENTS.md").exists()
+    assert "Use relative paths in specs, code and docs." in claude_content
+    assert "Claude-only note." in claude_content
+    assert "Claude Code Universal Memory Instructions" in claude_content
+    assert "Use este arquivo como a referencia operacional" in claude_content
+
+
 def test_sync_ignores_enabled_runtimes_without_legacy_instruction_support(
     tmp_path: Path,
     repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
