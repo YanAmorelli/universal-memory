@@ -1,6 +1,6 @@
 # Story 5.1: Modelar Registro de Runtimes e Alvos
 
-Status: ready-for-dev
+Status: review
 
 ## Reopened Scope
 
@@ -52,15 +52,52 @@ para que cada runtime tenha caminhos, capabilities, tiers de suporte, instructio
 
 ## Tasks / Subtasks
 
-- [ ] Criar ou atualizar modelos de domínio para `RuntimeAdapter`, `RuntimeRegistry`, `RuntimeTarget`, `InstructionTarget` e `NativeSkillTarget`.
-- [ ] Implementar registry declarativo incluindo `claude_code`, `opencode`, `codex`, `cursor` e `antigravity` com tiers corretos.
-- [ ] Atualizar o código que hoje usa `HostName`/`host_ids` para consumir runtime IDs ou registrar uma migração controlada.
-- [ ] Garantir single-writer ownership para `AGENTS.md` no novo modelo.
-- [ ] Adicionar testes de domínio/config para tiers, paths, targets, native skill targets e IDs estáveis.
-- [ ] Atualizar documentação interna da story com qualquer decisão de migração de `[hosts]` para `[runtimes]`.
+- [x] Criar ou atualizar modelos de domínio para `RuntimeAdapter`, `RuntimeRegistry`, `RuntimeTarget`, `InstructionTarget` e `NativeSkillTarget`.
+- [x] Implementar registry declarativo incluindo `claude_code`, `opencode`, `codex`, `cursor` e `antigravity` com tiers corretos.
+- [x] Atualizar o código que hoje usa `HostName`/`host_ids` para consumir runtime IDs ou registrar uma migração controlada.
+- [x] Garantir single-writer ownership para `AGENTS.md` no novo modelo.
+- [x] Adicionar testes de domínio/config para tiers, paths, targets, native skill targets e IDs estáveis.
+- [x] Atualizar documentação interna da story com qualquer decisão de migração de `[hosts]` para `[runtimes]`.
 
 ## Dev Notes
 
 - A story anterior estava implementada como `5-1-modelar-hosts-e-alvos-de-instru-o.md` e foi reaberta porque não cobre OpenCode, Cursor, Antigravity, native skill targets nem Runtime Registry.
 - Fontes de verdade: `_bmad-output/planning-artifacts/epics.md` Story 5.1, `_bmad-output/planning-artifacts/architecture.md` Architecture Patch 2, `_bmad-output/planning-artifacts/prd.md` FR7-FR8.
 - Não alterar `sprint-status.yaml` para `review` sem implementação e verificação da nova cobertura.
+
+## Dev Agent Record
+
+### Debug Log
+
+- 2026-06-01: Testes RED adicionados para Runtime Registry, tiers, native skill targets, single-writer de `AGENTS.md` e migração `[hosts]` -> `[runtimes]`.
+- 2026-06-01: `uv run pytest tests/domain/test_host.py tests/application/test_setup_project.py tests/infrastructure/config/test_toml_loader.py` falhou inicialmente por ausência de `universal_memory.domain.entities.runtime`, confirmando RED.
+- 2026-06-01: Ajustado contrato para permitir consumidores read-only de `AGENTS.md` via target de runtime, mantendo `InstructionTarget` legado validando writer real.
+- 2026-06-01: `uv run ruff check src tests` e `uv run pytest` passaram.
+
+### Completion Notes
+
+- Criado modelo de domínio `runtime.py` com `RuntimeId`, `RuntimeSupportTier`, `RuntimeTarget`, `NativeSkillTarget`, `RuntimeInstructionTarget`, `RuntimeAdapter`, `RuntimeRegistry` e `default_runtime_registry()`.
+- Registry declarativo inclui `claude_code`, `opencode`, `codex`, `cursor` e `antigravity`; Claude Code/OpenCode/Codex como Tier 1; Cursor/Antigravity como Tier 2.
+- Ownership de `AGENTS.md`: `codex` é o único writer `single_writer`; `opencode` referencia `AGENTS.md` como consumidor read-only no modelo de runtime.
+- Decisão de migração: `[runtimes] enabled = [...]` é a chave canônica nova; `[hosts] enabled = [...]` permanece apenas como entrada legada. `load_config()` projeta `[hosts]` para `[runtimes]` quando a chave nova não existe, `setup_project()` grava `[runtimes]`, `sync_instructions` lê/escreve `[runtimes]`, e `update --migrate` materializa `[runtimes]` preservando `[hosts]` legado.
+- Mantida compatibilidade operacional de CLI/use cases existentes que ainda expõem nomes `host_id`/`--hosts`, tratando esses valores como IDs estáveis de runtime até uma renomeação pública posterior.
+
+## File List
+
+- `src/universal_memory/domain/entities/runtime.py`
+- `src/universal_memory/domain/entities/__init__.py`
+- `src/universal_memory/application/onboarding/setup_project.py`
+- `src/universal_memory/application/host/sync_instructions_use_case.py`
+- `src/universal_memory/application/update/update_use_cases.py`
+- `src/universal_memory/infrastructure/config/toml_loader.py`
+- `tests/domain/test_host.py`
+- `tests/application/test_setup_project.py`
+- `tests/application/test_update_use_cases.py`
+- `tests/infrastructure/config/test_toml_loader.py`
+- `tests/interfaces/cli/test_init_command.py`
+- `tests/interfaces/cli/test_update_command.py`
+- `_bmad-output/implementation-artifacts/5-1-modelar-registro-de-runtimes-e-alvos.md`
+
+## Change Log
+
+- 2026-06-01: Implementado Runtime Registry declarativo, migração controlada `[hosts]` -> `[runtimes]`, single-writer de `AGENTS.md` e testes de domínio/config/update/CLI relacionados.

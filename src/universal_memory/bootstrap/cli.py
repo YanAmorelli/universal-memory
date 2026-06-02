@@ -196,6 +196,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     _deactivate_skill_use_case = DeactivateSkillUseCase(
         repository=latent_skill_repository,
+        project_root=project_root,
+        safe_write_use_case=safe_write_use_case,
     )
     _update_skill_use_case = UpdateSkillUseCase(
         project_root=project_root,

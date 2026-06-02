@@ -13,7 +13,10 @@ from universal_memory.interfaces.cli.init_command import main as cli_main
 
 
 def make_result(
-    *, collision_detected: bool = False, suggested_slug: str | None = None
+    *,
+    collision_detected: bool = False,
+    suggested_slug: str | None = None,
+    warnings: list[str] | None = None,
 ) -> GenerateSkillResult:
     now = datetime.now(UTC)
     skill = LatentSkill(
@@ -44,6 +47,7 @@ def make_result(
         snapshot_reference="snapshot-1",
         collision_detected=collision_detected,
         suggested_slug=suggested_slug,
+        warnings=warnings or [],
     )
 
 
@@ -135,6 +139,7 @@ def test_skills_generate_json_is_pure_success_envelope(capsys, monkeypatch) -> N
             ],
             "audit_reference": "audit-1",
             "snapshot_reference": "snapshot-1",
+            "native_installations": [],
             "collision_detected": False,
             "suggested_slug": None,
         },
@@ -239,5 +244,44 @@ def test_skills_generate_collision_interactive_alternative(monkeypatch, capsys) 
         ),
         GenerateSkillCommand(
             latent_skill_id="skill-1", origin="cli", dry_run=False, update_existing=False
+        ),
+    ]
+
+
+def test_skills_generate_prompts_overwrite_for_native_drift(monkeypatch, capsys) -> None:
+    seen: list[GenerateSkillCommand] = []
+
+    def generate(command: GenerateSkillCommand) -> GenerateSkillResult:
+        seen.append(command)
+        if command.dry_run or command.native_drift_decision == "overwrite":
+            return make_result()
+        return make_result(
+            warnings=[
+                "Warning: Native target has manual changes. Overwriting it might break your "
+                "current agent workflow. Keep local version or Overwrite with canonical library "
+                "version? [Keep/Overwrite]"
+            ]
+        )
+
+    inputs = ["y", "Overwrite"]
+    monkeypatch.setattr("builtins.input", lambda _prompt: inputs.pop(0))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+
+    exit_code = cli_main(
+        ["skills", "generate", "skill-1"],
+        generate_skill_command=generate,
+    )
+
+    assert exit_code == 0
+    assert seen == [
+        GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=True),
+        GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=False),
+        GenerateSkillCommand(
+            latent_skill_id="skill-1",
+            origin="cli",
+            update_existing=True,
+            dry_run=False,
+            native_drift_decision="overwrite",
         ),
     ]

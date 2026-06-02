@@ -13,6 +13,13 @@ from universal_memory.domain.entities.instruction_target import (
     InstructionTargetOwnership,
     InstructionTargetType,
 )
+from universal_memory.domain.entities.runtime import (
+    NativeSkillTarget,
+    RuntimeId,
+    RuntimeRegistry,
+    RuntimeSupportTier,
+    default_runtime_registry,
+)
 
 
 def base_entity_data() -> dict[str, Any]:
@@ -261,3 +268,56 @@ def test_host_and_instruction_target_exports_are_public() -> None:
     assert entities.InstructionTargetOwnership is InstructionTargetOwnership
     assert "Host" in entities.__all__
     assert "InstructionTarget" in entities.__all__
+
+
+def test_default_runtime_registry_declares_mvp_runtime_tiers_and_stable_ids() -> None:
+    registry = default_runtime_registry()
+
+    assert registry.runtime_ids == [
+        RuntimeId.claude_code,
+        RuntimeId.opencode,
+        RuntimeId.codex,
+        RuntimeId.cursor,
+        RuntimeId.antigravity,
+    ]
+    assert registry.get(RuntimeId.claude_code).support_tier == RuntimeSupportTier.tier_1
+    assert registry.get(RuntimeId.opencode).support_tier == RuntimeSupportTier.tier_1
+    assert registry.get(RuntimeId.codex).support_tier == RuntimeSupportTier.tier_1
+    assert registry.get(RuntimeId.cursor).support_tier == RuntimeSupportTier.tier_2
+    assert registry.get(RuntimeId.antigravity).support_tier == RuntimeSupportTier.tier_2
+
+
+def test_runtime_registry_declares_paths_targets_and_native_skill_targets() -> None:
+    registry = default_runtime_registry()
+    opencode = registry.get(RuntimeId.opencode)
+
+    assert opencode.display_name == "OpenCode"
+    assert opencode.runtime_target.global_config_path == ".config/opencode/opencode.jsonc"
+    assert opencode.runtime_target.project_config_path == ".opencode/opencode.jsonc"
+    assert opencode.instruction_targets[0].name == InstructionTargetType.agents_md
+    assert opencode.native_skill_targets == [
+        NativeSkillTarget(
+            relative_path=".opencode/skills",
+            format="markdown-directory",
+            install_strategy="sync_directory",
+            drift_strategy="compare_manifest_hash",
+            rollback_policy="snapshot_restore",
+        )
+    ]
+
+
+def test_runtime_registry_enforces_single_agents_md_writer() -> None:
+    registry = default_runtime_registry()
+
+    writers = registry.single_writer_runtime_ids(InstructionTargetType.agents_md)
+
+    assert writers == [RuntimeId.codex]
+
+
+def test_runtime_registry_rejects_multiple_agents_md_writers() -> None:
+    registry = default_runtime_registry()
+    claude = registry.get(RuntimeId.claude_code).model_copy(deep=True)
+    claude.instruction_targets = [registry.get(RuntimeId.codex).instruction_targets[0]]
+
+    with pytest.raises(ValidationError, match="agents_md must have exactly one writer"):
+        RuntimeRegistry(runtimes=[registry.get(RuntimeId.codex), claude])

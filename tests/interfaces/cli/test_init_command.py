@@ -22,12 +22,12 @@ from universal_memory.infrastructure.config import (
 from universal_memory.interfaces.cli import main as cli_main
 
 
-def _setup_project_command(project_root: Path, enabled_host_ids: list[str] | None = None):
+def _setup_project_command(project_root: Path, enabled_runtime_ids: list[str] | None = None):
     return setup_project(
         project_root,
         layout_port=LocalProjectLayoutPort(),
         config_validation_port=LocalConfigValidationPort(),
-        enabled_host_ids=enabled_host_ids,
+        enabled_runtime_ids=enabled_runtime_ids,
     )
 
 
@@ -169,11 +169,25 @@ def test_init_json_outputs_pure_parseable_payload_with_required_keys(
     assert data["audit_path"] == ".umem/audit/events.jsonl"
     assert data["snapshots_path"] == ".umem/snapshots"
     assert data["already_initialized"] is False
-    assert "hosts" in payload
-    assert len(payload["hosts"]) > 0
+    assert payload["runtimes_selected"] == [
+        "claude_code",
+        "opencode",
+        "codex",
+        "cursor",
+        "antigravity",
+    ]
+    assert payload["runtimes_skipped"] == []
+    assert payload["target_paths"] == {
+        "antigravity": [".antigravity/rules/universal-memory.md", ".antigravity/rules"],
+        "claude_code": ["CLAUDE.md", ".claude/skills"],
+        "codex": ["AGENTS.md"],
+        "cursor": [".cursor/rules/universal-memory.mdc", ".cursor/rules"],
+        "opencode": ["AGENTS.md", ".opencode/skills"],
+    }
+    assert payload["manual_steps_pending"] == []
 
 
-def test_init_json_hosts_option_persists_selection_and_runs_selected_host_setup(
+def test_init_json_runtime_option_persists_selection_and_runs_selected_runtime_setup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     seen: list[ConfigureHostCommand] = []
@@ -207,7 +221,7 @@ def test_init_json_hosts_option_persists_selection_and_runs_selected_host_setup(
     monkeypatch.chdir(tmp_path)
 
     exit_code = cli_main(
-        ["init", "--hosts", "codex", "--yes", "--format", "json"],
+        ["init", "--runtime", "codex", "--yes", "--format", "json"],
         setup_project_command=_setup_project_command,
         host_setup_command=host_setup,
         host_check_command=host_check,
@@ -216,9 +230,17 @@ def test_init_json_hosts_option_persists_selection_and_runs_selected_host_setup(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert captured.err == ""
-    assert json.loads(captured.out)["ok"] is True
+    payload = json.loads(captured.out)
+    assert payload["ok"] is True
+    assert payload["runtimes_selected"] == ["codex"]
+    assert payload["runtimes_skipped"] == [
+        "claude_code",
+        "opencode",
+        "cursor",
+        "antigravity",
+    ]
     config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
-    assert config["hosts"]["enabled"] == ["codex"]
+    assert config["runtimes"]["enabled"] == ["codex"]
     assert config["preferences"]["locale"] == "en"
     assert seen == [
         ConfigureHostCommand(host_id="codex", apply=True, origin="cli_init"),
@@ -226,53 +248,78 @@ def test_init_json_hosts_option_persists_selection_and_runs_selected_host_setup(
     ]
 
 
-def test_init_human_interactive_prompts_for_hosts(
+def test_init_json_accepts_repeated_runtime_flags_with_hyphen_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = cli_main(
+        [
+            "init",
+            "--runtime",
+            "claude-code",
+            "--runtime",
+            "opencode",
+            "--format",
+            "json",
+        ],
+        setup_project_command=_setup_project_command,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert payload["runtimes_selected"] == ["claude_code", "opencode"]
+    assert '[runtimes]\nenabled = [\n    "claude_code",\n    "opencode",\n]\n' in (
+        tmp_path / ".umem" / "config.toml"
+    ).read_text(encoding="utf-8")
+
+
+def test_init_human_interactive_prompts_for_runtime_indices(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     prompts: list[str] = []
 
-    def confirm(prompt: str, default: bool = False) -> bool:
-        prompts.append(prompt)
-        return "codex" in prompt
+    def prompt(prompt_text: str) -> str:
+        prompts.append(prompt_text)
+        return "1, 3"
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("universal_memory.interfaces.cli.init_command._confirm", confirm)
+    monkeypatch.setattr("universal_memory.interfaces.cli.init_command._prompt", prompt)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
     exit_code = cli_main(
-        ["init", "--format", "human"],
-        setup_project_command=_setup_project_command,
-        host_setup_command=lambda command: ConfigureHostResult(
-            host_id=command.host_id,
-            instruction_targets=[],
-            planned_changes=[],
-            manual_steps=[],
-            validation_status="success",
-            audit_reference="audit-ref",
-            snapshot_reference="snapshot-ref",
-            timestamp="2026-05-29T12:00:00Z",
-        ),
-        host_check_command=lambda command: ConfigureHostResult(
-            host_id=command.host_id,
-            instruction_targets=[],
-            planned_changes=[],
-            manual_steps=[],
-            validation_status="success",
-            audit_reference="audit-ref",
-            snapshot_reference="planned",
-            timestamp="2026-05-29T12:00:00Z",
-        ),
+        ["init", "--format", "human"], setup_project_command=_setup_project_command
     )
 
-    capsys.readouterr()
+    captured = capsys.readouterr()
     assert exit_code == 0
-    assert prompts == [
-        "Configure host 'codex' (AGENTS.md support)? [Y/n]: ",
-        "Configure host 'claude_code' (CLAUDE.md support)? [Y/n]: ",
-    ]
-    assert '[hosts]\nenabled = [\n    "codex",\n]\n' in (
+    assert prompts == ["Which runtime(s) would you like to install for? [1 2 3 4 5]: "]
+    assert "1. Claude Code (tier_1)" in captured.out
+    assert "2. OpenCode (tier_1)" in captured.out
+    assert "3. Codex/OpenAI-class (tier_1)" in captured.out
+    assert "4. Cursor (tier_2)" in captured.out
+    assert "5. Antigravity (tier_2)" in captured.out
+    assert '[runtimes]\nenabled = [\n    "claude_code",\n    "codex",\n]\n' in (
         tmp_path / ".umem" / "config.toml"
     ).read_text(encoding="utf-8")
+
+
+def test_init_rejects_invalid_runtime_with_english_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = cli_main(
+        ["init", "--runtime", "desconhecido"],
+        setup_project_command=_setup_project_command,
+        locale_resolver=lambda: "pt-BR",
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Unsupported runtimes: desconhecido" in captured.err
+    assert "nao suportado" not in captured.err.lower()
 
 
 def test_init_human_uses_pt_br_overlay_when_configured(
@@ -308,7 +355,9 @@ def test_init_human_interactive_renders_terminal_splash(
         "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
     )
 
-    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+    exit_code = cli_main(
+        ["init", "--runtime", "codex"], setup_project_command=_setup_project_command
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 0
@@ -358,7 +407,9 @@ def test_init_non_interactive_does_not_render_terminal_splash(
         "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
     )
 
-    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+    exit_code = cli_main(
+        ["init", "--runtime", "codex"], setup_project_command=_setup_project_command
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 0
@@ -378,7 +429,9 @@ def test_init_ci_environment_does_not_render_terminal_splash(
         "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
     )
 
-    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+    exit_code = cli_main(
+        ["init", "--runtime", "codex"], setup_project_command=_setup_project_command
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 0
@@ -398,7 +451,9 @@ def test_init_no_color_renders_plain_ascii_splash(
         "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
     )
 
-    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+    exit_code = cli_main(
+        ["init", "--runtime", "codex"], setup_project_command=_setup_project_command
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 0
@@ -420,7 +475,9 @@ def test_init_missing_term_renders_plain_ascii_splash(
         "universal_memory.interfaces.cli.init_command._confirm", lambda *_args: True
     )
 
-    exit_code = cli_main(["init", "--hosts", "codex"], setup_project_command=_setup_project_command)
+    exit_code = cli_main(
+        ["init", "--runtime", "codex"], setup_project_command=_setup_project_command
+    )
 
     captured = capsys.readouterr()
     assert exit_code == 0

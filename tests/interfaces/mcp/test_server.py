@@ -578,6 +578,7 @@ async def test_generate_skill_tool_invokes_use_case_and_matches_cli_json_contrac
             "affected_paths": [".umem/skills/tdd-recorrente/SKILL.md"],
             "audit_reference": "audit-1",
             "snapshot_reference": "snapshot-1",
+            "native_installations": [],
             "collision_detected": False,
             "suggested_slug": None,
         },

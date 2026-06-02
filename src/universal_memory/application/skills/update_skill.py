@@ -11,8 +11,18 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
+from universal_memory.application.skills.native_skill_sync import (
+    NativeDriftDecision,
+    NativeSkillSync,
+    merge_native_installations,
+)
 from universal_memory.domain import ValidationFailedError
-from universal_memory.domain.entities import AuditEventScope, LatentSkill, LatentSkillScope
+from universal_memory.domain.entities import (
+    AuditEventScope,
+    LatentSkill,
+    LatentSkillScope,
+    RuntimeRegistry,
+)
 from universal_memory.domain.entities.latent_skill import LatentSkillStatus
 from universal_memory.domain.ports import LatentSkillRepository
 
@@ -45,6 +55,7 @@ class DeactivateSkillResult:
     latent_skill: LatentSkill
     audit_reference: str = ""
     snapshot_reference: str = ""
+    affected_paths: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +67,7 @@ class UpdateSkillCommand:
     triggers: list[str] | None = None
     metadata: dict[str, Any] | None = None
     raw_markdown: str | None = None
+    native_drift_decision: NativeDriftDecision | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +77,8 @@ class UpdateSkillResult:
     audit_reference: str
     snapshot_reference: str
     rollback_hint: str | None = None
+    native_installations: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 class _SkillIdCommandSchema(BaseModel):
@@ -84,6 +98,7 @@ class _UpdateSkillCommandSchema(BaseModel):
     triggers: list[str] | None = None
     metadata: dict[str, Any] | None = None
     raw_markdown: str | None = None
+    native_drift_decision: NativeDriftDecision | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,8 +109,24 @@ class _ParsedSkillMarkdown:
 
 
 class DeactivateSkillUseCase:
-    def __init__(self, *, repository: LatentSkillRepository) -> None:
+    def __init__(
+        self,
+        *,
+        repository: LatentSkillRepository,
+        project_root: Path | None = None,
+        safe_write_use_case: SafeWriteUseCase | None = None,
+        runtime_registry: RuntimeRegistry | None = None,
+    ) -> None:
         self.repository = repository
+        self.native_skill_sync = (
+            NativeSkillSync(
+                project_root=project_root,
+                safe_write_use_case=safe_write_use_case,
+                runtime_registry=runtime_registry,
+            )
+            if project_root is not None and safe_write_use_case is not None
+            else None
+        )
 
     def execute(self, command: DeactivateSkillCommand) -> DeactivateSkillResult:
         validated = _SkillIdCommandSchema.model_validate(command)
@@ -105,12 +136,25 @@ class DeactivateSkillUseCase:
                 f"A latent skill {skill.id} precisa estar active para ser desativada."
             )
 
+        native_result = None
+        if self.native_skill_sync is not None:
+            native_result = self.native_skill_sync.disable(skill=skill, origin=validated.origin)
+
         updated = _replace_skill(skill, status=LatentSkillStatus.ignored)
         write_result = self.repository.write(updated, origin=validated.origin)
+        audit_refs = []
+        snapshot_refs = []
+        if native_result is not None:
+            audit_refs.extend(native_result.audit_references)
+            snapshot_refs.extend(native_result.snapshot_references)
+        if write_result is not None:
+            audit_refs.append(write_result.audit_reference)
+            snapshot_refs.append(write_result.snapshot_reference)
         return DeactivateSkillResult(
             latent_skill=updated,
-            audit_reference=write_result.audit_reference if write_result is not None else "",
-            snapshot_reference=write_result.snapshot_reference if write_result is not None else "",
+            audit_reference=", ".join(audit_refs),
+            snapshot_reference=", ".join(snapshot_refs),
+            affected_paths=native_result.affected_paths if native_result is not None else [],
         )
 
 
@@ -167,11 +211,17 @@ class UpdateSkillUseCase:
         repository: LatentSkillRepository,
         safe_write_use_case: SafeWriteUseCase,
         global_safe_write_use_case: SafeWriteUseCase | None = None,
+        runtime_registry: RuntimeRegistry | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.repository = repository
         self.safe_write_use_case = safe_write_use_case
         self.global_safe_write_use_case = global_safe_write_use_case or safe_write_use_case
+        self.native_skill_sync = NativeSkillSync(
+            project_root=self.project_root,
+            safe_write_use_case=safe_write_use_case,
+            runtime_registry=runtime_registry,
+        )
 
     def execute(self, command: UpdateSkillCommand) -> UpdateSkillResult:
         validated = _UpdateSkillCommandSchema.model_validate(command)
@@ -192,6 +242,21 @@ class UpdateSkillUseCase:
                 action="update_skill",
             )
         )
+        native_result = None
+        if isinstance((skill.metadata or {}).get("native_installations"), list):
+            slug = Path(relative_path).parent.name
+            native_result = self.native_skill_sync.sync(
+                skill=skill,
+                slug=slug,
+                canonical_skill_file=relative_path,
+                origin=validated.origin,
+                drift_decision=validated.native_drift_decision,
+            )
+        if native_result is not None and native_result.installations:
+            updated = _replace_skill(
+                updated,
+                metadata=merge_native_installations(updated.metadata, native_result.installations),
+            )
 
         try:
             repository_write = self.repository.write(updated, origin=validated.origin)
@@ -209,6 +274,9 @@ class UpdateSkillUseCase:
 
         audit_reference = write_result.audit_reference
         snapshot_reference = write_result.snapshot_reference
+        if native_result is not None and native_result.audit_references:
+            audit_reference = ", ".join([audit_reference, *native_result.audit_references])
+            snapshot_reference = ", ".join([snapshot_reference, *native_result.snapshot_references])
         if repository_write is not None:
             audit_reference = f"{audit_reference}, {repository_write.audit_reference}"
             snapshot_reference = f"{snapshot_reference}, {repository_write.snapshot_reference}"
@@ -219,6 +287,8 @@ class UpdateSkillUseCase:
             audit_reference=audit_reference,
             snapshot_reference=snapshot_reference,
             rollback_hint="Use rollback por escopo para restaurar o snapshot anterior.",
+            native_installations=native_result.installations if native_result is not None else [],
+            warnings=native_result.warnings if native_result is not None else [],
         )
 
     def _build_update(

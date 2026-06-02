@@ -353,7 +353,7 @@ class SyncInstructionsUseCase:
             for h in to_enable:
                 if h not in new_enabled:
                     new_enabled.append(h)
-            update_project_config(self.project_root, {"hosts": {"enabled": new_enabled}})
+            update_project_config(self.project_root, {"runtimes": {"enabled": new_enabled}})
 
         return normalized, warnings
 
@@ -363,16 +363,18 @@ class SyncInstructionsUseCase:
         except (OSError, InvalidConfigError, StorageError) as exc:
             raise ValidationFailedError(f"Falha ao ler configuracao do projeto: {exc}") from exc
 
-        raw_hosts = loaded.merged.get("hosts")
-        if raw_hosts is None:
+        raw_runtimes = loaded.merged.get("runtimes")
+        if raw_runtimes is None:
             return None
-        if not isinstance(raw_hosts, dict):
-            raise ValidationFailedError("Configuracao invalida: hosts deve ser uma tabela.")
-        raw_enabled = raw_hosts.get("enabled")
+        if not isinstance(raw_runtimes, dict):
+            raise ValidationFailedError("Configuracao invalida: runtimes deve ser uma tabela.")
+        raw_enabled = raw_runtimes.get("enabled")
         if raw_enabled is None:
             return None
         if not isinstance(raw_enabled, list):
-            raise ValidationFailedError("Configuracao invalida: hosts.enabled deve ser uma lista.")
+            raise ValidationFailedError(
+                "Configuracao invalida: runtimes.enabled deve ser uma lista."
+            )
         enabled = [str(host_id) for host_id in raw_enabled]
         unsupported = [host_id for host_id in enabled if host_id not in DEFAULT_SYNC_HOSTS]
         if unsupported:

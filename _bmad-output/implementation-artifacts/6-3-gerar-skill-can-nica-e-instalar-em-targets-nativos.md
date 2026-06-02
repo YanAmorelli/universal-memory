@@ -1,6 +1,6 @@
 # Story 6.3: Gerar Skill Canônica e Instalar em Targets Nativos
 
-Status: ready-for-dev
+Status: review
 
 ## Reopened Scope
 
@@ -59,17 +59,51 @@ para que a capacidade seja imediatamente utilizável pelos agentes compatíveis 
 
 ## Tasks / Subtasks
 
-- [ ] Integrar geração de skill com Runtime Registry e native skill targets.
-- [ ] Implementar instalador/sincronizador de skill canônica para targets nativos por runtime.
-- [ ] Registrar metadados por instalação nativa, incluindo runtime, path, hash e audit reference.
-- [ ] Implementar detecção de drift manual baseada em hash/versão canônica anterior.
-- [ ] Implementar prompt Keep/Overwrite em inglês e modo JSON/não-interativo seguro.
-- [ ] Garantir snapshot antes de qualquer overwrite de target nativo.
-- [ ] Adicionar testes para instalação em `.claude/skills/`, `.opencode/skills/` e `.cursor/rules/` conforme adapters disponíveis.
-- [ ] Adicionar testes de drift, Keep, Overwrite, snapshot failure e desativação sem deletar canônico.
+- [x] Integrar geração de skill com Runtime Registry e native skill targets.
+- [x] Implementar instalador/sincronizador de skill canônica para targets nativos por runtime.
+- [x] Registrar metadados por instalação nativa, incluindo runtime, path, hash e audit reference.
+- [x] Implementar detecção de drift manual baseada em hash/versão canônica anterior.
+- [x] Implementar prompt Keep/Overwrite em inglês e modo JSON/não-interativo seguro.
+- [x] Garantir snapshot antes de qualquer overwrite de target nativo.
+- [x] Adicionar testes para instalação em `.claude/skills/`, `.opencode/skills/` e `.cursor/rules/` conforme adapters disponíveis.
+- [x] Adicionar testes de drift, Keep, Overwrite, snapshot failure e desativação sem deletar canônico.
 
 ## Dev Notes
 
 - A story anterior estava implementada como `6-3-gerar-estrutura-agent-skills.md`; ela continua sendo uma base útil para o canonical store, mas não satisfaz FR31-FR32.
 - Esta story depende da 5.1 reaberta para native skill target metadata e da 5.6 para persistência de runtimes ativos.
 - Usar o pipeline obrigatório de mutação: validar, secret scan, resolver path/scope, snapshot, atomic write, audit.
+
+## Dev Agent Record
+
+### Debug Log
+
+- Carregado contexto da story 6-3 e confirmado que `sprint-status.yaml`, stories 5-1/5-6 e `_bmad-output/planning-artifacts/epics.md` não deveriam ser alterados.
+- Escritos testes focados antes da implementação para instalação nativa, drift Keep/Overwrite, falha de snapshot e desativação preservando canônico.
+- Executados testes focados, `ruff` e suíte completa após implementação.
+
+### Completion Notes
+
+- Implementado sincronizador nativo compartilhado com Runtime Registry e leitura de `runtimes.enabled` quando configurado.
+- Geração de skill agora instala a skill canônica em targets nativos declarados, registra metadados `native_installations` e mantém `.umem/skills/` como fonte de verdade.
+- Drift manual é detectado por hash do target previamente instalado; `keep` preserva local, `overwrite` usa `SafeWriteUseCase` com snapshot obrigatório antes de sobrescrever.
+- CLI adiciona prompt em inglês Keep/Overwrite para drift em fluxo interativo; JSON e não interativo permanecem seguros por padrão com Keep.
+- Desativação marca a skill como ignored e desabilita targets nativos registrados sem deletar o canônico.
+
+## File List
+
+- `src/universal_memory/application/skills/native_skill_sync.py`
+- `src/universal_memory/application/skills/generate_skill.py`
+- `src/universal_memory/application/skills/update_skill.py`
+- `src/universal_memory/bootstrap/cli.py`
+- `src/universal_memory/bootstrap/mcp.py`
+- `src/universal_memory/interfaces/cli/init_command.py`
+- `tests/application/skills/test_generate_skill.py`
+- `tests/application/skills/test_update_skill.py`
+- `tests/interfaces/cli/test_skills_generate.py`
+- `tests/interfaces/mcp/test_compliance.py`
+- `tests/interfaces/mcp/test_server.py`
+
+## Change Log
+
+- 2026-06-01: Implementada instalação/sincronização nativa de skills com metadados, drift protection, prompt Keep/Overwrite, snapshot obrigatório e testes completos.

@@ -63,20 +63,45 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
     assert config["project"] == {"name": "", "created_by": "universal-memory"}
     assert config["preferences"] == {"locale": "en"}
-    assert config["hosts"] == {"enabled": ["codex", "claude_code"]}
+    assert config["runtimes"] == {
+        "enabled": ["claude_code", "opencode", "codex", "cursor", "antigravity"]
+    }
+    assert "hosts" not in config
 
 
-def test_setup_project_persists_selected_hosts(tmp_path: Path) -> None:
+def test_setup_project_persists_selected_runtimes(tmp_path: Path) -> None:
     setup_project(
         tmp_path,
         layout_port=LocalProjectLayoutPort(),
         config_validation_port=LocalConfigValidationPort(),
-        enabled_host_ids=["codex"],
+        enabled_runtime_ids=["codex"],
     )
 
-    assert '[hosts]\nenabled = [\n    "codex",\n]\n' in (
+    assert '[runtimes]\nenabled = [\n    "codex",\n]\n' in (
         tmp_path / ".umem" / "config.toml"
     ).read_text(encoding="utf-8")
+
+
+def test_setup_project_accepts_runtime_aliases_and_rejects_unknown_runtime(
+    tmp_path: Path,
+) -> None:
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+        enabled_runtime_ids=["claude-code", "opencode"],
+    )
+
+    config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
+    assert config["runtimes"]["enabled"] == ["claude_code", "opencode"]
+
+    with pytest.raises(Exception, match="Unsupported runtimes: unknown"):
+        setup_project(
+            tmp_path,
+            layout_port=LocalProjectLayoutPort(),
+            config_validation_port=LocalConfigValidationPort(),
+            enabled_runtime_ids=["unknown"],
+        )
 
 
 def test_setup_project_preserves_existing_locale(tmp_path: Path) -> None:
@@ -101,7 +126,14 @@ def test_setup_project_preserves_existing_locale(tmp_path: Path) -> None:
 
     config = tomllib.loads(config_path.read_text(encoding="utf-8"))
     assert config["preferences"]["locale"] == "pt-BR"
-    assert config["hosts"]["enabled"] == ["codex", "claude_code"]
+    assert config["runtimes"]["enabled"] == [
+        "claude_code",
+        "opencode",
+        "codex",
+        "cursor",
+        "antigravity",
+    ]
+    assert config["hosts"]["enabled"] == ["codex"]
 
 
 def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path) -> None:

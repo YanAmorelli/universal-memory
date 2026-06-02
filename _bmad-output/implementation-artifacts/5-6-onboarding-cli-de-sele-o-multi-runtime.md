@@ -1,6 +1,6 @@
 # Story 5.6: Onboarding CLI de Seleção Multi-Runtime
 
-Status: ready-for-dev
+Status: review
 
 ## Reopened Scope
 
@@ -54,15 +54,45 @@ para que o setup inicial configure de forma coesa e limpa todos os agentes do me
 
 ## Tasks / Subtasks
 
-- [ ] Atualizar `umem init` para aceitar múltiplas flags `--runtime`.
-- [ ] Substituir ou migrar o fluxo interativo antigo baseado em hosts para seleção por Runtime Registry.
-- [ ] Implementar parser de seleção por índices separados por vírgula ou espaço com defaults seguros e mensagens em inglês.
-- [ ] Persistir seleção de runtimes no TOML e definir comportamento claro para configs antigas com `[hosts]`.
-- [ ] Garantir JSON puro com `runtimes_selected`, `runtimes_skipped`, `target_paths` e `manual_steps_pending`.
-- [ ] Adicionar testes CLI para TTY/interativo, não-interativo, JSON, runtimes inválidos e compatibilidade com locale.
+- [x] Atualizar `umem init` para aceitar múltiplas flags `--runtime`.
+- [x] Substituir ou migrar o fluxo interativo antigo baseado em hosts para seleção por Runtime Registry.
+- [x] Implementar parser de seleção por índices separados por vírgula ou espaço com defaults seguros e mensagens em inglês.
+- [x] Persistir seleção de runtimes no TOML e definir comportamento claro para configs antigas com `[hosts]`.
+- [x] Garantir JSON puro com `runtimes_selected`, `runtimes_skipped`, `target_paths` e `manual_steps_pending`.
+- [x] Adicionar testes CLI para TTY/interativo, não-interativo, JSON, runtimes inválidos e compatibilidade com locale.
 
 ## Dev Notes
 
 - A story anterior estava implementada como `5-6-fluxo-de-sele-o-de-hosts-no-onboarding.md` e usava `host_ids`/`--hosts`; isso não atende ao escopo multi-runtime atualizado.
 - Esta story depende da nova 5.1 reaberta para obter Runtime Registry e target metadata.
 - Coordenar com Story 4.6: splash só pode aparecer no onboarding humano, nunca em JSON/CI/non-interactive.
+
+## Dev Agent Record
+
+### Debug Log
+
+- Rodei testes focados antes da implementação para confirmar o contrato antigo de hosts.
+- Escrevi/atualizei testes CLI e de setup para `--runtime`, seleção interativa por índices, JSON puro, runtime inválido e aliases com hífen.
+- Corrigi guardrail de adapters evitando chamada `.replace()` no CLI.
+- `uv run ruff check src tests` permanece falhando apenas em arquivos de skills/testes de skills já modificados fora desta story.
+- `uv run pytest` permanece falhando apenas em contrato MCP de `generate_skill` por `native_installations`, área preservada para evitar conflito com 6-3.
+
+### Completion Notes
+
+- `umem init` agora aceita múltiplas flags `--runtime` e mantém `--hosts` apenas como alias legado.
+- O fluxo interativo humano lista os runtimes do `RuntimeRegistry` com índices, nomes e tiers, e aceita seleção por vírgula ou espaço.
+- O modo JSON adiciona `runtimes_selected`, `runtimes_skipped`, `target_paths` e `manual_steps_pending` sem splash/prompts/ANSI.
+- `setup_project` persiste `[runtimes].enabled`, aceita aliases como `claude-code` e preserva migração de configs antigas com `[hosts]` via loader existente.
+- A configuração automática legada de instruction targets continua limitada aos runtimes suportados pelo use case antigo (`claude_code`, `codex`), sem alterar código de skills.
+
+## File List
+
+- `src/universal_memory/application/onboarding/setup_project.py`
+- `src/universal_memory/interfaces/cli/init_command.py`
+- `tests/application/test_setup_project.py`
+- `tests/interfaces/cli/test_init_command.py`
+- `_bmad-output/implementation-artifacts/5-6-onboarding-cli-de-sele-o-multi-runtime.md`
+
+## Change Log
+
+- 2026-06-01: Implementado onboarding multi-runtime por Runtime Registry, `--runtime` repetível, parser interativo por índices, JSON de runtimes e testes focados.

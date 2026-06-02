@@ -52,7 +52,7 @@ def load_config(project_root: Path, global_config_path: Path | None = None) -> L
 
     global_data = _read_toml_document(resolved_global_config_path)
     project_data = _read_toml_document(project_config_path)
-    merged = _deep_merge(global_data, project_data)
+    merged = _with_legacy_hosts_migration(_deep_merge(global_data, project_data))
     resolved_paths = _deep_merge(
         _resolve_config_paths(global_data, resolved_global_config_path.parent),
         _resolve_config_paths(project_data, normalized_project_root),
@@ -134,7 +134,7 @@ def update_project_config(
             )
         )
 
-    merged = _deep_merge(global_data, project_data)
+    merged = _with_legacy_hosts_migration(_deep_merge(global_data, project_data))
     resolved_paths = _deep_merge(
         _resolve_config_paths(global_data, loaded.global_config_path.parent),
         _resolve_config_paths(project_data, project_root.resolve()),
@@ -184,6 +184,15 @@ def _deep_merge(base: TomlData, override: TomlData) -> TomlData:
         merged[key] = deepcopy(value)
 
     return merged
+
+
+def _with_legacy_hosts_migration(document: TomlData) -> TomlData:
+    migrated = deepcopy(document)
+    if "runtimes" not in migrated and isinstance(migrated.get("hosts"), dict):
+        hosts_enabled = migrated["hosts"].get("enabled")
+        if hosts_enabled is not None:
+            migrated["runtimes"] = {"enabled": deepcopy(hosts_enabled)}
+    return migrated
 
 
 def _resolve_config_paths(document: TomlData, base_dir: Path) -> TomlData:

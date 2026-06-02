@@ -5,9 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from universal_memory.domain import ConfigValidationPort, InvalidConfigError, ProjectLayoutPort
+from universal_memory.domain.entities.runtime import RuntimeId, default_runtime_registry
 from universal_memory.infrastructure.config.toml_loader import load_config, update_project_config
 
-DEFAULT_ENABLED_HOST_IDS = ["codex", "claude_code"]
+DEFAULT_ENABLED_RUNTIME_IDS = [
+    runtime_id.value for runtime_id in default_runtime_registry().runtime_ids
+]
+DEFAULT_ENABLED_HOST_IDS = DEFAULT_ENABLED_RUNTIME_IDS
 DEFAULT_UMEM_SKILL_ID = "00000000-0000-4000-8000-000000000001"
 DEFAULT_UMEM_SKILL_NAME = "use-universal-memory"
 DEFAULT_UMEM_SKILL_RELATIVE_PATH = ".umem/skills/use-universal-memory/SKILL.md"
@@ -89,25 +93,35 @@ class SetupProjectResult:
     existing_paths: list[str]
 
 
-def setup_project(
+def setup_project(  # noqa: PLR0913
     project_root: Path,
     layout_port: ProjectLayoutPort,
     config_validation_port: ConfigValidationPort,
     global_config_path: Path | None = None,
+    enabled_runtime_ids: list[str] | None = None,
     enabled_host_ids: list[str] | None = None,
 ) -> SetupProjectResult:
     normalized_project_root = project_root.resolve()
     layout_result = layout_port.ensure_project_layout(normalized_project_root)
     seeded_skill_paths = _ensure_default_umem_skill(normalized_project_root)
-    if enabled_host_ids is not None:
-        unsupported = [h for h in enabled_host_ids if h not in DEFAULT_ENABLED_HOST_IDS]
+    requested_runtime_ids = (
+        enabled_runtime_ids if enabled_runtime_ids is not None else enabled_host_ids
+    )
+    if requested_runtime_ids is not None:
+        normalized_runtime_ids = _normalize_runtime_ids(requested_runtime_ids)
+        unsupported = [
+            runtime_id
+            for runtime_id in normalized_runtime_ids
+            if runtime_id not in DEFAULT_ENABLED_RUNTIME_IDS
+        ]
         if unsupported:
-            raise InvalidConfigError(f"Unsupported hosts: {', '.join(unsupported)}")
+            raise InvalidConfigError(f"Unsupported runtimes: {', '.join(unsupported)}")
+    else:
+        normalized_runtime_ids = list(DEFAULT_ENABLED_RUNTIME_IDS)
 
-    hosts_enabled = enabled_host_ids if enabled_host_ids is not None else DEFAULT_ENABLED_HOST_IDS
     loaded_config = load_config(normalized_project_root, global_config_path=global_config_path)
     preferences = loaded_config.project_data.get("preferences")
-    updates: dict[str, Any] = {"hosts": {"enabled": hosts_enabled}}
+    updates: dict[str, Any] = {"runtimes": {"enabled": normalized_runtime_ids}}
     if not isinstance(preferences, dict) or "locale" not in preferences:
         updates["preferences"] = {"locale": "en"}
 
@@ -137,6 +151,19 @@ def setup_project(
         created_paths=[*layout_result.created_paths, *seeded_skill_paths["created"]],
         existing_paths=[*layout_result.existing_paths, *seeded_skill_paths["existing"]],
     )
+
+
+def _normalize_runtime_ids(runtime_ids: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for runtime_id in runtime_ids:
+        cleaned = runtime_id.strip().lower().replace("-", "_")
+        try:
+            resolved = RuntimeId(cleaned).value
+        except ValueError:
+            resolved = cleaned
+        if resolved not in normalized:
+            normalized.append(resolved)
+    return normalized
 
 
 def _ensure_default_umem_skill(project_root: Path) -> dict[str, list[str]]:

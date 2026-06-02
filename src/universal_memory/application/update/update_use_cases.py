@@ -201,9 +201,13 @@ class UpdateCheckUseCase:
                 "Benchmark results are missing at .umem/benchmarks/retrieval-results.json."
             )
 
-        migration_required = config_version != TARGET_SCHEMA_VERSION or any(
-            any(version != TARGET_SCHEMA_VERSION for version in versions)
-            for versions in memory_versions.values()
+        migration_required = (
+            config_version != TARGET_SCHEMA_VERSION
+            or self._config_requires_runtime_migration(data_root / "config.toml", warnings)
+            or any(
+                any(version != TARGET_SCHEMA_VERSION for version in versions)
+                for versions in memory_versions.values()
+            )
         )
         return UpdateCheckResult(
             installed_version=self.installed_version,
@@ -269,6 +273,19 @@ class UpdateCheckUseCase:
                 found.add(version)
             versions_by_file[filename] = sorted(found)
         return versions_by_file
+
+    def _config_requires_runtime_migration(self, path: Path, warnings: list[str]) -> bool:
+        if not path.exists():
+            return False
+        try:
+            with path.open("rb") as handle:
+                data = tomllib.load(handle)
+        except (tomllib.TOMLDecodeError, OSError):
+            return False
+        needs_migration = "runtimes" not in data and isinstance(data.get("hosts"), dict)
+        if needs_migration:
+            warnings.append("Legacy [hosts] config will be migrated to [runtimes].")
+        return needs_migration
 
 
 class UpdateMigrateUseCase:
@@ -357,11 +374,17 @@ class UpdateMigrateUseCase:
         raw_version = data.get("schema_version")
         if raw_version is not None and type(raw_version) is not int:
             raise InvalidConfigError("config schema_version must be an integer.")
-        if raw_version == TARGET_SCHEMA_VERSION:
+        needs_runtime_migration = "runtimes" not in data and isinstance(data.get("hosts"), dict)
+        if raw_version == TARGET_SCHEMA_VERSION and not needs_runtime_migration:
             return None
         if raw_version is not None and raw_version > TARGET_SCHEMA_VERSION:
             raise InvalidConfigError("Cannot downgrade config schema_version.")
         migrated = {**data, "schema_version": TARGET_SCHEMA_VERSION}
+        if needs_runtime_migration:
+            hosts = migrated["hosts"]
+            enabled = hosts.get("enabled")
+            if enabled is not None:
+                migrated["runtimes"] = {"enabled": enabled}
         rendered = tomli_w.dumps(migrated)
         try:
             tomllib.loads(rendered)

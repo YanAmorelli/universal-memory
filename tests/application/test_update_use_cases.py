@@ -157,6 +157,7 @@ def test_update_migrate_preserves_config_and_memory_custom_fields(tmp_path: Path
     config_text = (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8")
     assert "schema_version = 1" in config_text
     config_data = tomllib.loads(config_text)
+    assert config_data["runtimes"]["enabled"] == ["codex"]
     assert config_data["hosts"]["enabled"] == ["codex"]
     assert config_data["preferences"]["locale"] == "pt_BR"
     assert config_data["custom"]["flag"] is True
@@ -188,7 +189,9 @@ def test_update_migrate_updates_explicit_legacy_config_schema(tmp_path: Path) ->
         UpdateMigrateCommand(project_root=tmp_path)
     )
 
-    assert tomllib.loads(config_path.read_text(encoding="utf-8"))["schema_version"] == 1
+    config_data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert config_data["schema_version"] == 1
+    assert config_data["runtimes"]["enabled"] == ["codex"]
 
 
 def test_update_migrate_prepares_all_snapshots_before_any_rewrite(tmp_path: Path) -> None:

@@ -139,3 +139,17 @@ def test_update_project_config_persists_hosts_with_tomli_w_style(tmp_path: Path)
     assert config_path.read_text(encoding="utf-8") == (
         '[project]\nname = "demo"\n\n[hosts]\nenabled = [\n    "codex",\n    "claude_code",\n]\n'
     )
+
+
+def test_load_config_migrates_legacy_hosts_to_runtimes_when_runtimes_absent(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "workspace"
+    config_path = project_root / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text('[hosts]\nenabled = ["codex", "claude_code"]\n', encoding="utf-8")
+
+    loaded = load_config(project_root=project_root)
+
+    assert loaded.merged["runtimes"]["enabled"] == ["codex", "claude_code"]
+    assert loaded.merged["hosts"]["enabled"] == ["codex", "claude_code"]

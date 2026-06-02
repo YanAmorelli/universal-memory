@@ -174,6 +174,7 @@ CONTRACT_KEYS_BY_TOOL = {
         "affected_paths",
         "audit_reference",
         "snapshot_reference",
+        "native_installations",
         "collision_detected",
         "suggested_slug",
     },

@@ -59,6 +59,7 @@ def test_update_migrate_cli_adds_schema_and_reports_audit(
     config = (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8")
     assert "schema_version = 1" in config
     config_data = tomllib.loads(config)
+    assert config_data["runtimes"]["enabled"] == ["codex"]
     assert config_data["hosts"]["enabled"] == ["codex"]
     assert config_data["preferences"]["locale"] == "en"
 

@@ -37,7 +37,7 @@ from universal_memory.application.memory import (
     RememberFactResult,
 )
 from universal_memory.application.onboarding.setup_project import (
-    DEFAULT_ENABLED_HOST_IDS,
+    DEFAULT_ENABLED_RUNTIME_IDS,
     SetupProjectResult,
     setup_project,
 )
@@ -93,6 +93,7 @@ from universal_memory.domain.entities import (
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
+from universal_memory.domain.entities.runtime import RuntimeAdapter, default_runtime_registry
 from universal_memory.interfaces.cli.message_catalog import DEFAULT_LOCALE, human_message
 from universal_memory.interfaces.errors import (
     DOMAIN_ERROR_TYPES,
@@ -112,6 +113,7 @@ INIT_SPLASH_LINES = (
 SetupProjectCommand = (
     Callable[[Path, list[str] | None], SetupProjectResult] | Callable[[Path], SetupProjectResult]
 )
+LEGACY_CONFIGURABLE_RUNTIME_IDS = {"claude_code", "codex"}
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
@@ -295,9 +297,13 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @app.command("init")
     def init_command(
         ctx: typer.Context,
+        runtimes: Annotated[
+            list[str] | None,
+            typer.Option("--runtime", help="Runtime to configure. May be used multiple times."),
+        ] = None,
         hosts: Annotated[
             list[str] | None,
-            typer.Option("--hosts", help="Host to configure. May be used multiple times."),
+            typer.Option("--hosts", help="Legacy host option. Prefer --runtime."),
         ] = None,
         yes: YesOption = False,
         output_format: OutputFormatOption = None,
@@ -309,6 +315,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             code=_run_init(
                 setup_project_command,
                 _effective_format(ctx, output_format),
+                selected_runtimes=runtimes,
                 selected_hosts=hosts,
                 yes=yes,
                 host_setup_command=host_setup_command,
@@ -987,10 +994,15 @@ def _confirm(prompt: str, default: bool = False) -> bool:
     return val in {"y", "yes"}
 
 
+def _prompt(prompt: str) -> str:
+    return input(prompt)
+
+
 def _run_init(  # noqa: PLR0913
     command: SetupProjectCommand,
     output_format: str,
     *,
+    selected_runtimes: list[str] | None = None,
     selected_hosts: list[str] | None = None,
     yes: bool = False,
     host_setup_command: ConfigureHostCommandHandler | None = None,
@@ -1002,22 +1014,22 @@ def _run_init(  # noqa: PLR0913
     try:
         if _should_render_init_splash(output_format):
             _render_init_splash()
-        host_ids = _selected_init_hosts(
-            selected_hosts,
+        runtime_ids = _selected_init_runtimes(
+            selected_runtimes,
+            selected_hosts=selected_hosts,
             output_format=output_format,
             yes=yes,
-            locale=locale,
         )
         if output_format == "json":
-            result = _execute_setup_project(command, Path.cwd(), host_ids)
+            result = _execute_setup_project(command, Path.cwd(), runtime_ids)
         else:
             with _stderr_console().status(
                 human_message("Initializing project scaffold...", locale=locale), spinner="dots"
             ):
-                result = _execute_setup_project(command, Path.cwd(), host_ids)
+                result = _execute_setup_project(command, Path.cwd(), runtime_ids)
             locale = resolve_locale()
         host_results = _configure_init_hosts(
-            host_ids,
+            runtime_ids,
             output_format=output_format,
             locale=locale,
             host_setup_command=host_setup_command,
@@ -1037,6 +1049,7 @@ def _run_init(  # noqa: PLR0913
 
     if output_format == "json":
         payload = _success_envelope(result)
+        payload.update(_init_runtime_payload(runtime_ids, host_results))
         if host_results:
             payload["hosts"] = [asdict(res) for res in host_results]
         print(json.dumps(payload, sort_keys=True))
@@ -1051,7 +1064,7 @@ def _run_init(  # noqa: PLR0913
 def _execute_setup_project(
     command: SetupProjectCommand,
     project_root: Path,
-    enabled_host_ids: list[str],
+    enabled_runtime_ids: list[str],
 ) -> SetupProjectResult:
     try:
         sig = signature(command)
@@ -1064,55 +1077,124 @@ def _execute_setup_project(
         if (
             len(positional_params) >= min_positional_args
             or has_var_args
+            or "enabled_runtime_ids" in sig.parameters
             or "enabled_host_ids" in sig.parameters
         ):
-            return command(project_root, enabled_host_ids)  # type: ignore
+            return command(project_root, enabled_runtime_ids)  # type: ignore
     except (ValueError, TypeError):
         pass
     return command(project_root)  # type: ignore
 
 
-def _selected_init_hosts(
-    hosts: list[str] | None,
+def _selected_init_runtimes(
+    runtimes: list[str] | None,
     *,
+    selected_hosts: list[str] | None = None,
     output_format: str,
     yes: bool,
-    locale: str = "en",
 ) -> list[str]:
-    if hosts:
-        return _normalize_supported_hosts(hosts, locale=locale)
+    if runtimes:
+        return _normalize_supported_runtimes(runtimes)
+    if selected_hosts:
+        return _normalize_supported_runtimes(selected_hosts)
     if output_format == "json" or yes:
-        return list(DEFAULT_ENABLED_HOST_IDS)
+        return list(DEFAULT_ENABLED_RUNTIME_IDS)
     if not sys.stdin.isatty():
-        return list(DEFAULT_ENABLED_HOST_IDS)
+        return list(DEFAULT_ENABLED_RUNTIME_IDS)
 
-    selected = []
-    prompts = {
-        "codex": human_message(
-            "Configure host 'codex' (AGENTS.md support)? [Y/n]: ", locale=locale
-        ),
-        "claude_code": human_message(
-            "Configure host 'claude_code' (CLAUDE.md support)? [Y/n]: ", locale=locale
-        ),
-    }
-    for host_id in DEFAULT_ENABLED_HOST_IDS:
-        if _confirm(prompts[host_id], default=True):
-            selected.append(host_id)
+    registry = default_runtime_registry()
+    _stdout_console().print("Which runtime(s) would you like to install for?")
+    for index, runtime in enumerate(registry.runtimes, start=1):
+        _stdout_console().print(
+            f"{index}. {runtime.display_name} ({runtime.support_tier.value})"
+        )
+    answer = _prompt("Which runtime(s) would you like to install for? [1 2 3 4 5]: ")
+    return _parse_runtime_index_selection(answer, registry.runtimes)
+
+
+def _normalize_supported_runtimes(runtimes: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for runtime_id in runtimes:
+        cleaned = "_".join(runtime_id.strip().lower().split("-"))
+        if cleaned not in normalized:
+            normalized.append(cleaned)
+    supported = {runtime_id.value for runtime_id in default_runtime_registry().runtime_ids}
+    unsupported = [runtime_id for runtime_id in normalized if runtime_id not in supported]
+    if unsupported:
+        raise ValidationFailedError(
+            f"Unsupported runtimes: {', '.join(unsupported)}"
+        )
+    return normalized
+
+
+def _parse_runtime_index_selection(
+    raw_selection: str,
+    runtimes: list[RuntimeAdapter],
+) -> list[str]:
+    if not raw_selection.strip():
+        return [runtime.runtime_id.value for runtime in runtimes]
+    tokens = [
+        token
+        for comma_part in raw_selection.split(",")
+        for token in comma_part.split()
+        if token
+    ]
+    selected: list[str] = []
+    invalid: list[str] = []
+    for token in tokens:
+        if not token.isdecimal():
+            invalid.append(token)
+            continue
+        index = int(token)
+        if index < 1 or index > len(runtimes):
+            invalid.append(token)
+            continue
+        runtime_id = runtimes[index - 1].runtime_id.value
+        if runtime_id not in selected:
+            selected.append(runtime_id)
+    if invalid:
+        raise ValidationFailedError(
+            "Invalid runtime selection: "
+            f"{', '.join(invalid)}. Use numbers from 1 to {len(runtimes)}."
+        )
     return selected
 
 
-def _normalize_supported_hosts(hosts: list[str], *, locale: str = DEFAULT_LOCALE) -> list[str]:
-    normalized: list[str] = []
-    for host_id in hosts:
-        cleaned = host_id.strip().lower()
-        if cleaned not in normalized:
-            normalized.append(cleaned)
-    unsupported = [host_id for host_id in normalized if host_id not in DEFAULT_ENABLED_HOST_IDS]
-    if unsupported:
-        raise ValidationFailedError(
-            human_message("Unsupported hosts: {hosts}", locale=locale, hosts=", ".join(unsupported))
-        )
-    return normalized
+def _init_runtime_payload(
+    selected_runtime_ids: list[str],
+    host_results: list[ConfigureHostResult],
+) -> dict[str, Any]:
+    registry = default_runtime_registry()
+    selected = set(selected_runtime_ids)
+    target_paths: dict[str, list[str]] = {}
+    for runtime in registry.runtimes:
+        if runtime.runtime_id.value not in selected:
+            continue
+        paths: list[str] = []
+        for target in runtime.instruction_targets:
+            relative_path = str(target.relative_path)
+            if relative_path not in paths:
+                paths.append(relative_path)
+        for target in runtime.native_skill_targets:
+            if target.relative_path not in paths:
+                paths.append(target.relative_path)
+        target_paths[runtime.runtime_id.value] = paths
+
+    manual_steps_pending = [
+        {"runtime_id": result.host_id, "step": step}
+        for result in host_results
+        for step in result.manual_steps
+    ]
+    return {
+        "runtimes_selected": selected_runtime_ids,
+        "runtimes_skipped": [
+            runtime.runtime_id.value
+            for runtime in registry.runtimes
+            if runtime.runtime_id.value not in selected
+        ],
+        "target_paths": target_paths,
+        "manual_steps_pending": manual_steps_pending,
+    }
 
 
 def _configure_init_hosts(
@@ -1123,12 +1205,8 @@ def _configure_init_hosts(
     host_setup_command: ConfigureHostCommandHandler | None,
     host_check_command: ConfigureHostCommandHandler | None,
 ) -> list[ConfigureHostResult]:
+    host_ids = [host_id for host_id in host_ids if host_id in LEGACY_CONFIGURABLE_RUNTIME_IDS]
     if host_ids and (host_setup_command is None or host_check_command is None):
-        _stderr_console().print(
-            "[yellow]Warning: CLI host_setup_command or "
-            "host_check_command dependency was not configured. "
-            "Skipping automatic host setup.[/yellow]"
-        )
         return []
     if not host_ids:
         return []
@@ -1914,6 +1992,18 @@ def _run_skills_generate(
                 dry_run=False,
             )
         )
+        if output_format != "json" and not yes and _has_native_drift_warning(result):
+            choice = _prompt_native_drift_decision()
+            if choice == "overwrite":
+                result = command(
+                    GenerateSkillCommand(
+                        latent_skill_id=latent_skill_id,
+                        origin="cli",
+                        update_existing=True,
+                        dry_run=False,
+                        native_drift_decision="overwrite",
+                    )
+                )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
         exc = _map_generate_error(error, latent_skill_id)
         _print_expected_error(exc, output_format=output_format)
@@ -1924,6 +2014,27 @@ def _run_skills_generate(
     else:
         _stdout_console().print(_format_human_skill_generate_success(result))
     return 0
+
+
+def _has_native_drift_warning(result: GenerateSkillResult) -> bool:
+    return any(
+        "Warning: Native target has manual changes." in warning
+        for warning in result.warnings
+    )
+
+
+def _prompt_native_drift_decision() -> str:
+    prompt_msg = (
+        "Warning: Native target has manual changes. Overwriting it might break your "
+        "current agent workflow. Keep local version or Overwrite with canonical library "
+        "version? [Keep/Overwrite] "
+    )
+    choice = ""
+    while choice not in {"keep", "overwrite"}:
+        choice = input(prompt_msg).strip().lower()
+        if not choice:
+            choice = "keep"
+    return choice
 
 
 def _run_skills_activate(
