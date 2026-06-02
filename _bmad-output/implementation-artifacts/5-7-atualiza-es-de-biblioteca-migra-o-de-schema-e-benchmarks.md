@@ -172,7 +172,7 @@ para que eu nao perca meu historico de uso, fatos ou regras customizadas.
 
 ## Inteligencia da Historia Anterior
 
-- A historia anterior relevante existe como `5-6-fluxo-de-sele-o-de-hosts-no-onboarding.md`, nao como `5-6-onboarding-cli-de-sele-o-multi-runtime.md`. Essa divergencia deve ser considerada ao referenciar sprint status e artefatos.
+- A historia anterior relevante foi reaberta como `5-6-onboarding-cli-de-sele-o-multi-runtime.md` para alinhar o sprint status ao escopo multi-runtime atualizado.
 - A Story 5.6 foi marcada `done`, mas seu escopo implementado usa `hosts` e cobre principalmente `codex` e `claude_code`, enquanto o `epics.md` atualizado fala em multi-runtime com Claude Code, OpenCode, Codex, Cursor e Antigravity. Nao expandir suporte de runtime nesta historia alem do necessario para FR33.
 - A Story 5.6 registrou pendencias de review abertas que podem impactar esta historia, especialmente escrita insegura/duplo I/O em `update_project_config()`, escrita de config antes da validacao, fragilidade de hosts em config e falta de tratamento de excecoes. Ao tocar esses pontos, corrija de forma local e testada sem alterar comportamento nao relacionado.
 - O onboarding ja grava `[hosts] enabled = [...]` e default de locale; a migracao de schema precisa preservar esses dados para nao quebrar sincronizacao futura de instrucoes.
