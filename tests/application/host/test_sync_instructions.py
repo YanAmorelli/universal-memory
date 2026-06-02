@@ -267,7 +267,7 @@ def test_sync_claude_without_agents_md_keeps_shared_policy_in_claude_md(
     assert "Use relative paths in specs, code and docs." in claude_content
     assert "Claude-only note." in claude_content
     assert "Claude Code Universal Memory Instructions" in claude_content
-    assert "Use este arquivo como a referencia operacional" in claude_content
+    assert "Use this file as Claude Code's operational reference" in claude_content
 
 
 def test_sync_ignores_enabled_runtimes_without_legacy_instruction_support(

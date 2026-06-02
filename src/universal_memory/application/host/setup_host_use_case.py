@@ -722,29 +722,29 @@ class ConfigureHostUseCase:
             UMEM_START,
             "# Universal Memory Active Policy",
             "> [!IMPORTANT]",
-            "> `umem` é a memória operacional deste projeto. Antes de planejar, editar, "
-            "investigar ou revisar, carregue a memória com `umem status --format json`, "
-            "`umem context --scope project --format json` e `umem skills list --format json` "
-            "ou use as ferramentas MCP/FastMCP equivalentes.",
-            "> Leia e siga `.umem/skills/use-universal-memory/SKILL.md`. Se houver skill "
-            "ativa relevante, consulte `umem skills detail <skill-id-or-name> --format json` "
-            "antes de agir.",
-            "> Ao registrar aprendizados, use `--scope global` para preferências duráveis do "
-            "usuário entre projetos e `--scope project` para decisões, comandos e contexto deste "
-            "repositório. Nunca grave segredos, dumps extensos ou fatos incertos.",
+            "> `umem` is this project's operational memory. Before planning, editing, "
+            "investigating, or reviewing, load memory with `umem status --format json`, "
+            "`umem context --scope project --format json`, and "
+            "`umem skills list --format json`, or use the equivalent MCP/FastMCP tools.",
+            "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a relevant "
+            "active skill exists, inspect it with "
+            "`umem skills detail <skill-id-or-name> --format json` before acting.",
+            "> When recording learnings, use `--scope global` for durable user preferences "
+            "across projects and `--scope project` for decisions, commands, and context for "
+            "this repository. Never record secrets, large dumps, or uncertain facts.",
             "",
-            "## Bootstrap Obrigatório",
-            "- Execute `umem status --format json` para validar a integração.",
-            "- Execute `umem context --scope project --format json` e trate o resultado "
-            "como contexto ativo.",
-            "- Execute `umem skills list --format json`; para cada skill relevante, "
-            "execute `umem skills detail <skill-id-or-name> --format json`.",
-            "- Se MCP/FastMCP estiver disponível, prefira as ferramentas equivalentes; "
-            "se não estiver, use os comandos CLI acima.",
-            "- Mantenha `AGENTS.md` e `CLAUDE.md` compactos: eles apontam para `umem`, "
-            "não armazenam dumps de memória.",
+            "## Required Bootstrap",
+            "- Run `umem status --format json` to validate the integration.",
+            "- Run `umem context --scope project --format json` and treat the result as "
+            "active context.",
+            "- Run `umem skills list --format json`; for each relevant skill, run "
+            "`umem skills detail <skill-id-or-name> --format json`.",
+            "- If MCP/FastMCP is available, prefer the equivalent tools; otherwise, use the "
+            "CLI commands above.",
+            "- Keep `AGENTS.md` and `CLAUDE.md` compact: they should point to `umem`, not "
+            "store memory dumps.",
             "",
-            "## Regras Operacionais Consolidadas",
+            "## Consolidated Operational Rules",
         ]
         if partition.manifest_blocks:
             for block in partition.manifest_blocks:
@@ -754,13 +754,13 @@ class ConfigureHostUseCase:
                     for subline in lines_content[1:]:
                         lines.append(f"  {subline}")
         else:
-            lines.append("- Consulte `umem context` para recuperar regras ativas sob demanda.")
+            lines.append("- Use `umem context` to retrieve active rules on demand.")
 
-        lines.extend(["", "## Ponteiros Canônicos"])
+        lines.extend(["", "## Canonical Pointers"])
         if partition.pointer_lines:
             lines.extend(partition.pointer_lines)
         else:
-            lines.append("- Nenhum documento canônico adicional registrado.")
+            lines.append("- No additional canonical document registered.")
         lines.append(UMEM_END)
         return "\n".join(lines) + "\n"
 
@@ -773,45 +773,44 @@ class ConfigureHostUseCase:
         if shared_manifest_available:
             title = "# Claude Delta Instructions"
             scope_line = (
-                "> Leia `AGENTS.md` como manifesto compartilhado. Este arquivo contém apenas "
-                "deltas específicos para Claude Code, mas o uso de `umem` continua obrigatório."
+                "> Read `AGENTS.md` as the shared manifest. This file contains only "
+                "Claude Code-specific deltas, but `umem` usage remains required."
             )
             memory_line = (
-                "> Antes de planejar, editar, investigar ou revisar, carregue `umem` com "
+                "> Before planning, editing, investigating, or reviewing, load `umem` with "
                 "`umem status --format json`, `umem context --scope project --format json` "
-                "e `umem skills list --format json`, ou use as ferramentas MCP/FastMCP "
-                "equivalentes."
+                "and `umem skills list --format json`, or use the equivalent MCP/FastMCP "
+                "tools."
             )
             policy_line = (
-                "> Leia e siga `.umem/skills/use-universal-memory/SKILL.md`. Se houver skill "
-                "ativa relevante, consulte `umem skills detail <skill-id-or-name> --format json` "
-                "antes de agir."
+                "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a "
+                "relevant active skill exists, inspect it with "
+                "`umem skills detail <skill-id-or-name> --format json` before acting."
             )
-            section_title = "## Deltas do Provedor"
-            empty_line = "- Nenhum delta especifico registrado para Claude Code."
+            section_title = "## Provider Deltas"
+            empty_line = "- No Claude Code-specific delta registered."
         else:
             title = "# Claude Code Universal Memory Instructions"
             scope_line = (
-                "> Use este arquivo como a referencia operacional do Claude Code neste projeto. "
-                "Ele consolida como recuperar contexto, aplicar regras ativas e registrar "
-                "aprendizados "
-                "quando `AGENTS.md` ainda nao existe."
+                "> Use this file as Claude Code's operational reference for this project. "
+                "It consolidates how to retrieve context, apply active rules, and record "
+                "learnings when `AGENTS.md` does not exist yet."
             )
             memory_line = (
-                "> Antes de planejar, editar, investigar ou revisar, carregue `umem` com "
+                "> Before planning, editing, investigating, or reviewing, load `umem` with "
                 "`umem status --format json`, `umem context --scope project --format json` "
-                "e `umem skills list --format json`, ou use as ferramentas MCP/FastMCP "
-                "equivalentes."
+                "and `umem skills list --format json`, or use the equivalent MCP/FastMCP "
+                "tools."
             )
             policy_line = (
-                "> Leia e siga `.umem/skills/use-universal-memory/SKILL.md`. Se houver skill "
-                "ativa relevante, consulte `umem skills detail <skill-id-or-name> --format json` "
-                "antes de agir."
+                "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a "
+                "relevant active skill exists, inspect it with "
+                "`umem skills detail <skill-id-or-name> --format json` before acting."
             )
-            section_title = "## Regras Operacionais"
+            section_title = "## Operational Rules"
             empty_line = (
-                "- Nenhuma regra consolidada registrada; use "
-                "`umem context --scope project` para recuperar contexto sob demanda."
+                "- No consolidated rule registered; use `umem context --scope project` to "
+                "retrieve context on demand."
             )
         lines = [
             UMEM_START,
@@ -825,18 +824,17 @@ class ConfigureHostUseCase:
         if not shared_manifest_available:
             lines.extend(
                 [
-                    "## Fluxo Padrao",
-                    "- Execute `umem status --format json` para validar a integração.",
-                    "- Execute `umem context --scope project --format json` e trate o "
-                    "resultado como contexto ativo.",
-                    "- Execute `umem skills list --format json`; para cada skill relevante, "
-                    "execute `umem skills detail <skill-id-or-name> --format json`.",
-                    "- Ao encontrar uma preferencia duravel do usuario, registre como memoria "
-                    "global; ao encontrar decisao ou detalhe deste repositorio, registre como "
-                    "memoria do projeto.",
-                    "- Preserve conteudo manual fora do bloco UMEM e mantenha este bloco "
-                    "compacto, apontando para documentos externos quando a orientacao ficar "
-                    "longa.",
+                    "## Standard Flow",
+                    "- Run `umem status --format json` to validate the integration.",
+                    "- Run `umem context --scope project --format json` and treat the result "
+                    "as active context.",
+                    "- Run `umem skills list --format json`; for each relevant skill, run "
+                    "`umem skills detail <skill-id-or-name> --format json`.",
+                    "- When you find a durable user preference, record it as global memory; "
+                    "when you find a repository decision or detail, record it as project "
+                    "memory.",
+                    "- Preserve manual content outside the UMEM block and keep this block "
+                    "compact, pointing to external documents when guidance grows long.",
                     "",
                 ]
             )

@@ -195,10 +195,10 @@ def test_setup_preserves_manual_content_outside_managed_block(
     assert "umem status --format json" in managed_block
     assert "umem skills list --format json" in managed_block
     assert "umem skills detail <skill-id-or-name> --format json" in managed_block
-    assert "Bootstrap Obrigatório" in managed_block
+    assert "Required Bootstrap" in managed_block
     assert "--scope global" in managed_block
     assert "--scope project" in managed_block
-    assert "aprendizados" in managed_block
+    assert "learnings" in managed_block
 
 
 def test_check_rejects_massive_agents_md_dump(
@@ -327,11 +327,11 @@ def test_claude_code_setup_without_agents_md_includes_shared_policy_in_claude_md
     assert "When editing Claude instructions, preserve manual content." in claude_content
     assert "Use relative paths in specs, code and docs." in claude_content
     assert "Claude Code Universal Memory Instructions" in claude_content
-    assert "Use este arquivo como a referencia operacional" in claude_content
+    assert "Use this file as Claude Code's operational reference" in claude_content
     assert "umem status --format json" in claude_content
     assert "umem skills list --format json" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
-    assert "## Regras Operacionais" in claude_content
+    assert "## Operational Rules" in claude_content
 
 
 def test_claude_code_setup_with_agents_md_writes_only_delta_blocks_to_claude_md(
@@ -369,7 +369,7 @@ def test_claude_code_setup_with_agents_md_writes_only_delta_blocks_to_claude_md(
 
     assert "Use CLAUDE.md only for Claude-specific deltas." in claude_content
     assert "Use relative paths in specs, code and docs." not in claude_content
-    assert "contém apenas" in claude_content
+    assert "contains only Claude Code-specific deltas" in claude_content
     assert "umem status --format json" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
 
@@ -397,7 +397,7 @@ def test_claude_code_setup_without_deltas_passes_own_read_validator(
     assert "umem skills list --format json" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
     assert ".umem/skills/use-universal-memory/SKILL.md" in claude_content
-    assert "registre como memoria global" in claude_content
+    assert "record it as global memory" in claude_content
     assert "--scope global" not in claude_content
     details = json.loads(audit_log_repository.events[-1].details or "{}")
     assert details["checks"]["managed_block_has_mcp_reference"] is True
