@@ -2,9 +2,10 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from universal_memory.domain import ConfigValidationPort, InvalidConfigError, ProjectLayoutPort
-from universal_memory.infrastructure.config.toml_loader import update_project_config
+from universal_memory.infrastructure.config.toml_loader import load_config, update_project_config
 
 DEFAULT_ENABLED_HOST_IDS = ["codex", "claude_code"]
 DEFAULT_UMEM_SKILL_ID = "00000000-0000-4000-8000-000000000001"
@@ -15,61 +16,61 @@ DEFAULT_UMEM_SKILL_MARKDOWN = """---
 name: "use-universal-memory"
 description: "Use umem to inspect project memory, skills, and durable learnings."
 triggers:
-  - "inicio de uma sessao de trabalho"
-  - "antes de implementar, investigar ou revisar codigo"
-  - "quando precisar entender memoria, fatos ou skills do projeto"
+  - "at the start of a work session"
+  - "before implementing, investigating, or reviewing code"
+  - "when project memory, facts, or skills are needed"
 ---
 
 # Use Universal Memory
 
-## Quando Usar
+## When To Use
 
-- No inicio de uma sessao de trabalho relevante.
-- Antes de implementar, investigar, revisar codigo ou responder sobre decisoes do projeto.
-- Quando o usuario pedir para consultar memoria, contexto, fatos, regras ou skills.
-- Depois de descobrir uma decisao duravel que deve ser lembrada em trabalhos futuros.
+- At the start of a relevant work session.
+- Before implementing, investigating, reviewing code, or answering questions about project
+  decisions.
+- When the user asks to inspect memory, context, facts, rules, or skills.
+- After discovering a durable decision that should be remembered for future work.
 
-## Procedimento
+## Procedure
 
-1. Rode `umem status` para confirmar que o projeto esta inicializado.
-2. Rode `umem context --scope project` para carregar fatos e preferencias relevantes.
-3. Rode `umem skills list` para ver skills registradas ou candidatas.
-4. Se uma skill parecer relevante, rode `umem skills detail <nome-ou-id>` antes de agir.
-5. Use `umem facts list --scope project` quando precisar auditar fatos individuais.
-6. Durante ou ao final da atividade, revisar aprendizados duraveis e registrar apenas fatos
-   curtos, verificaveis e nao sensiveis.
+1. Run `umem status` to confirm the project is initialized.
+2. Run `umem context --scope project` to load relevant facts and preferences.
+3. Run `umem skills list` to inspect registered or candidate skills.
+4. If a skill looks relevant, run `umem skills detail <name-or-id>` before acting.
+5. Use `umem facts list --scope project` when individual facts need to be audited.
+6. During or at the end of the activity, review durable learnings and record only short,
+   verifiable, non-sensitive facts.
 
-## Memoria Global Vs Memoria De Projeto
+## Global Memory Vs Project Memory
 
-- Use `--scope global` para preferencias pessoais, estilo de comunicacao, informacoes
-  duraveis sobre o usuario, habitos recorrentes e comportamentos que devem valer entre
-  projetos.
-- Use `--scope project` para decisoes, arquitetura, comandos, restricoes, tarefas, bugs,
-  dominio e aprendizados especificos do repositorio atual.
-- `umem context --scope project` carrega a memoria do projeto junto com preferencias globais
-  relevantes.
+- Use `--scope global` for personal preferences, communication style, durable user
+  information, recurring habits, and behavior that should apply across projects.
+- Use `--scope project` for decisions, architecture, commands, constraints, tasks, bugs,
+  domain knowledge, and learnings specific to the current repository.
+- `umem context --scope project` loads project memory together with relevant global
+  preferences.
 
-## Exemplos
+## Examples
 
 ```bash
-umem remember "Preferir respostas objetivas em portugues." --scope global --tag preference
-umem remember "Projeto usa Firebase Admin/ADC backend-only." --scope project --tag architecture
+umem remember "Prefer concise responses in English." --scope global --tag preference
+umem remember "Project uses Firebase Admin/ADC backend-only." --scope project --tag architecture
 ```
 
-## Criterios Para Registrar Memoria
+## Criteria For Recording Memory
 
-- Registre decisoes arquiteturais, convencoes recorrentes e preferencias do usuario no
-  escopo correto.
-- Nao registre passos transitorios, outputs enormes, logs brutos, segredos, credenciais,
-  dados pessoais sensiveis ou informacoes incertas.
-- Prefira fatos verificaveis e curtos, com tags como `architecture`, `workflow` ou `bug`.
+- Record architecture decisions, recurring conventions, and user preferences in the
+  correct scope.
+- Do not record transient steps, huge outputs, raw logs, secrets, credentials,
+  sensitive personal data, or uncertain information.
+- Prefer short, verifiable facts with tags such as `architecture`, `workflow`, or `bug`.
 
 ## Guardrails
 
-- Nao rode `purge`, `rollback` ou `hygiene` sem confirmacao explicita do usuario.
-- Nao cole dumps completos de memoria em arquivos de instrucao de host.
-- Nao persista tokens, chaves, dumps de env, dados sensiveis ou fatos que voce nao verificou.
-- Se `umem status` indicar problema de inicializacao, reporte isso antes de continuar.
+- Do not run `purge`, `rollback`, or `hygiene` without explicit user confirmation.
+- Do not paste full memory dumps into host instruction files.
+- Do not persist tokens, keys, env dumps, sensitive data, or facts you have not verified.
+- If `umem status` reports an initialization problem, report it before continuing.
 """
 
 
@@ -101,12 +102,18 @@ def setup_project(
     if enabled_host_ids is not None:
         unsupported = [h for h in enabled_host_ids if h not in DEFAULT_ENABLED_HOST_IDS]
         if unsupported:
-            raise InvalidConfigError(f"Hosts nao suportados: {', '.join(unsupported)}")
+            raise InvalidConfigError(f"Unsupported hosts: {', '.join(unsupported)}")
 
     hosts_enabled = enabled_host_ids if enabled_host_ids is not None else DEFAULT_ENABLED_HOST_IDS
+    loaded_config = load_config(normalized_project_root, global_config_path=global_config_path)
+    preferences = loaded_config.project_data.get("preferences")
+    updates: dict[str, Any] = {"hosts": {"enabled": hosts_enabled}}
+    if not isinstance(preferences, dict) or "locale" not in preferences:
+        updates["preferences"] = {"locale": "en"}
+
     update_project_config(
         normalized_project_root,
-        {"hosts": {"enabled": hosts_enabled}},
+        updates,
         global_config_path=global_config_path,
     )
 
@@ -185,9 +192,9 @@ def _default_umem_skill_jsonl_line() -> str:
             "origin": "umem-init",
             "audit_reference": "seeded-by-init",
             "triggers": [
-                "inicio de uma sessao de trabalho",
-                "antes de implementar, investigar ou revisar codigo",
-                "quando precisar entender memoria, fatos ou skills do projeto",
+                "at the start of a work session",
+                "before implementing, investigating, or reviewing code",
+                "when project memory, facts, or skills are needed",
             ],
             "evidence": [
                 {

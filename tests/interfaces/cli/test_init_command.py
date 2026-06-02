@@ -2,6 +2,7 @@ import json
 import socket
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -36,7 +37,8 @@ def test_init_in_clean_directory_creates_layout_with_human_output(
     assert exit_code == 0
     assert captured.err == ""
     assert ".umem/" in captured.out
-    assert "criada" in captured.out
+    assert "Local memory created" in captured.out
+    assert "criada" not in captured.out
     assert ".umem/config.toml" in captured.out
     assert ".umem/memory" in captured.out
     assert ".umem/audit/events.jsonl" in captured.out
@@ -44,6 +46,8 @@ def test_init_in_clean_directory_creates_layout_with_human_output(
     assert "umem status" in captured.out
     assert (tmp_path / ".umem" / "config.toml").is_file()
     assert (tmp_path / ".umem" / "memory").is_dir()
+    config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
+    assert config["preferences"]["locale"] == "en"
 
 
 def test_init_json_outputs_pure_parseable_payload_with_required_keys(
@@ -57,6 +61,7 @@ def test_init_json_outputs_pure_parseable_payload_with_required_keys(
     payload = json.loads(captured.out)
     assert exit_code == 0
     assert captured.err == ""
+    assert captured.out.startswith("{")
     assert payload["ok"] is True
     assert payload["operation"] == "init"
     assert payload["scope"] == "project"
@@ -117,11 +122,9 @@ def test_init_json_hosts_option_persists_selection_and_runs_selected_host_setup(
     assert exit_code == 0
     assert captured.err == ""
     assert json.loads(captured.out)["ok"] is True
-    assert (
-        (tmp_path / ".umem" / "config.toml")
-        .read_text(encoding="utf-8")
-        .endswith('[hosts]\nenabled = [\n    "codex",\n]\n')
-    )
+    config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
+    assert config["hosts"]["enabled"] == ["codex"]
+    assert config["preferences"]["locale"] == "en"
     assert seen == [
         ConfigureHostCommand(host_id="codex", apply=True, origin="cli_init"),
         ConfigureHostCommand(host_id="codex", apply=False, check=True, origin="cli_init"),
@@ -169,12 +172,32 @@ def test_init_human_interactive_prompts_for_hosts(
     capsys.readouterr()
     assert exit_code == 0
     assert prompts == [
-        "Deseja configurar o host 'codex' (suporte a AGENTS.md)? [S/n]: ",
-        "Deseja configurar o host 'claude_code' (suporte a CLAUDE.md)? [S/n]: ",
+        "Configure host 'codex' (AGENTS.md support)? [Y/n]: ",
+        "Configure host 'claude_code' (CLAUDE.md support)? [Y/n]: ",
     ]
     assert '[hosts]\nenabled = [\n    "codex",\n]\n' in (
         tmp_path / ".umem" / "config.toml"
     ).read_text(encoding="utf-8")
+
+
+def test_init_human_uses_pt_br_overlay_when_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["init", "--format", "json"]) == 0
+    capsys.readouterr()
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace('locale = "en"', 'locale = "pt-BR"'),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["init"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Memoria local ja inicializada." in captured.out
+    assert "Local memory already initialized." not in captured.out
 
 
 def test_init_module_execution_exits_with_process_status_and_json(
@@ -223,9 +246,9 @@ def test_cli_adapter_maps_unexpected_os_errors_to_json_error_envelope(
         "ok": False,
         "error": {
             "code": "storage_error",
-            "message": "Falha de armazenamento.",
+            "message": "Storage error.",
             "detail": "filesystem unavailable",
-            "recovery_hint": "Verifique o layout local e execute umem init na raiz do projeto.",
+            "recovery_hint": "Check the local layout and run umem init at the project root.",
             "audit_reference": None,
         },
     }

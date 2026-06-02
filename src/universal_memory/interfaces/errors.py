@@ -135,6 +135,30 @@ def recovery_hint(error: Exception) -> str:
     return error_descriptor(error).recovery_hint
 
 
+def _recovery_hint_for_locale(error: Exception, *, message_locale: str) -> str:
+    hint = recovery_hint(error)
+    if message_locale == "pt-BR":
+        return hint
+    translations = {
+        "Remova ou mascare valores sensiveis antes de repetir a operacao.": (
+            "Remove or mask sensitive values before retrying."
+        ),
+        "Execute uma mutacao segura antes de tentar rollback ou verifique o escopo.": (
+            "Run a safe mutation before retrying rollback, or check the scope."
+        ),
+        "Corrija os dados invalidos informados.": "Fix the invalid input data.",
+        "Verifique o identificador ou escopo informado.": "Check the provided identifier or scope.",
+        "Verifique as configuracoes no arquivo config.toml.": "Check the settings in config.toml.",
+        "Verifique o layout local e execute umem init na raiz do projeto.": (
+            "Check the local layout and run umem init at the project root."
+        ),
+        "Tente novamente. Se persistir, consulte os logs de diagnostico.": (
+            "Try again. If the problem persists, check the diagnostic logs."
+        ),
+    }
+    return translations.get(hint, hint)
+
+
 def sanitize_error_detail(error_or_detail: Exception | str, *, max_length: int = 240) -> str:
     if isinstance(error_or_detail, SecretDetectedError):
         return "Sensitive content was detected and blocked."
@@ -162,7 +186,7 @@ def error_payload(error: Exception, *, message_locale: str) -> dict[str, Any]:
         "code": descriptor.slug,
         "message": descriptor.cli_message if message_locale == "pt-BR" else descriptor.mcp_message,
         "detail": sanitize_error_detail(error),
-        "recovery_hint": recovery_hint(error),
+        "recovery_hint": _recovery_hint_for_locale(error, message_locale=message_locale),
         "audit_reference": getattr(error, "audit_reference", None),
     }
 
@@ -174,7 +198,7 @@ def json_rpc_error_payload(error: Exception) -> dict[str, Any]:
         "message": descriptor.mcp_message,
         "data": {
             "detail": sanitize_error_detail(error),
-            "recovery_hint": recovery_hint(error),
+            "recovery_hint": _recovery_hint_for_locale(error, message_locale="en"),
             "audit_reference": getattr(error, "audit_reference", None),
         },
     }

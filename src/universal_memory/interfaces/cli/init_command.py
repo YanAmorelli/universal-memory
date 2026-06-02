@@ -85,6 +85,7 @@ from universal_memory.domain.entities import (
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
+from universal_memory.interfaces.cli.message_catalog import human_message, project_locale
 from universal_memory.interfaces.errors import (
     DOMAIN_ERROR_TYPES,
     error_descriptor,
@@ -121,12 +122,12 @@ OutputFormatOption = Annotated[
     typer.Option(
         "--format",
         "-f",
-        help="Formato de saida.",
+        help="Output format.",
         case_sensitive=False,
         click_type=click.Choice(["human", "json"], case_sensitive=False),
     ),
 ]
-YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Ignorar confirmacao interativa.")]
+YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Skip interactive confirmation.")]
 
 
 def _determine_output_format(argv: Sequence[str] | None) -> str:
@@ -192,7 +193,7 @@ def main(  # noqa: PLR0913
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
     except click.exceptions.ClickException as e:
-        _stderr_console().print(f"[bold red]Erro:[/bold red] {e.format_message()}")
+        _stderr_console().print(f"[bold red]Error:[/bold red] {e.format_message()}")
         return e.exit_code
     except click.exceptions.Exit as exit_error:
         code = exit_error.exit_code
@@ -253,7 +254,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             typer.Option(
                 "--format",
                 "-f",
-                help="Formato global de saida.",
+                help="Global output format.",
                 case_sensitive=False,
                 click_type=click.Choice(["human", "json"], case_sensitive=False),
             ),
@@ -266,7 +267,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         ctx: typer.Context,
         hosts: Annotated[
             list[str] | None,
-            typer.Option("--hosts", help="Host a configurar. Pode ser usado multiplas vezes."),
+            typer.Option("--hosts", help="Host to configure. May be used multiple times."),
         ] = None,
         yes: YesOption = False,
         output_format: OutputFormatOption = None,
@@ -880,31 +881,39 @@ def _run_init(  # noqa: PLR0913
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
 ) -> int:
+    locale = project_locale(Path.cwd()) if output_format != "json" else "en"
     try:
         host_ids = _selected_init_hosts(
             selected_hosts,
             output_format=output_format,
             yes=yes,
+            locale=locale,
         )
         if output_format == "json":
             result = _execute_setup_project(command, Path.cwd(), host_ids)
         else:
-            with _stderr_console().status("Inicializando scaffold do projeto...", spinner="dots"):
+            with _stderr_console().status(
+                human_message("Initializing project scaffold...", locale=locale), spinner="dots"
+            ):
                 result = _execute_setup_project(command, Path.cwd(), host_ids)
+            locale = project_locale(Path.cwd())
         host_results = _configure_init_hosts(
             host_ids,
             output_format=output_format,
+            locale=locale,
             host_setup_command=host_setup_command,
             host_check_command=host_check_command,
         )
     except (KeyboardInterrupt, EOFError):
-        _stdout_console().print("\nOperacao cancelada pelo usuario.")
+        _stdout_console().print(
+            "\n" + human_message("Operation cancelled by user.", locale=locale)
+        )
         return 1
     except OSError as error:
-        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        _print_expected_error(StorageError(str(error)), output_format=output_format, locale=locale)
         return 1
     except DOMAIN_ERROR_TYPES as error:
-        _print_expected_error(error, output_format=output_format)
+        _print_expected_error(error, output_format=output_format, locale=locale)
         return 1
 
     if output_format == "json":
@@ -913,9 +922,9 @@ def _run_init(  # noqa: PLR0913
             payload["hosts"] = [asdict(res) for res in host_results]
         print(json.dumps(payload, sort_keys=True))
     else:
-        _stdout_console().print(_format_human_init_output(result))
+        _stdout_console().print(_format_human_init_output(result, locale=locale))
         if host_results:
-            _stdout_console().print(_format_human_init_host_results(host_results))
+            _stdout_console().print(_format_human_init_host_results(host_results, locale=locale))
 
     return 0
 
@@ -949,6 +958,7 @@ def _selected_init_hosts(
     *,
     output_format: str,
     yes: bool,
+    locale: str = "en",
 ) -> list[str]:
     if hosts:
         return _normalize_supported_hosts(hosts)
@@ -959,8 +969,12 @@ def _selected_init_hosts(
 
     selected = []
     prompts = {
-        "codex": "Deseja configurar o host 'codex' (suporte a AGENTS.md)? [S/n]: ",
-        "claude_code": "Deseja configurar o host 'claude_code' (suporte a CLAUDE.md)? [S/n]: ",
+        "codex": human_message(
+            "Configure host 'codex' (AGENTS.md support)? [Y/n]: ", locale=locale
+        ),
+        "claude_code": human_message(
+            "Configure host 'claude_code' (CLAUDE.md support)? [Y/n]: ", locale=locale
+        ),
     }
     for host_id in DEFAULT_ENABLED_HOST_IDS:
         if _confirm(prompts[host_id], default=True):
@@ -976,7 +990,7 @@ def _normalize_supported_hosts(hosts: list[str]) -> list[str]:
             normalized.append(cleaned)
     unsupported = [host_id for host_id in normalized if host_id not in DEFAULT_ENABLED_HOST_IDS]
     if unsupported:
-        raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
+        raise ValidationFailedError(f"Unsupported hosts: {', '.join(unsupported)}")
     return normalized
 
 
@@ -984,6 +998,7 @@ def _configure_init_hosts(
     host_ids: list[str],
     *,
     output_format: str,
+    locale: str = "en",
     host_setup_command: ConfigureHostCommandHandler | None,
     host_check_command: ConfigureHostCommandHandler | None,
 ) -> list[ConfigureHostResult]:
@@ -1012,9 +1027,22 @@ def _configure_init_hosts(
             results.extend([setup_result, check_result])
             if output_format != "json":
                 for step in check_result.manual_steps:
-                    _stdout_console().print(f"Passo manual pendente ({host_id}): {step}")
+                    _stdout_console().print(
+                        human_message(
+                            "Pending manual step ({host_id}): {step}",
+                            locale=locale,
+                            host_id=host_id,
+                            step=step,
+                        )
+                    )
         except Exception as error:
-            raise ValidationFailedError(f"Falha ao configurar host '{host_id}': {error}") from error
+            msg = human_message(
+                "Host setup failed for '{host_id}': {error}",
+                locale=locale,
+                host_id=host_id,
+                error=error,
+            )
+            raise ValidationFailedError(msg) from error
     return results
 
 
@@ -2139,32 +2167,42 @@ def _remember_payload(result: RememberFactResult) -> dict[str, Any]:
     }
 
 
-def _format_human_init_output(result: SetupProjectResult) -> str:
+def _format_human_init_output(result: SetupProjectResult, *, locale: str = "en") -> str:
     status = (
-        "Memoria local criada em .umem/." if result.created else "Memoria local ja inicializada."
+        "Local memory created at .umem/." if result.created else "Local memory already initialized."
     )
-    paths_label = "Caminhos criados:" if result.created else "Caminhos reutilizados:"
+    paths_label = "Created paths:" if result.created else "Reused paths:"
     paths = result.created_paths if result.created else result.existing_paths
     rendered_paths = "\n".join(f"- {path}" for path in paths)
 
     return "\n".join(
         [
-            status,
-            paths_label,
+            human_message(status, locale=locale),
+            human_message(paths_label, locale=locale),
             rendered_paths,
-            f"Auditoria: {AUDIT_REFERENCE_PLACEHOLDER}",
-            "Proximo comando sugerido: umem status",
+            human_message(
+                "Audit: {audit_reference}",
+                locale=locale,
+                audit_reference=AUDIT_REFERENCE_PLACEHOLDER,
+            ),
+            human_message("Suggested next command: umem status", locale=locale),
         ]
     )
 
 
-def _format_human_init_host_results(results: list[ConfigureHostResult]) -> str:
-    lines = ["Hosts configurados no onboarding:"]
+def _format_human_init_host_results(
+    results: list[ConfigureHostResult], *, locale: str = "en"
+) -> str:
+    lines = [human_message("Hosts configured during onboarding:", locale=locale)]
     for result in results:
-        changes = ", ".join(change["path"] for change in result.planned_changes) or "(validacao)"
+        changes = ", ".join(change["path"] for change in result.planned_changes) or (
+            "(" + human_message("validation", locale=locale) + ")"
+        )
         lines.append(
-            f"- {result.host_id}: {result.validation_status}; arquivos={changes}; "
-            f"snapshot={result.snapshot_reference}; auditoria={result.audit_reference}"
+            f"- {result.host_id}: {result.validation_status}; "
+            f"{human_message('files', locale=locale)}={changes}; "
+            f"{human_message('snapshot', locale=locale)}={result.snapshot_reference}; "
+            f"{human_message('audit', locale=locale)}={result.audit_reference}"
         )
     return "\n".join(lines)
 
@@ -2641,10 +2679,13 @@ def _recovery_hint(error: Exception) -> str:
     return recovery_hint(error)
 
 
-def _print_expected_error(error: Exception, output_format: str) -> None:
+def _print_expected_error(
+    error: Exception, output_format: str, *, locale: str | None = None
+) -> None:
+    message_locale = "en" if output_format == "json" else (locale or "pt-BR")
     payload = {
         "ok": False,
-        "error": error_payload(error, message_locale="pt-BR"),
+        "error": error_payload(error, message_locale=message_locale),
     }
 
     if output_format == "json":
@@ -2655,13 +2696,16 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
         Text.from_markup(
             "\n".join(
                 [
-                    f"[bold]Falha:[/bold] {payload['error']['message']}",
-                    f"[bold]Detalhe:[/bold] {payload['error']['detail']}",
-                    f"[bold]Recuperacao:[/bold] {payload['error']['recovery_hint']}",
+                    f"[bold]{human_message('Failure:', locale=message_locale)}[/bold] "
+                    f"{payload['error']['message']}",
+                    f"[bold]{human_message('Detail:', locale=message_locale)}[/bold] "
+                    f"{payload['error']['detail']}",
+                    f"[bold]{human_message('Recovery:', locale=message_locale)}[/bold] "
+                    f"{payload['error']['recovery_hint']}",
                 ]
             )
         ),
-        title="Erro",
+        title=human_message("Error", locale=message_locale),
         border_style="red",
     )
     _stderr_console().print(panel)

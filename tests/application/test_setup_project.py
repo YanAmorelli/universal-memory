@@ -1,4 +1,5 @@
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -50,19 +51,19 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "--scope project" in skill_content
     assert "--tag preference" in skill_content
     assert "--tag architecture" in skill_content
-    assert "segredos" in skill_content
-    assert "credenciais" in skill_content
-    assert "dados pessoais sensiveis" in skill_content
-    assert "revisar aprendizados" in skill_content
+    assert "secrets" in skill_content
+    assert "credentials" in skill_content
+    assert "sensitive personal data" in skill_content
+    assert "review durable learnings" in skill_content
     latent_skill_line = (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").read_text(
         encoding="utf-8"
     )
     latent_skill = json.loads(latent_skill_line)
     assert latent_skill["name"] == "use-universal-memory"
-    assert (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8") == (
-        '[project]\nname = ""\ncreated_by = "universal-memory"\n\n'
-        '[hosts]\nenabled = [\n    "codex",\n    "claude_code",\n]\n'
-    )
+    config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
+    assert config["project"] == {"name": "", "created_by": "universal-memory"}
+    assert config["preferences"] == {"locale": "en"}
+    assert config["hosts"] == {"enabled": ["codex", "claude_code"]}
 
 
 def test_setup_project_persists_selected_hosts(tmp_path: Path) -> None:
@@ -76,6 +77,31 @@ def test_setup_project_persists_selected_hosts(tmp_path: Path) -> None:
     assert '[hosts]\nenabled = [\n    "codex",\n]\n' in (
         tmp_path / ".umem" / "config.toml"
     ).read_text(encoding="utf-8")
+
+
+def test_setup_project_preserves_existing_locale(tmp_path: Path) -> None:
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.write_text(
+        '[project]\nname = ""\ncreated_by = "universal-memory"\n\n'
+        '[preferences]\nlocale = "pt-BR"\n\n'
+        '[hosts]\nenabled = [\n    "codex",\n]\n',
+        encoding="utf-8",
+    )
+
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+
+    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert config["preferences"]["locale"] == "pt-BR"
+    assert config["hosts"]["enabled"] == ["codex", "claude_code"]
 
 
 def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path) -> None:
