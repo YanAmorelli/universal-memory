@@ -2,7 +2,10 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase
+from universal_memory.application.host import (
+    ConfigureHostUseCase,
+    SyncInstructionsUseCase,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     ContextHygieneUseCase,
@@ -24,7 +27,13 @@ from universal_memory.application.skills import (
     GetSkillDetailUseCase,
     ListSkillsUseCase,
     ProposeSkillUseCase,
+    TrackLatentSkillUseCase,
     UpdateSkillUseCase,
+)
+from universal_memory.application.update import (
+    UpdateBenchmarksUseCase,
+    UpdateCheckUseCase,
+    UpdateMigrateUseCase,
 )
 from universal_memory.domain import SnapshotFailedError
 from universal_memory.domain.entities import (
@@ -43,6 +52,7 @@ from universal_memory.infrastructure.config import (
     LocalConfigValidationPort,
     LocalProjectLayoutPort,
 )
+from universal_memory.infrastructure.config.toml_loader import load_config
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
     LocalAuditLogRepository,
@@ -55,6 +65,7 @@ from universal_memory.infrastructure.storage import (
     LocalRuleRepository,
 )
 from universal_memory.interfaces.cli import build_main
+from universal_memory.interfaces.cli.message_catalog import DEFAULT_LOCALE, normalize_locale
 
 
 class EmptyRuleRepository(RuleRepository):
@@ -169,11 +180,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         project_root=project_root,
         safe_write_use_case=safe_write_use_case,
         rule_repository=rule_repository,
+        fact_repository=fact_repository,
     )
     propose_skill_use_case = ProposeSkillUseCase(
         project_root=project_root,
         repository=latent_skill_repository,
         safe_write_use_case=safe_write_use_case,
+    )
+    track_latent_skill_use_case = TrackLatentSkillUseCase(
+        repository=latent_skill_repository,
     )
     generate_skill_use_case = GenerateSkillUseCase(
         project_root=project_root,
@@ -189,6 +204,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     _deactivate_skill_use_case = DeactivateSkillUseCase(
         repository=latent_skill_repository,
+        project_root=project_root,
+        safe_write_use_case=safe_write_use_case,
     )
     _update_skill_use_case = UpdateSkillUseCase(
         project_root=project_root,
@@ -206,13 +223,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         project_root=project_root,
         repository=latent_skill_repository,
     )
+    update_check_use_case = UpdateCheckUseCase()
+    update_migrate_use_case = UpdateMigrateUseCase(safe_write_use_case=safe_write_use_case)
+    update_benchmarks_use_case = UpdateBenchmarksUseCase(
+        safe_write_use_case=safe_write_use_case,
+    )
+
+    def locale_resolver() -> str:
+        try:
+            loaded = load_config(project_root)
+        except Exception:
+            return DEFAULT_LOCALE
+        preferences = loaded.merged.get("preferences")
+        if not isinstance(preferences, dict):
+            return DEFAULT_LOCALE
+        return normalize_locale(preferences.get("locale"))
 
     def rollback_preview(scope: SnapshotScope) -> Snapshot:
         snapshots = snapshot_repository.list(scope=scope, status=SnapshotStatus.created)
         if not snapshots:
             raise SnapshotFailedError(
-                "Nenhum snapshot encontrado para o escopo solicitado. "
-                "Hint: execute uma mutacao segura antes de tentar rollback."
+                "No snapshot found for the requested scope. "
+                "Hint: run a safe mutation before trying rollback."
             )
 
         def _normalize_datetime(dt: datetime) -> datetime:
@@ -239,11 +271,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         host_check_command=host_use_case.execute,
         host_sync_command=host_sync_use_case.execute,
         propose_skill_command=propose_skill_use_case.execute,
+        track_latent_skill_command=track_latent_skill_use_case.execute,
         generate_skill_command=generate_skill_use_case.execute,
         list_skills_command=list_skills_use_case.execute,
         get_skill_detail_command=get_skill_detail_use_case.execute,
         activate_skill_command=_activate_skill_use_case.execute,
         deactivate_skill_command=_deactivate_skill_use_case.execute,
         update_skill_command=_update_skill_use_case.execute,
+        update_check_command=update_check_use_case.execute,
+        update_migrate_command=update_migrate_use_case.execute,
+        update_benchmarks_command=update_benchmarks_use_case.execute,
+        locale_resolver=locale_resolver,
     )
     return configured_main(argv)

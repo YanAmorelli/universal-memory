@@ -1,6 +1,6 @@
 [project]
 name = "universal-memory"
-version = "0.1.0"
+version = "0.1.1"
 description = "Vendor-agnostic cognitive persistence layer for AI agents."
 readme = "README.md"
 license = { text = "MIT" }
@@ -45,6 +45,7 @@ select = ["E", "F", "I", "N", "UP", "PL", "RUF", "B", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
+"src/universal_memory/interfaces/cli/init_command.py" = ["E501"]
 
 
 [tool.pyright]

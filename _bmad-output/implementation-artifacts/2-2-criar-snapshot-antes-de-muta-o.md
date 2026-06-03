@@ -37,7 +37,7 @@ para que eu possa recuperar o estado anterior se uma alteração automática for
 - [x] **Task 2: Implementar `LocalSnapshotRepository` em Infraestrutura** (AC: 1, 3)
   - [x] Criar o arquivo `src/universal_memory/infrastructure/security/local_snapshot_repository.py`.
   - [x] Implementar a classe concreta `LocalSnapshotRepository` herdando de `SnapshotRepository` (definido em `src/universal_memory/domain/ports/snapshot_repository.py`).
-  - [x] Configurar a classe para aceitar o diretório base de dados correspondente (e.g. `.umem/` para escopo de projeto e `~/.local/share/universal-memory/` para escopo global).
+  - [x] Configurar a classe para aceitar o diretório base de dados correspondente (e.g. `.umem/` para escopo de projeto e `~/.local/share/umem/` para escopo global; atualizado por BUG-002).
   - [x] Utilizar a estrutura canônica definida para o armazenamento:
     - O arquivo manifest de controle: `.umem/snapshots/manifest.json` (ou o equivalente no caminho global).
     - O diretório físico para as cópias de backup: `.umem/snapshots/files/` (ou correspondente global).

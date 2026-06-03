@@ -45,6 +45,11 @@ class RecordingSnapshotRepository(SnapshotRepository):
         return None
 
 
+class FailingSnapshotRepository(RecordingSnapshotRepository):
+    def write(self, entity: Snapshot) -> None:
+        raise OSError("simulated snapshot failure")
+
+
 class RecordingAuditRepository(AuditLogRepository):
     def __init__(self) -> None:
         self.written: list[AuditEvent] = []
@@ -159,8 +164,11 @@ def test_generate_skill_creates_project_structure_and_skill_markdown(tmp_path: P
     assert str(tmp_path) not in markdown
     assert (tmp_path / ".umem" / "skills" / "tdd-recorrente" / "scripts").is_dir()
     assert (tmp_path / ".umem" / "skills" / "tdd-recorrente" / "references").is_dir()
-    assert {snapshot.relative_path for snapshot in snapshots.written} == set(result.created_paths)
-    assert {event.action for event in audit.written} == {"generate_skill"}
+    snapshotted_paths = {snapshot.relative_path for snapshot in snapshots.written}
+    assert set(result.created_paths).issubset(snapshotted_paths)
+    assert {"generate_skill", "sync_native_skill"}.issubset(
+        {event.action for event in audit.written}
+    )
 
 
 def test_generate_skill_omits_optional_directories_when_not_requested(tmp_path: Path) -> None:
@@ -250,3 +258,134 @@ def test_generate_skill_fails_when_path_occupied_by_regular_file(tmp_path: Path)
         use_case.execute(GenerateSkillCommand(latent_skill_id=skill.id, origin="test"))
 
     assert "Caminho ocupado por um arquivo regular" in str(exc_info.value)
+
+
+def test_generate_skill_installs_native_targets_and_records_metadata(tmp_path: Path) -> None:
+    use_case, repository, _snapshots, _audit = build_use_case(tmp_path)
+    skill = make_skill()
+    repository.write(skill)
+
+    result = use_case.execute(GenerateSkillCommand(latent_skill_id=skill.id, origin="test"))
+
+    expected_paths = {
+        ".claude/skills/tdd-recorrente",
+        ".opencode/skills/tdd-recorrente",
+        ".cursor/rules/tdd-recorrente",
+    }
+    expected_written_files = {
+        ".claude/skills/tdd-recorrente/SKILL.md",
+        ".claude/skills/tdd-recorrente/scripts/.gitkeep",
+        ".claude/skills/tdd-recorrente/references/.gitkeep",
+        ".opencode/skills/tdd-recorrente/SKILL.md",
+        ".opencode/skills/tdd-recorrente/scripts/.gitkeep",
+        ".opencode/skills/tdd-recorrente/references/.gitkeep",
+        ".cursor/rules/tdd-recorrente/SKILL.mdc",
+        ".cursor/rules/tdd-recorrente/scripts/.gitkeep",
+        ".cursor/rules/tdd-recorrente/references/.gitkeep",
+    }
+    assert expected_written_files.issubset(set(result.affected_paths))
+    assert (tmp_path / ".claude" / "skills" / "tdd-recorrente" / "SKILL.md").is_file()
+    assert (tmp_path / ".claude" / "skills" / "tdd-recorrente" / "scripts" / ".gitkeep").is_file()
+    assert (
+        tmp_path / ".claude" / "skills" / "tdd-recorrente" / "references" / ".gitkeep"
+    ).is_file()
+    assert (tmp_path / ".opencode" / "skills" / "tdd-recorrente" / "SKILL.md").is_file()
+    assert (tmp_path / ".cursor" / "rules" / "tdd-recorrente" / "SKILL.mdc").is_file()
+
+    stored = repository.read(skill.id)
+    installations = stored.metadata["native_installations"]
+    assert {entry["runtime"] for entry in installations} >= {
+        "claude_code",
+        "opencode",
+        "cursor",
+    }
+    assert expected_paths.issubset({entry["path"] for entry in installations})
+    assert all(entry["canonical_hash"] for entry in installations)
+    assert all(entry["audit_reference"] for entry in installations)
+    assert all(entry["manifest"] for entry in installations)
+
+
+def test_generate_skill_keep_preserves_manual_native_drift(tmp_path: Path) -> None:
+    use_case, repository, _snapshots, _audit = build_use_case(tmp_path)
+    skill = make_skill()
+    repository.write(skill)
+    use_case.execute(GenerateSkillCommand(latent_skill_id=skill.id, origin="test"))
+    native_path = tmp_path / ".opencode" / "skills" / "tdd-recorrente" / "SKILL.md"
+    native_path.write_text("manual local workflow\n", encoding="utf-8")
+    native_script = tmp_path / ".opencode" / "skills" / "tdd-recorrente" / "scripts" / "local.sh"
+    native_script.write_text("custom helper\n", encoding="utf-8")
+
+    result = use_case.execute(
+        GenerateSkillCommand(
+            latent_skill_id=skill.id,
+            origin="test",
+            update_existing=True,
+            native_drift_decision="keep",
+        )
+    )
+
+    assert native_path.read_text(encoding="utf-8") == "manual local workflow\n"
+    assert native_script.read_text(encoding="utf-8") == "custom helper\n"
+    assert any(
+        "Warning: Native target has manual changes." in warning for warning in result.warnings
+    )
+
+
+def test_generate_skill_overwrite_replaces_manual_native_drift_with_snapshot(
+    tmp_path: Path,
+) -> None:
+    use_case, repository, snapshots, _audit = build_use_case(tmp_path)
+    skill = make_skill()
+    repository.write(skill)
+    use_case.execute(GenerateSkillCommand(latent_skill_id=skill.id, origin="test"))
+    native_path = tmp_path / ".claude" / "skills" / "tdd-recorrente" / "SKILL.md"
+    native_path.write_text("manual local workflow\n", encoding="utf-8")
+    snapshots.written.clear()
+
+    result = use_case.execute(
+        GenerateSkillCommand(
+            latent_skill_id=skill.id,
+            origin="test",
+            update_existing=True,
+            native_drift_decision="overwrite",
+        )
+    )
+
+    assert "manual local workflow" not in native_path.read_text(encoding="utf-8")
+    assert ".claude/skills/tdd-recorrente/SKILL.md" in {
+        snapshot.relative_path for snapshot in snapshots.written
+    }
+    assert any("overwritten" in warning for warning in result.warnings)
+
+
+def test_generate_skill_snapshot_failure_aborts_native_overwrite(tmp_path: Path) -> None:
+    use_case, repository, _snapshots, audit = build_use_case(tmp_path)
+    skill = make_skill()
+    repository.write(skill)
+    use_case.execute(GenerateSkillCommand(latent_skill_id=skill.id, origin="test"))
+    native_path = tmp_path / ".cursor" / "rules" / "tdd-recorrente" / "SKILL.mdc"
+    native_path.write_text("manual local workflow\n", encoding="utf-8")
+
+    failing_safe_write = SafeWriteUseCase(
+        project_root=tmp_path,
+        secret_scanner=RecordingScanner(),
+        snapshot_repository=FailingSnapshotRepository(),
+        audit_log_repository=audit,
+    )
+    failing_use_case = GenerateSkillUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=failing_safe_write,
+    )
+
+    with pytest.raises(OSError, match="simulated snapshot failure"):
+        failing_use_case.execute(
+            GenerateSkillCommand(
+                latent_skill_id=skill.id,
+                origin="test",
+                update_existing=True,
+                native_drift_decision="overwrite",
+            )
+        )
+
+    assert native_path.read_text(encoding="utf-8") == "manual local workflow\n"

@@ -114,7 +114,7 @@ def test_audit_list_human_output_is_concise_and_ordered(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert captured.err == ""
-    assert "Eventos de auditoria" in captured.out
+    assert "Audit events" in captured.out
     assert captured.out.index("first") < captured.out.index("second")
     assert "project" in captured.out
     assert "success" in captured.out
@@ -208,10 +208,10 @@ def test_list_commands_return_explicit_empty_state_without_error(
     assert snapshots_payload["data"]["snapshots"] == []
 
     assert main(["audit", "list"]) == 0
-    assert "Nenhum evento de auditoria encontrado." in capsys.readouterr().out
+    assert "No audit events found." in capsys.readouterr().out
 
     assert main(["snapshots", "list"]) == 0
-    assert "Nenhum snapshot encontrado." in capsys.readouterr().out
+    assert "No snapshots found." in capsys.readouterr().out
 
 
 def test_cli_adapter_requires_composed_list_dependencies() -> None:

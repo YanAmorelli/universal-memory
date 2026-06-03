@@ -50,6 +50,8 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    TrackLatentSkillCommand,
+    TrackLatentSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
@@ -59,6 +61,7 @@ from universal_memory.domain.entities import (
     ContextSummaryScope,
     FactScope,
     FactStatus,
+    LatentSkillScope,
     SnapshotScope,
     SnapshotStatus,
 )
@@ -93,6 +96,7 @@ RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
+TrackLatentSkillCommandHandler = Callable[[TrackLatentSkillCommand], TrackLatentSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
 GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
@@ -122,6 +126,7 @@ class MCPUseCases:
     host_check: ConfigureHostCommandHandler = _missing_use_case
     sync_instructions: SyncInstructionsCommandHandler = _missing_use_case
     propose_skill: ProposeSkillCommandHandler = _missing_use_case
+    track_latent_skill: TrackLatentSkillCommandHandler = _missing_use_case
     generate_skill: GenerateSkillCommandHandler = _missing_use_case
     list_skills: ListSkillsCommandHandler = _missing_use_case
     get_skill_detail: GetSkillDetailCommandHandler = _missing_use_case
@@ -142,6 +147,13 @@ def configure_server(  # noqa: PLR0915
 ) -> FastMCP:
     root = project_root or Path.cwd()
 
+    def require_project_initialized() -> None:
+        result = use_cases.status(GetMemoryStatusCommand(project_root=root))
+        if not result.initialized:
+            raise ValidationFailedError(
+                "Project memory is not initialized. Call initialize_project first."
+            )
+
     @server.tool(name="initialize_project")
     def initialize_project() -> ToolResponse:
         """Initialize the local Universal Memory project layout."""
@@ -153,7 +165,7 @@ def configure_server(  # noqa: PLR0915
                 data=_init_payload(result, root),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="init", scope="project")
 
     @server.tool(name="status")
     def status() -> ToolResponse:
@@ -170,7 +182,7 @@ def configure_server(  # noqa: PLR0915
                 data=_status_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="status", scope="project")
 
     @server.tool(name="context")
     def context(
@@ -185,6 +197,8 @@ def configure_server(  # noqa: PLR0915
         """
         try:
             context_scope = _context_scope(scope)
+            if context_scope is ContextSummaryScope.project:
+                require_project_initialized()
             result = use_cases.context(
                 AssembleContextSummaryCommand(
                     scope=context_scope,
@@ -198,7 +212,7 @@ def configure_server(  # noqa: PLR0915
                 data=_context_payload(result, max_size_chars=max_size_chars),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="context", scope=_raw_scope(scope))
 
     @server.tool(name="remember_fact")
     def remember_fact(
@@ -209,6 +223,8 @@ def configure_server(  # noqa: PLR0915
         """Persist a memory fact through the shared safe mutation pipeline."""
         try:
             fact_scope = _fact_scope(scope)
+            if fact_scope is FactScope.project:
+                require_project_initialized()
             result = use_cases.remember(
                 RememberFactCommand(
                     content=content,
@@ -224,7 +240,7 @@ def configure_server(  # noqa: PLR0915
                 data=_remember_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="remember", scope=_raw_scope(scope))
 
     @server.tool(name="list_facts")
     def list_facts(
@@ -234,6 +250,8 @@ def configure_server(  # noqa: PLR0915
         """List memory facts with optional scope and status filters."""
         try:
             fact_scope = _fact_scope_optional(scope)
+            if fact_scope is None or fact_scope is FactScope.project:
+                require_project_initialized()
             result = use_cases.list_facts(
                 ListFactsCommand(scope=fact_scope, status=FactStatus(status))
             )
@@ -243,7 +261,11 @@ def configure_server(  # noqa: PLR0915
                 data={"facts": [_fact_payload(fact) for fact in result.facts]},
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(
+                error,
+                operation="facts.list",
+                scope=_raw_scope(scope) if scope is not None else "all",
+            )
 
     @server.tool(name="purge_fact")
     def purge_fact(
@@ -262,6 +284,8 @@ def configure_server(  # noqa: PLR0915
                     "Please call this tool with confirm=True."
                 )
             fact_scope = _fact_scope_optional(scope)
+            if fact_scope is None or fact_scope is FactScope.project:
+                require_project_initialized()
             result = use_cases.purge_fact(PurgeFactCommand(id=id, scope=fact_scope, origin="mcp"))
             return _success_envelope(
                 operation="facts.purge",
@@ -269,7 +293,11 @@ def configure_server(  # noqa: PLR0915
                 data=_purge_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(
+                error,
+                operation="facts.purge",
+                scope=_raw_scope(scope) if scope is not None else "fact",
+            )
 
     @server.tool(name="list_audit_events")
     def list_audit_events(
@@ -278,6 +306,8 @@ def configure_server(  # noqa: PLR0915
         """List audit events for a scope."""
         try:
             audit_scope = _audit_scope(scope)
+            if audit_scope is AuditEventScope.project:
+                require_project_initialized()
             result = use_cases.list_audit_events(ListAuditLogCommand(scope=audit_scope))
             return _success_envelope(
                 operation="audit.list",
@@ -285,7 +315,7 @@ def configure_server(  # noqa: PLR0915
                 data={"events": [_entry_dict(event) for event in result.events]},
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="audit.list", scope=_raw_scope(scope))
 
     @server.tool(name="list_snapshots")
     def list_snapshots(
@@ -294,6 +324,8 @@ def configure_server(  # noqa: PLR0915
         """List created snapshots for a scope."""
         try:
             snapshot_scope = _snapshot_scope(scope)
+            if snapshot_scope is SnapshotScope.project:
+                require_project_initialized()
             result = use_cases.list_snapshots(
                 ListSnapshotsCommand(scope=snapshot_scope, status=SnapshotStatus.created)
             )
@@ -303,7 +335,7 @@ def configure_server(  # noqa: PLR0915
                 data={"snapshots": [_entry_dict(snapshot) for snapshot in result.snapshots]},
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="snapshots.list", scope=_raw_scope(scope))
 
     @server.tool(name="rollback_scope")
     def rollback_scope(
@@ -321,6 +353,8 @@ def configure_server(  # noqa: PLR0915
                     "Please call this tool with confirm=True."
                 )
             snapshot_scope = _snapshot_scope(scope)
+            if snapshot_scope is SnapshotScope.project:
+                require_project_initialized()
             result = use_cases.rollback_scope(RollbackCommand(scope=snapshot_scope, origin="mcp"))
             return _success_envelope(
                 operation="rollback",
@@ -328,7 +362,7 @@ def configure_server(  # noqa: PLR0915
                 data=_rollback_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="rollback", scope=_raw_scope(scope))
 
     @server.tool(name="host_setup")
     def host_setup(
@@ -339,6 +373,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Configure an agent host manifest through the safe mutation pipeline."""
         try:
+            require_project_initialized()
             result = use_cases.host_setup(
                 ConfigureHostCommand(
                     host_id=host_id,
@@ -355,7 +390,7 @@ def configure_server(  # noqa: PLR0915
                 warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="host_setup", scope="project")
 
     @server.tool(name="host_check")
     def host_check(
@@ -365,6 +400,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Validate an agent host manifest without mutating files."""
         try:
+            require_project_initialized()
             result = use_cases.host_check(
                 ConfigureHostCommand(
                     host_id=host_id,
@@ -382,7 +418,7 @@ def configure_server(  # noqa: PLR0915
                 warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="host_check", scope="project")
 
     @server.tool(name="sync_instructions")
     def sync_instructions(
@@ -391,6 +427,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Synchronize approved active rules into supported instruction targets."""
         try:
+            require_project_initialized()
             result = use_cases.sync_instructions(
                 SyncInstructionsCommand(
                     host_ids=host_ids or ["codex", "claude_code"],
@@ -405,12 +442,12 @@ def configure_server(  # noqa: PLR0915
                 warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="host_sync", scope="project")
 
     @server.tool(name="propose_skill")
     def propose_skill(
         latent_skill_id: str,
-        decision: Literal["sim", "s", "sempre", "e", "nao", "não", "n"] | None = None,
+        decision: Literal["yes", "y", "always", "no", "n"] | None = None,
     ) -> ToolResponse:
         """Review or decide a latent skill proposal.
 
@@ -418,6 +455,7 @@ def configure_server(  # noqa: PLR0915
         evidence, and explicit choices for a follow-up call.
         """
         try:
+            require_project_initialized()
             result = use_cases.propose_skill(
                 ProposeSkillCommand(
                     latent_skill_id=latent_skill_id,
@@ -431,7 +469,54 @@ def configure_server(  # noqa: PLR0915
                 data=_skill_proposal_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="skills.propose", scope="project")
+
+    @server.tool(name="track_latent_skill")
+    def track_latent_skill(
+        name: str,
+        description: str,
+        scope: Literal["project", "global"] = "project",
+        evidence_summary: str = "Manual user invocation via MCP.",
+        tags: list[str] | None = None,
+    ) -> ToolResponse:
+        """Explicitly track or increment recurrence for a latent skill opportunity."""
+        try:
+            latent_scope = _latent_skill_scope(scope)
+            if latent_scope is LatentSkillScope.project:
+                require_project_initialized()
+            result = use_cases.track_latent_skill(
+                TrackLatentSkillCommand(
+                    name=name,
+                    description=description,
+                    scope=latent_scope,
+                    origin="mcp",
+                    evidence_summary=evidence_summary,
+                    tags=tags or [],
+                )
+            )
+            skill = result.latent_skill
+            return _success_envelope(
+                operation="skills.track",
+                scope=skill.scope.value,
+                data={
+                    "latent_skill": {
+                        "id": skill.id,
+                        "name": skill.name,
+                        "description": skill.description,
+                        "scope": skill.scope.value,
+                        "status": skill.status.value,
+                        "recurrence_count": skill.recurrence_count,
+                        "metadata": skill.metadata,
+                        "created_at": format_utc_iso(skill.created_at),
+                        "updated_at": format_utc_iso(skill.updated_at),
+                    },
+                    "matched_existing": result.matched_existing,
+                    "audit_reference": result.audit_reference,
+                    "snapshot_reference": result.snapshot_reference,
+                },
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.track", scope=_raw_scope(scope))
 
     @server.tool(name="generate_skill")
     def generate_skill(
@@ -440,6 +525,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Generate the physical Agent Skill structure for an approved latent skill."""
         try:
+            require_project_initialized()
             result = use_cases.generate_skill(
                 GenerateSkillCommand(
                     latent_skill_id=latent_skill_id,
@@ -454,12 +540,13 @@ def configure_server(  # noqa: PLR0915
                 warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="skills.generate", scope="project")
 
     @server.tool(name="list_skills")
     def list_skills() -> ToolResponse:
         """List registered skills and candidates without mutating local state."""
         try:
+            require_project_initialized()
             result = use_cases.list_skills(ListSkillsCommand())
             return _success_envelope(
                 operation="skills.list",
@@ -467,12 +554,13 @@ def configure_server(  # noqa: PLR0915
                 data=result.to_payload(),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="skills.list", scope="all")
 
     @server.tool(name="get_skill_detail")
     def get_skill_detail(name_or_id: str) -> ToolResponse:
         """Inspect metadata and triggers for one registered skill."""
         try:
+            require_project_initialized()
             result = use_cases.get_skill_detail(GetSkillDetailCommand(name_or_id=name_or_id))
             return _success_envelope(
                 operation="skills.detail",
@@ -480,12 +568,13 @@ def configure_server(  # noqa: PLR0915
                 data=result.to_payload(),
             )
         except Exception as error:
-            return _mcp_tool_error(error)
+            return _mcp_tool_error(error, operation="skills.detail", scope="project")
 
     @server.tool(name="activate_skill")
     def activate_skill(latent_skill_id: str) -> ToolResponse:
         """Reactivate an ignored latent skill through the shared safe mutation pipeline."""
         try:
+            require_project_initialized()
             result = use_cases.activate_skill(
                 ActivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
             )
@@ -495,12 +584,17 @@ def configure_server(  # noqa: PLR0915
                 data=_skill_mutation_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+            return _mcp_tool_error(
+                _map_skill_mutation_error(error, latent_skill_id),
+                operation="skills.activate",
+                scope="project",
+            )
 
     @server.tool(name="deactivate_skill")
     def deactivate_skill(latent_skill_id: str) -> ToolResponse:
         """Deactivate an active latent skill without deleting its physical SKILL.md."""
         try:
+            require_project_initialized()
             result = use_cases.deactivate_skill(
                 DeactivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
             )
@@ -510,7 +604,11 @@ def configure_server(  # noqa: PLR0915
                 data=_skill_mutation_payload(result),
             )
         except Exception as error:
-            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+            return _mcp_tool_error(
+                _map_skill_mutation_error(error, latent_skill_id),
+                operation="skills.deactivate",
+                scope="project",
+            )
 
     @server.tool(name="update_skill")
     def update_skill(
@@ -522,6 +620,7 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Update skill metadata or markdown through the shared safe mutation pipeline."""
         try:
+            require_project_initialized()
             result = use_cases.update_skill(
                 UpdateSkillCommand(
                     latent_skill_id=latent_skill_id,
@@ -530,15 +629,21 @@ def configure_server(  # noqa: PLR0915
                     description=description.strip() if description is not None else None,
                     triggers=_normalize_triggers(triggers),
                     raw_markdown=raw_markdown,
+                    native_drift_decision="keep",
                 )
             )
             return _success_envelope(
                 operation="skills.update",
                 scope=result.latent_skill.scope.value,
                 data=_skill_mutation_payload(result),
+                warnings=result.warnings,
             )
         except Exception as error:
-            return _mcp_tool_error(_map_skill_mutation_error(error, latent_skill_id))
+            return _mcp_tool_error(
+                _map_skill_mutation_error(error, latent_skill_id),
+                operation="skills.update",
+                scope="project",
+            )
 
     return server
 
@@ -736,6 +841,15 @@ def _fact_scope(value: Literal["project", "global"]) -> FactScope:
     raise ValidationFailedError("scope must be 'project' or 'global'.")
 
 
+def _latent_skill_scope(value: Literal["project", "global"]) -> LatentSkillScope:
+    normalized = str(value).lower()
+    if normalized == "global":
+        return LatentSkillScope.global_
+    if normalized == "project":
+        return LatentSkillScope.project
+    raise ValidationFailedError("scope must be 'project' or 'global'.")
+
+
 def _fact_scope_optional(value: Literal["project", "global"] | None) -> FactScope | None:
     if value is None:
         return None
@@ -764,13 +878,13 @@ def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
     if value is None:
         return None
     normalized = value.strip().casefold()
-    if normalized in {"s", "sim", "y", "yes"}:
+    if normalized in {"y", "yes"}:
         return ProposeSkillDecision.sim
-    if normalized in {"e", "sempre", "always"}:
+    if normalized == "always":
         return ProposeSkillDecision.sempre
-    if normalized in {"n", "nao", "não", "no"}:
+    if normalized in {"n", "no"}:
         return ProposeSkillDecision.nao
-    raise ValidationFailedError("decision must be 'sim', 'sempre' or 'nao'.")
+    raise ValidationFailedError("decision must be 'yes', 'always' or 'no'.")
 
 
 def _error_envelope(error: Exception) -> dict[str, Any]:
@@ -783,7 +897,7 @@ def _error_envelope(error: Exception) -> dict[str, Any]:
     }
 
 
-def _mcp_tool_error(error: Exception) -> dict[str, Any]:
+def _mcp_tool_error(error: Exception, *, operation: str, scope: str) -> dict[str, Any]:
     if _error_code(error) == JSON_RPC_UNEXPECTED_ERROR:
         traceback.print_exc(file=sys.stderr)
     else:
@@ -792,8 +906,16 @@ def _mcp_tool_error(error: Exception) -> dict[str, Any]:
     payload = json_rpc_error_payload(error)
     return {
         "ok": False,
+        "operation": operation,
+        "scope": scope,
+        "data": {},
         "error": payload,
+        "warnings": [],
     }
+
+
+def _raw_scope(value: Any) -> str:
+    return str(value).lower()
 
 
 def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
@@ -801,7 +923,7 @@ def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Excepti
         f"Latent skill not found: {latent_skill_id}"
     ):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     return error
 

@@ -10,7 +10,7 @@ from universal_memory.application.skills import (
     TrackLatentSkillCommand,
     TrackLatentSkillUseCase,
 )
-from universal_memory.domain import SecretDetectedError, StorageError
+from universal_memory.domain import SecretDetectedError, StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEvent,
     LatentSkill,
@@ -244,6 +244,33 @@ def test_ambiguous_occurrence_creates_separate_candidate(tmp_path) -> None:
     assert result.matched_existing is False
     assert len(repository.skills) == EXPECTED_AMBIGUOUS_CANDIDATE_COUNT
     assert repository.read(existing.id).recurrence_count == 1
+
+
+@pytest.mark.parametrize(
+    ("name", "description"),
+    [
+        ("", "Descricao valida"),
+        ("   ", "Descricao valida"),
+        ("Skill valida", ""),
+        ("Skill valida", "   "),
+    ],
+)
+def test_rejects_blank_name_or_description(name: str, description: str) -> None:
+    repository = RecordingLatentSkillRepository()
+    use_case = TrackLatentSkillUseCase(repository=repository)
+
+    with pytest.raises(ValidationFailedError, match="Skill name and description are required"):
+        use_case.execute(
+            TrackLatentSkillCommand(
+                name=name,
+                description=description,
+                scope=LatentSkillScope.project,
+                origin="cli",
+                evidence_summary="evidencia",
+            )
+        )
+
+    assert repository.skills == []
 
 
 def test_blocks_secret_in_evidence_before_persisting(tmp_path) -> None:

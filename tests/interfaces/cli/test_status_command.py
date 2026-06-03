@@ -132,14 +132,14 @@ def test_status_human_output_summarizes_health(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "Memoria local inicializada." in captured.out
-    assert "Fatos por escopo/status" in captured.out
+    assert "Local memory initialized." in captured.out
+    assert "Facts by scope/status" in captured.out
     assert "project active: 1" in captured.out
-    assert "Regras ativas: 2" in captured.out
-    assert "Skills registradas: 3" in captured.out
-    assert "Tamanho aproximado: 42 bytes" in captured.out
+    assert "Active rules: 2" in captured.out
+    assert "Registered skills: 3" in captured.out
+    assert "Approximate size: 42 bytes" in captured.out
     assert "codex: success" in captured.out
-    assert "metodo=agents_md_compact_validator" in captured.out
+    assert "method=agents_md_compact_validator" in captured.out
 
 
 def test_status_bootstrap_uses_local_data_and_no_network(
@@ -162,7 +162,7 @@ def test_status_bootstrap_uses_local_data_and_no_network(
     assert captured.err == ""
     assert payload["data"]["initialized"] is True
     assert payload["data"]["active_rules_count"] == 0
-    assert payload["data"]["registered_skills_count"] == 0
+    assert payload["data"]["registered_skills_count"] == 1
 
 
 def test_cli_adapter_requires_composed_status_dependency() -> None:

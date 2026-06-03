@@ -30,6 +30,8 @@ from universal_memory.application.skills import (
     ProposeSkillDecision,
     ProposeSkillResult,
     SkillListItem,
+    UpdateSkillCommand,
+    UpdateSkillResult,
 )
 from universal_memory.bootstrap.mcp import build_server
 from universal_memory.domain import SecretDetectedError
@@ -42,6 +44,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.interfaces.mcp.server import (
     JSON_RPC_SECRET_DETECTED,
+    JSON_RPC_VALIDATION_FAILED,
     MCPUseCases,
     configure_server,
     create_mcp_server,
@@ -165,6 +168,28 @@ def generated_skill_result() -> GenerateSkillResult:
     )
 
 
+def updated_skill_result(*, warnings: list[str] | None = None) -> UpdateSkillResult:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id=SKILL_ID,
+        created_at=now,
+        updated_at=now,
+        name="TDD recorrente",
+        description="Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.active,
+        recurrence_count=3,
+        metadata={},
+    )
+    return UpdateSkillResult(
+        latent_skill=skill,
+        skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+        warnings=warnings or [],
+    )
+
+
 def list_skills_result() -> ListSkillsResult:
     return ListSkillsResult(
         skills=[
@@ -200,6 +225,98 @@ async def test_server_factory_initializes_fastmcp_offline() -> None:
 
     assert isinstance(server, FastMCP)
     assert server.name == "universal-memory"
+
+
+@pytest.mark.anyio
+async def test_real_mcp_rollback_removes_file_created_by_first_remember(tmp_path: Path) -> None:
+    server = build_server(project_root=tmp_path)
+
+    init_result = await server.call_tool("initialize_project", {})
+    remember_result = await server.call_tool(
+        "remember_fact",
+        {"content": "Fato antes do rollback.", "scope": "project", "tags": ["mcp"]},
+    )
+    rollback_result = await server.call_tool(
+        "rollback_scope",
+        {"scope": "project", "confirm": True},
+    )
+    init_content = init_result.structured_content
+    remember_content = remember_result.structured_content
+    rollback_content = rollback_result.structured_content
+
+    assert init_content is not None
+    assert remember_content is not None
+    assert rollback_content is not None
+    assert init_content["ok"] is True
+    assert remember_content["ok"] is True
+    assert rollback_content["ok"] is True
+    assert rollback_content["operation"] == "rollback"
+    assert not (tmp_path / ".umem" / "memory" / "facts.jsonl").exists()
+
+
+@pytest.mark.anyio
+async def test_real_mcp_blocks_project_mutation_before_initialization(tmp_path: Path) -> None:
+    server = build_server(project_root=tmp_path)
+
+    remember_result = await server.call_tool(
+        "remember_fact",
+        {"content": "MCP grava fatos corretamente", "scope": "project", "tags": ["mcp"]},
+    )
+    remember_content = remember_result.structured_content
+
+    assert not (tmp_path / ".umem").exists()
+
+    init_result = await server.call_tool("initialize_project", {})
+    init_content = init_result.structured_content
+
+    assert remember_content is not None
+    assert init_content is not None
+    assert remember_content["ok"] is False
+    assert remember_content["operation"] == "remember"
+    assert remember_content["scope"] == "project"
+    assert remember_content["error"]["code"] == JSON_RPC_VALIDATION_FAILED
+    assert "initialize_project" in remember_content["error"]["data"]["detail"]
+    assert init_content["ok"] is True
+    assert (tmp_path / ".umem" / "config.toml").is_file()
+    assert (tmp_path / ".umem" / "skills").is_dir()
+    assert (tmp_path / ".umem" / "benchmarks" / "retrieval-results.json").is_file()
+
+
+@pytest.mark.anyio
+async def test_destructive_mcp_errors_keep_uniform_envelope(tmp_path: Path) -> None:
+    server = build_server(project_root=tmp_path)
+
+    purge_result = await server.call_tool(
+        "purge_fact",
+        {"id": "11111111-1111-4111-8111-111111111111", "confirm": False},
+    )
+    rollback_result = await server.call_tool(
+        "rollback_scope",
+        {"scope": "project", "confirm": False},
+    )
+    purge_payload = purge_result.structured_content
+    rollback_payload = rollback_result.structured_content
+
+    assert purge_payload is not None
+    assert rollback_payload is not None
+    assert purge_payload == {
+        "ok": False,
+        "operation": "facts.purge",
+        "scope": "fact",
+        "data": {},
+        "error": purge_payload["error"],
+        "warnings": [],
+    }
+    assert purge_payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
+    assert rollback_payload == {
+        "ok": False,
+        "operation": "rollback",
+        "scope": "project",
+        "data": {},
+        "error": rollback_payload["error"],
+        "warnings": [],
+    }
+    assert rollback_payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
 
 
 @pytest.mark.anyio
@@ -392,7 +509,7 @@ async def test_propose_skill_without_decision_returns_proposal_for_follow_up(
             "auto_approval_recorded": False,
             "audit_reference": "",
             "snapshot_reference": "",
-            "choices": ["Sim", "Sempre", "Não"],
+            "choices": ["yes", "always", "no"],
             "requires_decision": True,
             "evidence": ["Pedido em story anterior", "Pedido em review"],
         },
@@ -422,7 +539,7 @@ async def test_propose_skill_with_decision_invokes_use_case_and_matches_cli_json
 
     result = await server.call_tool(
         "propose_skill",
-        {"latent_skill_id": SKILL_ID, "decision": "sempre"},
+        {"latent_skill_id": SKILL_ID, "decision": "always"},
     )
 
     assert received == [
@@ -485,6 +602,7 @@ async def test_generate_skill_tool_invokes_use_case_and_matches_cli_json_contrac
             "affected_paths": [".umem/skills/tdd-recorrente/SKILL.md"],
             "audit_reference": "audit-1",
             "snapshot_reference": "snapshot-1",
+            "native_installations": [],
             "collision_detected": False,
             "suggested_slug": None,
         },
@@ -537,6 +655,44 @@ async def test_list_skills_tool_invokes_use_case_and_matches_cli_json_contract(
         },
         "warnings": [],
     }
+
+
+@pytest.mark.anyio
+async def test_update_skill_tool_defaults_to_keep_and_preserves_warnings(
+    tmp_path: Path,
+) -> None:
+    received: list[UpdateSkillCommand] = []
+
+    def update_skill(command: UpdateSkillCommand) -> UpdateSkillResult:
+        received.append(command)
+        return updated_skill_result(warnings=["Warning: Native target has manual changes."])
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            update_skill=update_skill,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool(
+        "update_skill",
+        {"latent_skill_id": SKILL_ID, "name": "TDD recorrente"},
+    )
+
+    assert received == [
+        UpdateSkillCommand(
+            latent_skill_id=SKILL_ID,
+            origin="mcp",
+            name="TDD recorrente",
+            native_drift_decision="keep",
+        )
+    ]
+    assert result.structured_content is not None
+    assert result.structured_content["operation"] == "skills.update"
+    assert result.structured_content["warnings"] == ["Warning: Native target has manual changes."]
 
 
 @pytest.mark.anyio
@@ -827,4 +983,4 @@ async def test_bootstrap_server_uses_local_dependencies_without_network(
     assert payload["operation"] == "status"
     assert payload["data"]["initialized"] is True
     assert payload["data"]["active_rules_count"] == 0
-    assert payload["data"]["registered_skills_count"] == 0
+    assert payload["data"]["registered_skills_count"] == 1

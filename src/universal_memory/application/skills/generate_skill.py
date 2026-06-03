@@ -10,8 +10,18 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
+from universal_memory.application.skills.native_skill_sync import (
+    NativeDriftDecision,
+    NativeSkillSync,
+    merge_native_installations,
+)
 from universal_memory.domain import StorageError, ValidationFailedError
-from universal_memory.domain.entities import AuditEventScope, LatentSkill, LatentSkillScope
+from universal_memory.domain.entities import (
+    AuditEventScope,
+    LatentSkill,
+    LatentSkillScope,
+    RuntimeRegistry,
+)
 from universal_memory.domain.entities.latent_skill import LatentSkillStatus
 from universal_memory.domain.ports import LatentSkillRepository
 
@@ -22,6 +32,7 @@ class GenerateSkillCommand:
     origin: str
     update_existing: bool = False
     dry_run: bool = False
+    native_drift_decision: NativeDriftDecision | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +45,7 @@ class GenerateSkillResult:
     affected_paths: list[str]
     audit_reference: str
     snapshot_reference: str
+    native_installations: list[dict[str, Any]] = field(default_factory=list)
     collision_detected: bool = False
     suggested_slug: str | None = None
     warnings: list[str] = field(default_factory=list)
@@ -49,6 +61,7 @@ class GenerateSkillResult:
             "affected_paths": self.affected_paths,
             "audit_reference": self.audit_reference,
             "snapshot_reference": self.snapshot_reference,
+            "native_installations": self.native_installations,
             "collision_detected": self.collision_detected,
             "suggested_slug": self.suggested_slug,
         }
@@ -61,6 +74,7 @@ class _GenerateSkillSchema(BaseModel):
     origin: str = Field(min_length=1)
     update_existing: bool = False
     dry_run: bool = False
+    native_drift_decision: NativeDriftDecision | None = None
 
 
 class GenerateSkillUseCase:
@@ -71,11 +85,17 @@ class GenerateSkillUseCase:
         repository: LatentSkillRepository,
         safe_write_use_case: SafeWriteUseCase,
         global_safe_write_use_case: SafeWriteUseCase | None = None,
+        runtime_registry: RuntimeRegistry | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.repository = repository
         self.safe_write_use_case = safe_write_use_case
         self.global_safe_write_use_case = global_safe_write_use_case or safe_write_use_case
+        self.native_skill_sync = NativeSkillSync(
+            project_root=self.project_root,
+            safe_write_use_case=safe_write_use_case,
+            runtime_registry=runtime_registry,
+        )
 
     def execute(self, command: GenerateSkillCommand) -> GenerateSkillResult:
         validated = _GenerateSkillSchema.model_validate(command)
@@ -152,19 +172,46 @@ class GenerateSkillUseCase:
                     pass
             raise
 
-        affected_paths = [result.relative_path for result in write_results]
+        created_paths = [result.relative_path for result in write_results]
+        affected_paths = list(created_paths)
+        native_result = self.native_skill_sync.sync(
+            skill=skill,
+            slug=target_slug,
+            canonical_skill_file=skill_file,
+            origin=validated.origin,
+            drift_decision=validated.native_drift_decision,
+        )
+        affected_paths.extend(native_result.affected_paths)
+        if native_result.installations:
+            updated_skill = skill.model_copy(
+                update={
+                    "metadata": merge_native_installations(
+                        skill.metadata,
+                        native_result.installations,
+                    )
+                }
+            )
+            repository_write = self.repository.write(updated_skill, origin=validated.origin)
+            skill = updated_skill
+            if repository_write is not None:
+                write_results.append(repository_write)
+        audit_references = [result.audit_reference for result in write_results]
+        audit_references.extend(native_result.audit_references)
+        snapshot_references = [result.snapshot_reference for result in write_results]
+        snapshot_references.extend(native_result.snapshot_references)
         return GenerateSkillResult(
             latent_skill=skill,
             slug=target_slug,
             skill_dir=skill_dir,
             skill_file=skill_file,
-            created_paths=affected_paths,
+            created_paths=created_paths,
             affected_paths=affected_paths,
-            audit_reference=", ".join(result.audit_reference for result in write_results),
-            snapshot_reference=", ".join(result.snapshot_reference for result in write_results),
+            audit_reference=", ".join(audit_references),
+            snapshot_reference=", ".join(snapshot_references),
+            native_installations=native_result.installations,
             collision_detected=collision_detected,
             suggested_slug=target_slug if collision_detected else None,
-            warnings=warnings,
+            warnings=[*warnings, *native_result.warnings],
         )
 
     def _resolve_slug(

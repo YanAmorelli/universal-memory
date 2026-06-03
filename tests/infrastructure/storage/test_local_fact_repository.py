@@ -5,8 +5,14 @@ from uuid import uuid4
 
 import pytest
 
+from universal_memory.application.security import SafeWriteUseCase
 from universal_memory.domain import FactNotFoundError, StorageError
 from universal_memory.domain.entities import Fact, FactScope, FactStatus
+from universal_memory.infrastructure.security import (
+    EntropySecretScanner,
+    LocalAuditLogRepository,
+    LocalSnapshotRepository,
+)
 from universal_memory.infrastructure.storage import LocalFactRepository
 
 
@@ -59,6 +65,33 @@ def test_list_filters_by_scope_and_status_ordered_by_creation(tmp_path: Path) ->
     assert repository.list(scope=FactScope.project) == [project_active, project_stale]
     assert repository.list(status=FactStatus.active) == [project_active, global_active]
     assert repository.list(scope=FactScope.global_, status=FactStatus.active) == [global_active]
+
+
+def test_write_global_fact_uses_xdg_umem_data_path(tmp_path: Path) -> None:
+    global_home = tmp_path / "home"
+    data_root = tmp_path / ".umem"
+    safe_write = SafeWriteUseCase(
+        project_root=tmp_path,
+        secret_scanner=EntropySecretScanner(),
+        snapshot_repository=LocalSnapshotRepository(project_root=tmp_path, data_root=data_root),
+        audit_log_repository=LocalAuditLogRepository(project_root=tmp_path, data_root=data_root),
+    )
+    repository = LocalFactRepository(
+        project_root=tmp_path,
+        global_home=global_home,
+        safe_write_use_case=safe_write,
+    )
+    fact = make_fact(scope=FactScope.global_)
+
+    repository.write(fact)
+
+    global_data_root = global_home / ".local" / "share" / "umem"
+    global_path = global_data_root / "memory" / "facts.jsonl"
+    assert json.loads(global_path.read_text(encoding="utf-8").splitlines()[0])["id"] == fact.id
+    assert (global_data_root / "audit" / "events.jsonl").is_file()
+    assert (global_data_root / "snapshots" / "manifest.json").is_file()
+    assert not (global_home / ".umem" / "memory" / "facts.jsonl").exists()
+    assert not (data_root / "audit" / "events.jsonl").exists()
 
 
 def test_read_returns_fact_by_id_or_raises_typed_not_found(tmp_path: Path) -> None:

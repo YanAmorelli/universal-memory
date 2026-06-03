@@ -205,6 +205,47 @@ def test_deactivate_skill_marks_repository_ignored_audits_and_keeps_skill_file(
     }
 
 
+def test_deactivate_skill_disables_native_targets_and_keeps_canonical_skill(
+    tmp_path: Path,
+) -> None:
+    safe_write, repository, _snapshots, _audit, _scanner = build_safe_write(tmp_path)
+    skill = make_skill(status=LatentSkillStatus.active)
+    repository.write(skill)
+    canonical = write_skill_markdown(tmp_path)
+    native = tmp_path / ".opencode" / "skills" / "tdd-recorrente" / "SKILL.md"
+    native.parent.mkdir(parents=True)
+    native.write_text(canonical.read_text(encoding="utf-8"), encoding="utf-8")
+    skill = skill.model_copy(
+        update={
+            "metadata": {
+                **skill.metadata,
+                "native_installations": [
+                    {
+                        "runtime": "opencode",
+                        "path": ".opencode/skills/tdd-recorrente",
+                        "canonical_hash": "previous",
+                        "target_hash": "previous",
+                        "timestamp": "2026-01-01T00:00:00+00:00",
+                        "audit_reference": "audit-1",
+                    }
+                ],
+            }
+        }
+    )
+    repository.write(skill)
+
+    result = DeactivateSkillUseCase(
+        repository=repository,
+        project_root=tmp_path,
+        safe_write_use_case=safe_write,
+    ).execute(DeactivateSkillCommand(latent_skill_id=skill.id, origin="cli"))
+
+    assert canonical.is_file()
+    assert result.latent_skill.status == LatentSkillStatus.ignored
+    assert result.affected_paths == [".opencode/skills/tdd-recorrente"]
+    assert not native.parent.exists()
+
+
 def test_activate_skill_requires_existing_valid_skill_file_and_audits(
     tmp_path: Path,
 ) -> None:

@@ -81,7 +81,7 @@ def test_cli_human_unexpected_error_is_clean_by_default(
     captured = capsys.readouterr()
 
     assert exit_code == 1
-    assert "Erro inesperado" in captured.err
+    assert "Unexpected error" in captured.err
     assert "Traceback" not in captured.err
     assert SECRET_SENTINEL not in captured.err
     assert "/Users/test" not in captured.err

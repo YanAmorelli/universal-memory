@@ -13,7 +13,10 @@ from universal_memory.interfaces.cli.init_command import main as cli_main
 
 
 def make_result(
-    *, collision_detected: bool = False, suggested_slug: str | None = None
+    *,
+    collision_detected: bool = False,
+    suggested_slug: str | None = None,
+    warnings: list[str] | None = None,
 ) -> GenerateSkillResult:
     now = datetime.now(UTC)
     skill = LatentSkill(
@@ -44,6 +47,7 @@ def make_result(
         snapshot_reference="snapshot-1",
         collision_detected=collision_detected,
         suggested_slug=suggested_slug,
+        warnings=warnings or [],
     )
 
 
@@ -54,7 +58,7 @@ def test_skills_generate_human_output_shows_plan_and_prompts(monkeypatch, capsys
         seen.append(command)
         return make_result()
 
-    monkeypatch.setattr("builtins.input", lambda _prompt: "s")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
     exit_code = cli_main(
@@ -68,10 +72,10 @@ def test_skills_generate_human_output_shows_plan_and_prompts(monkeypatch, capsys
         GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=True),
         GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=False),
     ]
-    assert "Operacao: skills.generate" in output
+    assert "Operation: skills.generate" in output
     assert ".umem/skills/tdd-recorrente/SKILL.md" in output
     assert "Snapshot: snapshot-" in output
-    assert "Auditoria: audit-" in output
+    assert "Audit: audit-" in output
 
 
 def test_skills_generate_yes_runs_without_prompt(capsys, monkeypatch) -> None:
@@ -135,6 +139,7 @@ def test_skills_generate_json_is_pure_success_envelope(capsys, monkeypatch) -> N
             ],
             "audit_reference": "audit-1",
             "snapshot_reference": "snapshot-1",
+            "native_installations": [],
             "collision_detected": False,
             "suggested_slug": None,
         },
@@ -156,7 +161,7 @@ def test_skills_generate_non_tty_requires_yes(capsys, monkeypatch) -> None:
     output = capsys.readouterr().err
 
     assert exit_code == 1
-    assert "Ambiente nao-TTY exige --yes para gerar skill." in output
+    assert "Non-TTY environment requires --yes to generate a skill." in output
 
 
 def test_skills_generate_user_cancels(monkeypatch, capsys) -> None:
@@ -177,7 +182,7 @@ def test_skills_generate_user_cancels(monkeypatch, capsys) -> None:
     output = capsys.readouterr().out
 
     assert exit_code == 1
-    assert "Geracao de skill cancelada." in output
+    assert "Skill generation cancelled." in output
     assert seen == [
         GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=True),
     ]
@@ -239,5 +244,44 @@ def test_skills_generate_collision_interactive_alternative(monkeypatch, capsys) 
         ),
         GenerateSkillCommand(
             latent_skill_id="skill-1", origin="cli", dry_run=False, update_existing=False
+        ),
+    ]
+
+
+def test_skills_generate_prompts_overwrite_for_native_drift(monkeypatch, capsys) -> None:
+    seen: list[GenerateSkillCommand] = []
+
+    def generate(command: GenerateSkillCommand) -> GenerateSkillResult:
+        seen.append(command)
+        if command.dry_run or command.native_drift_decision == "overwrite":
+            return make_result()
+        return make_result(
+            warnings=[
+                "Warning: Native target has manual changes. Overwriting it might break your "
+                "current agent workflow. Keep local version or Overwrite with canonical library "
+                "version? [Keep/Overwrite]"
+            ]
+        )
+
+    inputs = ["y", "Overwrite"]
+    monkeypatch.setattr("builtins.input", lambda _prompt: inputs.pop(0))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+
+    exit_code = cli_main(
+        ["skills", "generate", "skill-1"],
+        generate_skill_command=generate,
+    )
+
+    assert exit_code == 0
+    assert seen == [
+        GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=True),
+        GenerateSkillCommand(latent_skill_id="skill-1", origin="cli", dry_run=False),
+        GenerateSkillCommand(
+            latent_skill_id="skill-1",
+            origin="cli",
+            update_existing=True,
+            dry_run=False,
+            native_drift_decision="overwrite",
         ),
     ]

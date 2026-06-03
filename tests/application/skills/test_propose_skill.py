@@ -137,7 +137,7 @@ def test_preview_presents_explicit_choices_and_evidence_without_mutation(tmp_pat
     result = use_case.execute(ProposeSkillCommand(latent_skill_id=skill.id, origin="cli"))
 
     assert result.requires_decision is True
-    assert result.choices == ["Sim", "Sempre", "Não"]
+    assert result.choices == ["yes", "always", "no"]
     assert result.proposal["suggested_name"] == "TDD recorrente"
     assert result.proposal["purpose"] == skill.description
     assert result.proposal["scope"] == "project"
@@ -201,7 +201,7 @@ def test_sempre_accepts_and_records_reversible_auto_approval_preference(
     assert result.auto_approval_recorded is True
     assert ".umem/config.toml" in {snapshot.relative_path for snapshot in snapshots.written}
     assert "update_skill_auto_approval" in {event.action for event in audit.written}
-    assert result.rollback_hint == "Use o snapshot registrado para reverter a preferencia."
+    assert result.rollback_hint == "Use the recorded snapshot to revert the preference."
 
 
 def test_nao_ignores_latent_skill_without_creating_skill_files(tmp_path: Path) -> None:
@@ -243,7 +243,7 @@ def test_propose_skill_validation_raises_on_invalid_initial_status(tmp_path: Pat
                 origin="cli",
             )
         )
-    assert "Nao e possivel propor ou decidir" in str(exc.value)
+    assert "Cannot propose or decide" in str(exc.value)
 
 
 def test_record_auto_approval_transaction_rollback_on_failure(tmp_path: Path) -> None:

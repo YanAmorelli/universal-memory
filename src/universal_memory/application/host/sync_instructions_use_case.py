@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from universal_memory.application.host.setup_host_use_case import (
+    DEFAULT_MAX_MANAGED_CHARS,
+    DEFAULT_MAX_MANAGED_LINES,
     ConfigureHostCommand,
     ConfigureHostResult,
     ConfigureHostUseCase,
     InstructionBlock,
+    _resolve_limits,
     _safe_relative_path,
 )
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
@@ -22,7 +25,7 @@ from universal_memory.domain.entities import (
     RuleStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
-from universal_memory.domain.ports import RuleRepository
+from universal_memory.domain.ports import FactRepository, RuleRepository
 from universal_memory.infrastructure.config.toml_loader import load_config, update_project_config
 
 DEFAULT_SYNC_HOSTS = ("codex", "claude_code")
@@ -36,8 +39,8 @@ CLAUDE_SUPPORTED_CLASSIFICATIONS = {
 class SyncInstructionsCommand:
     host_ids: list[str] = field(default_factory=lambda: list(DEFAULT_SYNC_HOSTS))
     apply: bool = False
-    max_managed_lines: int = 100
-    max_managed_chars: int = 4000
+    max_managed_lines: int = DEFAULT_MAX_MANAGED_LINES
+    max_managed_chars: int = DEFAULT_MAX_MANAGED_CHARS
     origin: str = "host_sync"
 
 
@@ -73,22 +76,39 @@ class SyncInstructionsUseCase:
         project_root: Path,
         safe_write_use_case: SafeWriteUseCase,
         rule_repository: RuleRepository,
+        fact_repository: FactRepository | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.rule_repository = rule_repository
+        self.fact_repository = fact_repository
         self.configure_host_use_case = ConfigureHostUseCase(
             project_root=project_root,
             safe_write_use_case=safe_write_use_case,
+            fact_repository=fact_repository,
         )
 
     def execute(self, command: SyncInstructionsCommand) -> SyncInstructionsResult:
+        max_lines, max_chars = _resolve_limits(
+            self.project_root,
+            command.max_managed_lines,
+            command.max_managed_chars,
+        )
+        command = replace(command, max_managed_lines=max_lines, max_managed_chars=max_chars)
+
         host_ids, config_warnings = self._host_ids_for_command(command.host_ids)
         all_blocks = self._active_rule_blocks()
         plans = self._plan_commands(host_ids, all_blocks, command)
 
         results = []
-        for host_id, blocks in plans:
-            results.append(self._execute_host_plan(host_id, blocks, command))
+        for host_id, blocks, shared_manifest_available in plans:
+            results.append(
+                self._execute_host_plan(
+                    host_id,
+                    blocks,
+                    command,
+                    shared_manifest_available=shared_manifest_available,
+                )
+            )
 
         planned_changes = self._unique_changes(
             change for result in results for change in result.planned_changes
@@ -119,6 +139,8 @@ class SyncInstructionsUseCase:
         host_id: str,
         blocks: list[InstructionBlock],
         command: SyncInstructionsCommand,
+        *,
+        shared_manifest_available: bool | None,
     ) -> ConfigureHostResult:
         host = self.configure_host_use_case.host_for(host_id)
         target = self.configure_host_use_case.primary_target_for(host)
@@ -126,6 +148,7 @@ class SyncInstructionsUseCase:
             host_id=host_id,
             apply=command.apply,
             instruction_blocks=blocks,
+            shared_manifest_available=shared_manifest_available,
             max_managed_lines=command.max_managed_lines,
             max_managed_chars=command.max_managed_chars,
             origin=command.origin,
@@ -254,8 +277,8 @@ class SyncInstructionsUseCase:
         host_ids: list[str],
         blocks: list[InstructionBlock],
         command: SyncInstructionsCommand,
-    ) -> list[tuple[str, list[InstructionBlock]]]:
-        plans: list[tuple[str, list[InstructionBlock]]] = []
+    ) -> list[tuple[str, list[InstructionBlock], bool | None]]:
+        plans: list[tuple[str, list[InstructionBlock], bool | None]] = []
         should_write_agents = "codex" in host_ids and any(
             block.resolved_classification
             in {
@@ -267,25 +290,32 @@ class SyncInstructionsUseCase:
             for block in blocks
         )
         if should_write_agents:
-            plans.append(("codex", blocks))
+            plans.append(("codex", blocks, None))
         if "claude_code" in host_ids:
+            claude_classifications = set(CLAUDE_SUPPORTED_CLASSIFICATIONS)
+            if not should_write_agents:
+                claude_classifications.add(InstructionClassification.shared_policy)
             plans.append(
                 (
                     "claude_code",
                     [
                         block
                         for block in blocks
-                        if block.resolved_classification in CLAUDE_SUPPORTED_CLASSIFICATIONS
+                        if block.resolved_classification in claude_classifications
                     ],
+                    should_write_agents,
                 )
             )
-        if not plans:
+        if not plans and host_ids:
             raise ValidationFailedError("Nenhum host suportado informado para sincronizacao.")
         return plans
 
     def _active_rule_blocks(self) -> list[InstructionBlock]:
+        blocks = []
         rules = self.rule_repository.list(status=RuleStatus.active)
-        return [self._rule_to_block(rule) for rule in rules]
+        for rule in rules:
+            blocks.append(self._rule_to_block(rule))
+        return blocks
 
     def _rule_to_block(self, rule: Rule) -> InstructionBlock:
         classification = self._classification_for(rule)
@@ -353,7 +383,7 @@ class SyncInstructionsUseCase:
             for h in to_enable:
                 if h not in new_enabled:
                     new_enabled.append(h)
-            update_project_config(self.project_root, {"hosts": {"enabled": new_enabled}})
+            update_project_config(self.project_root, {"runtimes": {"enabled": new_enabled}})
 
         return normalized, warnings
 
@@ -363,21 +393,20 @@ class SyncInstructionsUseCase:
         except (OSError, InvalidConfigError, StorageError) as exc:
             raise ValidationFailedError(f"Falha ao ler configuracao do projeto: {exc}") from exc
 
-        raw_hosts = loaded.merged.get("hosts")
-        if raw_hosts is None:
+        raw_runtimes = loaded.merged.get("runtimes")
+        if raw_runtimes is None:
             return None
-        if not isinstance(raw_hosts, dict):
-            raise ValidationFailedError("Configuracao invalida: hosts deve ser uma tabela.")
-        raw_enabled = raw_hosts.get("enabled")
+        if not isinstance(raw_runtimes, dict):
+            raise ValidationFailedError("Configuracao invalida: runtimes deve ser uma tabela.")
+        raw_enabled = raw_runtimes.get("enabled")
         if raw_enabled is None:
             return None
         if not isinstance(raw_enabled, list):
-            raise ValidationFailedError("Configuracao invalida: hosts.enabled deve ser uma lista.")
+            raise ValidationFailedError(
+                "Configuracao invalida: runtimes.enabled deve ser uma lista."
+            )
         enabled = [str(host_id) for host_id in raw_enabled]
-        unsupported = [host_id for host_id in enabled if host_id not in DEFAULT_SYNC_HOSTS]
-        if unsupported:
-            raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
-        return enabled
+        return [host_id for host_id in enabled if host_id in DEFAULT_SYNC_HOSTS]
 
     def _instruction_targets(self, planned_changes: list[dict[str, str]]) -> list[str]:
         targets: list[str] = []

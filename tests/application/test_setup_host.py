@@ -190,6 +190,19 @@ def test_setup_preserves_manual_content_outside_managed_block(
     assert content.endswith("Tail note.\n")
     assert "old" not in content
     assert "Universal Memory Active Policy" in content
+    managed_block = content.split("<!-- UMEM: START -->", 1)[1].split("<!-- UMEM: END -->", 1)[0]
+    assert "umem context --scope project" in managed_block
+    assert "umem status --format json" in managed_block
+    assert "umem skills list --format json" in managed_block
+    assert "umem skills detail <skill-id-or-name> --format json" in managed_block
+    assert ".umem/skills/use-universal-memory/SKILL.md" in managed_block
+    assert "proactively capture new memory" in managed_block
+    assert "MANDATORY OUTPUT FORMAT" in managed_block
+    assert "Required Bootstrap" in managed_block
+    assert "mandatory preflight at the start of a conversation" in managed_block
+    assert "skill workflow, slash command, or structured agent workflow" in managed_block
+    assert "If `umem` is unavailable or not initialized" in managed_block
+    assert "Perform this bootstrap only at the start of a conversation" in managed_block
 
 
 def test_check_rejects_massive_agents_md_dump(
@@ -275,7 +288,7 @@ def test_claude_md_target_allows_only_delta_classifications(
     ]
 
 
-def test_claude_code_setup_writes_only_delta_blocks_to_claude_md(
+def test_claude_code_setup_without_agents_md_includes_shared_policy_in_claude_md(
     tmp_path: Path,
     configured_use_case: ConfigureHostUseCase,
 ) -> None:
@@ -316,7 +329,88 @@ def test_claude_code_setup_writes_only_delta_blocks_to_claude_md(
     assert "<!-- UMEM: END -->" in claude_content
     assert "Use CLAUDE.md only for Claude-specific deltas." in claude_content
     assert "When editing Claude instructions, preserve manual content." in claude_content
+    assert "Use relative paths in specs, code and docs." in claude_content
+    assert "Claude Code Universal Memory Instructions" in claude_content
+    assert "mandatory preflight at the start of a conversation" in claude_content
+    assert "umem status --format json" in claude_content
+    assert "umem skills list --format json" in claude_content
+    assert "umem skills detail <skill-id-or-name> --format json" in claude_content
+    assert "If `umem` is unavailable or not initialized" in claude_content
+    assert "Perform this bootstrap only at the start of a conversation" in claude_content
+    assert "proactively capture new memory" in claude_content
+    assert "## Operational Rules" in claude_content
+
+
+def test_claude_code_setup_with_agents_md_writes_only_delta_blocks_to_claude_md(
+    tmp_path: Path,
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    (tmp_path / "AGENTS.md").write_text(
+        "<!-- UMEM: START -->\n"
+        "- (shared_policy) Use relative paths in specs, code and docs.\n"
+        "<!-- UMEM: END -->\n",
+        encoding="utf-8",
+    )
+
+    configured_use_case.execute(
+        ConfigureHostCommand(
+            host_id="claude_code",
+            apply=True,
+            instruction_blocks=[
+                InstructionBlock(
+                    title="Shared Policy",
+                    content="Use relative paths in specs, code and docs.",
+                    classification="shared_policy",
+                ),
+                InstructionBlock(
+                    title="Claude Delta",
+                    content="Use CLAUDE.md only for Claude-specific deltas.",
+                    classification="provider_delta",
+                ),
+            ],
+            origin="test",
+        )
+    )
+
+    claude_content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+
+    assert "Use CLAUDE.md only for Claude-specific deltas." in claude_content
     assert "Use relative paths in specs, code and docs." not in claude_content
+    assert "contains only Claude Code-specific deltas" in claude_content
+    assert "umem status --format json" in claude_content
+    assert "umem skills detail <skill-id-or-name> --format json" in claude_content
+    assert "mandatory preflight at the start of a conversation" in claude_content
+    assert "If `umem` is unavailable or not initialized" in claude_content
+
+
+def test_claude_code_setup_without_deltas_passes_own_read_validator(
+    tmp_path: Path,
+    configured_use_case_with_audit: tuple[ConfigureHostUseCase, InMemoryAuditLogRepository],
+) -> None:
+    configured_use_case, audit_log_repository = configured_use_case_with_audit
+
+    configured_use_case.execute(
+        ConfigureHostCommand(host_id="claude_code", apply=True, origin="test")
+    )
+
+    result = configured_use_case.execute(
+        ConfigureHostCommand(host_id="claude_code", check=True, origin="test")
+    )
+    claude_content = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8")
+
+    assert result.validation_status == "success"
+    assert result.warnings == []
+    assert "universal-memory" in claude_content
+    assert "umem context" in claude_content
+    assert "umem status" in claude_content
+    assert "umem skills list --format json" in claude_content
+    assert "umem skills detail <skill-id-or-name> --format json" in claude_content
+    assert ".umem/skills/use-universal-memory/SKILL.md" in claude_content
+    assert "record it as global memory" in claude_content
+    assert "MANDATORY OUTPUT FORMAT" in claude_content
+    assert "--scope global" not in claude_content
+    details = json.loads(audit_log_repository.events[-1].details or "{}")
+    assert details["checks"]["managed_block_has_mcp_reference"] is True
 
 
 def test_claude_code_setup_preserves_manual_content_outside_managed_block(
@@ -349,7 +443,7 @@ def test_claude_code_setup_preserves_manual_content_outside_managed_block(
     assert content.startswith("# Claude manual notes\n\nKeep this.")
     assert content.endswith("Tail note.\n")
     assert "old" not in content
-    assert "Claude Delta Instructions" in content
+    assert "Claude Code Universal Memory Instructions" in content
     assert "Prefer CLAUDE.md deltas over duplicated shared policy." in content
 
 

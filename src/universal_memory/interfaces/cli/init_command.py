@@ -37,7 +37,7 @@ from universal_memory.application.memory import (
     RememberFactResult,
 )
 from universal_memory.application.onboarding.setup_project import (
-    DEFAULT_ENABLED_HOST_IDS,
+    DEFAULT_ENABLED_RUNTIME_IDS,
     SetupProjectResult,
     setup_project,
 )
@@ -63,8 +63,19 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    TrackLatentSkillCommand,
+    TrackLatentSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
+)
+from universal_memory.application.skills.native_skill_sync import NativeDriftDecision
+from universal_memory.application.update import (
+    UpdateBenchmarksCommand,
+    UpdateBenchmarksResult,
+    UpdateCheckCommand,
+    UpdateCheckResult,
+    UpdateMigrateCommand,
+    UpdateMigrateResult,
 )
 from universal_memory.domain import (
     ConfigValidationPort,
@@ -80,11 +91,17 @@ from universal_memory.domain.entities import (
     FactScope,
     FactStatus,
     LatentSkillScope,
+    LatentSkillStatus,
     Snapshot,
     SnapshotScope,
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
+from universal_memory.domain.entities.runtime import RuntimeAdapter, default_runtime_registry
+from universal_memory.interfaces.cli.message_catalog import (
+    DEFAULT_LOCALE,
+    human_message,
+)
 from universal_memory.interfaces.errors import (
     DOMAIN_ERROR_TYPES,
     error_descriptor,
@@ -94,9 +111,36 @@ from universal_memory.interfaces.errors import (
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
+INIT_SPLASH_MARKER = "USB"
+INIT_SPLASH_LINES = (
+    "  umem",
+    " ┌───┐┌───────────────────────────────────────┐\n │USB├┤                  (o)                  ├┐\n └───┘└=======================================┘│\n                                               ┘",
+    " [USB] == portable memory for AI agents == ",
+)
+INIT_SPLASH_ANSI = """\x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m       \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄▄▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[m
+\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m    \x1b[m
+\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[m
+\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m     \x1b[38;5;255;48;5;255m▄\x1b[m
+\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m    \x1b[m
+\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m     \x1b[38;5;255;48;5;255m▄\x1b[38;5;254;48;5;255m▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[m
+\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m     \x1b[38;5;255;48;5;255m▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄\x1b[38;5;255;48;5;254m▄\x1b[38;5;252;48;5;251m▄\x1b[38;5;188;48;5;188m▄\x1b[38;5;253;48;5;188m▄▄\x1b[38;5;254;48;5;253m▄▄\x1b[38;5;253;48;5;188m▄\x1b[38;5;254;48;5;253m▄▄\x1b[38;5;253;48;5;253m▄\x1b[38;5;253;48;5;188m▄\x1b[38;5;253;48;5;253m▄▄▄▄▄▄\x1b[38;5;188;48;5;253m▄\x1b[38;5;253;48;5;253m▄▄▄▄▄▄▄▄▄▄▄▄▄▄\x1b[38;5;253;48;5;188m▄\x1b[38;5;252;48;5;253m▄\x1b[38;5;253;48;5;253m▄\x1b[38;5;253;48;5;188m▄\x1b[38;5;253;48;5;253m▄▄▄\x1b[38;5;252;48;5;253m▄▄\x1b[38;5;254;48;5;254m▄\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m      \x1b[m
+\x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄▄\x1b[38;5;254;48;5;255m▄\x1b[38;5;188;48;5;252m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;251;48;5;252m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;252;48;5;252m▄\x1b[38;5;252;48;5;251m▄▄\x1b[38;5;252;48;5;252m▄\x1b[38;5;251;48;5;252m▄\x1b[38;5;252;48;5;252m▄\x1b[38;5;251;48;5;188m▄\x1b[38;5;7;48;5;252m▄\x1b[38;5;251;48;5;252m▄\x1b[38;5;252;48;5;251m▄▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;252;48;5;251m▄▄\x1b[38;5;251;48;5;251m▄▄\x1b[38;5;7;48;5;251m▄▄\x1b[38;5;250;48;5;252m▄\x1b[38;5;7;48;5;252m▄▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;252;48;5;251m▄\x1b[38;5;251;48;5;253m▄\x1b[38;5;7;48;5;252m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;251;48;5;252m▄\x1b[38;5;250;48;5;252m▄\x1b[38;5;252;48;5;252m▄▄▄\x1b[38;5;7;48;5;252m▄\x1b[38;5;251;48;5;252m▄\x1b[38;5;252;48;5;251m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;251;48;5;253m▄\x1b[38;5;255;48;5;255m▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[m
+\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄\x1b[38;5;247;48;5;251m▄\x1b[38;5;248;48;5;7m▄\x1b[38;5;247;48;5;7m▄\x1b[38;5;102;48;5;250m▄\x1b[38;5;247;48;5;250m▄\x1b[38;5;247;48;5;7m▄▄\x1b[38;5;248;48;5;251m▄\x1b[38;5;188;48;5;188m▄\x1b[38;5;251;48;5;251m▄▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;251;48;5;7m▄▄\x1b[38;5;251;48;5;251m▄▄▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;251;48;5;252m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;246;48;5;251m▄\x1b[38;5;243;48;5;248m▄\x1b[38;5;246;48;5;250m▄\x1b[38;5;245;48;5;102m▄\x1b[38;5;247;48;5;243m▄\x1b[38;5;250;48;5;246m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;248;48;5;250m▄\x1b[38;5;7;48;5;250m▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;7;48;5;251m▄▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;252;48;5;251m▄\x1b[38;5;251;48;5;250m▄\x1b[38;5;251;48;5;249m▄\x1b[38;5;250;48;5;249m▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;7;48;5;251m▄▄▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;7;48;5;251m▄▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;254;48;5;188m▄\x1b[38;5;246;48;5;249m▄\x1b[38;5;253;48;5;255m▄\x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m ▄\x1b[48;5;255m    \x1b[m
+\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄\x1b[38;5;247;48;5;247m▄▄▄\x1b[38;5;247;48;5;245m▄\x1b[38;5;247;48;5;247m▄\x1b[38;5;246;48;5;247m▄\x1b[38;5;246;48;5;246m▄\x1b[38;5;248;48;5;248m▄\x1b[38;5;253;48;5;253m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;250;48;5;251m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;250;48;5;7m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;251;48;5;252m▄\x1b[38;5;250;48;5;252m▄\x1b[38;5;250;48;5;251m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;250;48;5;7m▄\x1b[38;5;249;48;5;7m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;243;48;5;251m▄\x1b[38;5;248;48;5;247m▄\x1b[38;5;249;48;5;145m▄\x1b[38;5;7;48;5;245m▄\x1b[38;5;245;48;5;242m▄\x1b[38;5;247;48;5;247m▄\x1b[38;5;250;48;5;145m▄\x1b[38;5;250;48;5;251m▄\x1b[38;5;248;48;5;242m▄\x1b[38;5;247;48;5;245m▄\x1b[38;5;250;48;5;250m▄\x1b[38;5;249;48;5;249m▄\x1b[38;5;250;48;5;145m▄\x1b[38;5;250;48;5;250m▄\x1b[38;5;250;48;5;251m▄\x1b[38;5;249;48;5;7m▄\x1b[38;5;145;48;5;251m▄\x1b[38;5;248;48;5;7m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;249;48;5;7m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;250;48;5;251m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;249;48;5;250m▄\x1b[38;5;250;48;5;251m▄\x1b[38;5;249;48;5;251m▄\x1b[38;5;250;48;5;250m▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;253;48;5;253m▄\x1b[38;5;247;48;5;246m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m    \x1b[m
+\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[38;5;246;48;5;247m▄\x1b[38;5;247;48;5;246m▄\x1b[38;5;247;48;5;247m▄\x1b[38;5;8;48;5;246m▄\x1b[38;5;246;48;5;246m▄\x1b[38;5;246;48;5;245m▄\x1b[38;5;246;48;5;246m▄\x1b[38;5;247;48;5;247m▄\x1b[38;5;253;48;5;254m▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;251;48;5;250m▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;7;48;5;250m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;250;48;5;251m▄\x1b[38;5;249;48;5;251m▄\x1b[38;5;249;48;5;250m▄\x1b[38;5;250;48;5;250m▄\x1b[38;5;145;48;5;7m▄\x1b[38;5;250;48;5;250m▄\x1b[38;5;250;48;5;249m▄\x1b[38;5;250;48;5;246m▄\x1b[38;5;243;48;5;248m▄\x1b[38;5;248;48;5;8m▄\x1b[38;5;248;48;5;250m▄\x1b[38;5;8;48;5;8m▄\x1b[38;5;243;48;5;240m▄\x1b[38;5;243;48;5;250m▄\x1b[38;5;246;48;5;145m▄\x1b[38;5;248;48;5;246m▄\x1b[38;5;251;48;5;145m▄\x1b[38;5;250;48;5;249m▄\x1b[38;5;249;48;5;7m▄\x1b[38;5;250;48;5;249m▄▄\x1b[38;5;248;48;5;250m▄\x1b[38;5;145;48;5;250m▄\x1b[38;5;7;48;5;249m▄\x1b[38;5;249;48;5;250m▄▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;251;48;5;7m▄\x1b[38;5;145;48;5;7m▄\x1b[38;5;145;48;5;249m▄\x1b[38;5;250;48;5;7m▄\x1b[38;5;249;48;5;249m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;254;48;5;254m▄\x1b[38;5;248;48;5;248m▄\x1b[38;5;7;48;5;250m▄\x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[m
+\x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄\x1b[38;5;246;48;5;247m▄\x1b[38;5;247;48;5;247m▄▄\x1b[38;5;248;48;5;248m▄\x1b[38;5;248;48;5;249m▄\x1b[38;5;247;48;5;247m▄\x1b[38;5;247;48;5;246m▄\x1b[38;5;248;48;5;247m▄\x1b[38;5;253;48;5;253m▄\x1b[38;5;251;48;5;251m▄▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;251;48;5;252m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;250;48;5;7m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;249;48;5;250m▄\x1b[38;5;7;48;5;250m▄▄\x1b[38;5;251;48;5;250m▄\x1b[38;5;7;48;5;7m▄\x1b[38;5;7;48;5;250m▄\x1b[38;5;250;48;5;250m▄\x1b[38;5;250;48;5;249m▄\x1b[38;5;7;48;5;246m▄\x1b[38;5;250;48;5;247m▄\x1b[38;5;247;48;5;242m▄\x1b[38;5;243;48;5;241m▄\x1b[38;5;246;48;5;241m▄\x1b[38;5;250;48;5;247m▄\x1b[38;5;250;48;5;7m▄▄\x1b[38;5;249;48;5;7m▄\x1b[38;5;7;48;5;7m▄\x1b[48;5;250m \x1b[38;5;7;48;5;251m▄\x1b[38;5;7;48;5;250m▄▄▄\x1b[38;5;249;48;5;250m▄\x1b[38;5;251;48;5;250m▄\x1b[38;5;250;48;5;7m▄\x1b[38;5;249;48;5;251m▄\x1b[38;5;250;48;5;251m▄\x1b[38;5;250;48;5;249m▄\x1b[38;5;250;48;5;7m▄▄\x1b[38;5;250;48;5;249m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;251;48;5;255m▄\x1b[38;5;248;48;5;247m▄\x1b[38;5;254;48;5;252m▄\x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄\x1b[48;5;255m    \x1b[m
+\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[38;5;255;48;5;254m▄\x1b[38;5;253;48;5;188m▄\x1b[38;5;188;48;5;251m▄\x1b[38;5;252;48;5;7m▄\x1b[38;5;251;48;5;250m▄\x1b[38;5;251;48;5;249m▄\x1b[38;5;251;48;5;145m▄\x1b[38;5;251;48;5;250m▄\x1b[38;5;253;48;5;253m▄\x1b[38;5;7;48;5;7m▄▄\x1b[38;5;250;48;5;7m▄\x1b[38;5;251;48;5;250m▄\x1b[38;5;249;48;5;249m▄\x1b[38;5;250;48;5;250m▄\x1b[38;5;249;48;5;250m▄\x1b[38;5;249;48;5;7m▄\x1b[38;5;248;48;5;250m▄\x1b[38;5;247;48;5;250m▄▄\x1b[38;5;248;48;5;251m▄\x1b[38;5;145;48;5;7m▄\x1b[38;5;250;48;5;7m▄\x1b[38;5;249;48;5;249m▄\x1b[38;5;248;48;5;250m▄\x1b[38;5;7;48;5;251m▄\x1b[38;5;251;48;5;251m▄\x1b[38;5;250;48;5;250m▄\x1b[38;5;145;48;5;248m▄\x1b[38;5;145;48;5;249m▄\x1b[38;5;145;48;5;248m▄\x1b[38;5;249;48;5;249m▄\x1b[38;5;247;48;5;250m▄\x1b[38;5;247;48;5;7m▄\x1b[38;5;248;48;5;250m▄\x1b[38;5;248;48;5;248m▄\x1b[38;5;248;48;5;145m▄\x1b[38;5;248;48;5;250m▄\x1b[38;5;145;48;5;250m▄\x1b[38;5;145;48;5;249m▄\x1b[38;5;250;48;5;7m▄\x1b[38;5;249;48;5;251m▄\x1b[38;5;249;48;5;7m▄\x1b[38;5;248;48;5;7m▄\x1b[38;5;249;48;5;249m▄\x1b[38;5;145;48;5;250m▄\x1b[38;5;145;48;5;251m▄\x1b[38;5;249;48;5;250m▄\x1b[38;5;250;48;5;145m▄\x1b[38;5;252;48;5;248m▄\x1b[38;5;254;48;5;251m▄\x1b[38;5;254;48;5;254m▄\x1b[38;5;255;48;5;255m▄▄▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[m
+\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄\x1b[38;5;255;48;5;254m▄▄\x1b[38;5;255;48;5;253m▄▄\x1b[38;5;254;48;5;188m▄\x1b[38;5;254;48;5;253m▄\x1b[38;5;253;48;5;253m▄\x1b[38;5;248;48;5;251m▄\x1b[38;5;247;48;5;249m▄▄\x1b[38;5;247;48;5;145m▄▄\x1b[38;5;247;48;5;248m▄▄▄▄\x1b[38;5;247;48;5;247m▄\x1b[38;5;247;48;5;248m▄▄\x1b[38;5;247;48;5;249m▄▄▄\x1b[38;5;248;48;5;145m▄\x1b[38;5;247;48;5;248m▄\x1b[38;5;248;48;5;247m▄\x1b[38;5;248;48;5;248m▄\x1b[38;5;248;48;5;247m▄▄\x1b[38;5;248;48;5;248m▄\x1b[38;5;248;48;5;247m▄\x1b[38;5;248;48;5;246m▄\x1b[38;5;145;48;5;247m▄▄\x1b[38;5;248;48;5;247m▄\x1b[38;5;247;48;5;248m▄\x1b[38;5;145;48;5;249m▄\x1b[38;5;248;48;5;247m▄▄\x1b[38;5;248;48;5;246m▄▄\x1b[38;5;248;48;5;247m▄\x1b[38;5;248;48;5;250m▄\x1b[38;5;248;48;5;248m▄\x1b[38;5;145;48;5;248m▄\x1b[38;5;248;48;5;248m▄▄\x1b[38;5;247;48;5;247m▄\x1b[38;5;248;48;5;247m▄\x1b[38;5;252;48;5;251m▄\x1b[38;5;255;48;5;254m▄\x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄▄▄▄\x1b[48;5;255m \x1b[m
+\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄\x1b[38;5;255;48;5;253m▄\x1b[38;5;254;48;5;252m▄▄\x1b[38;5;254;48;5;251m▄▄\x1b[38;5;253;48;5;251m▄▄▄▄▄▄▄▄▄▄▄▄▄▄\x1b[38;5;254;48;5;251m▄\x1b[38;5;254;48;5;252m▄▄\x1b[38;5;254;48;5;188m▄\x1b[38;5;255;48;5;254m▄\x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m  \x1b[m
+\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄▄\x1b[38;5;255;48;5;254m▄▄▄▄▄▄▄▄▄▄▄▄▄▄\x1b[38;5;255;48;5;255m▄\x1b[38;5;255;48;5;254m▄▄▄▄▄▄▄▄▄▄▄▄▄▄\x1b[38;5;255;48;5;255m▄▄\x1b[38;5;255;48;5;254m▄\x1b[38;5;255;48;5;255m▄▄▄▄\x1b[48;5;255m      \x1b[38;5;255;48;5;255m▄▄▄▄▄▄\x1b[48;5;255m \x1b[m
+\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m     \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[m
+\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[m
+\x1b[48;5;255m     \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄▄▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m       \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄▄\x1b[38;5;15;48;5;255m▄▄\x1b[48;5;255m  \x1b[m
+\x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄▄▄▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m      \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄\x1b[48;5;255m        \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m   \x1b[38;5;255;48;5;255m▄\x1b[48;5;255m    \x1b[38;5;255;48;5;255m▄▄▄▄▄▄▄\x1b[48;5;255m  \x1b[38;5;255;48;5;255m▄▄▄\x1b[48;5;255m \x1b[m"""
 SetupProjectCommand = (
     Callable[[Path, list[str] | None], SetupProjectResult] | Callable[[Path], SetupProjectResult]
 )
+LEGACY_CONFIGURABLE_RUNTIME_IDS = {"claude_code", "codex"}
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
@@ -110,23 +154,28 @@ ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneR
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
+TrackLatentSkillCommandHandler = Callable[[TrackLatentSkillCommand], TrackLatentSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
 GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
 ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResult]
 DeactivateSkillCommandHandler = Callable[[DeactivateSkillCommand], DeactivateSkillResult]
 UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
+UpdateCheckCommandHandler = Callable[[UpdateCheckCommand], UpdateCheckResult]
+UpdateMigrateCommandHandler = Callable[[UpdateMigrateCommand], UpdateMigrateResult]
+UpdateBenchmarksCommandHandler = Callable[[UpdateBenchmarksCommand], UpdateBenchmarksResult]
+LocaleResolver = Callable[[], str]
 OutputFormatOption = Annotated[
     str | None,
     typer.Option(
         "--format",
         "-f",
-        help="Formato de saida.",
+        help="Output format.",
         case_sensitive=False,
         click_type=click.Choice(["human", "json"], case_sensitive=False),
     ),
 ]
-YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Ignorar confirmacao interativa.")]
+YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Skip interactive confirmation.")]
 
 
 def _determine_output_format(argv: Sequence[str] | None) -> str:
@@ -159,12 +208,17 @@ def main(  # noqa: PLR0913
     host_check_command: ConfigureHostCommandHandler | None = None,
     host_sync_command: SyncInstructionsCommandHandler | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
     activate_skill_command: ActivateSkillCommandHandler | None = None,
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
+    update_check_command: UpdateCheckCommandHandler | None = None,
+    update_migrate_command: UpdateMigrateCommandHandler | None = None,
+    update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    locale_resolver: LocaleResolver | None = None,
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
@@ -182,21 +236,46 @@ def main(  # noqa: PLR0913
         host_check_command=host_check_command,
         host_sync_command=host_sync_command,
         propose_skill_command=propose_skill_command,
+        track_latent_skill_command=track_latent_skill_command,
         generate_skill_command=generate_skill_command,
         list_skills_command=list_skills_command,
         get_skill_detail_command=get_skill_detail_command,
         activate_skill_command=activate_skill_command,
         deactivate_skill_command=deactivate_skill_command,
         update_skill_command=update_skill_command,
+        update_check_command=update_check_command,
+        update_migrate_command=update_migrate_command,
+        update_benchmarks_command=update_benchmarks_command,
+        locale_resolver=locale_resolver,
     )
     try:
         result = app(args=list(argv) if argv is not None else None, standalone_mode=False)
     except click.exceptions.ClickException as e:
-        _stderr_console().print(f"[bold red]Erro:[/bold red] {e.format_message()}")
+        fmt = _determine_output_format(argv)
+        _print_expected_error(ValidationFailedError(e.format_message()), output_format=fmt)
         return e.exit_code
     except click.exceptions.Exit as exit_error:
         code = exit_error.exit_code
         return int(code) if code is not None else 0
+    except click.exceptions.Abort:
+        fmt = _determine_output_format(argv)
+        if fmt == "json":
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "aborted",
+                            "detail": "Command execution was aborted by user or system signal.",
+                        },
+                        "warnings": [],
+                    },
+                    sort_keys=True,
+                )
+            )
+        else:
+            sys.stderr.write("Aborted.\n")
+        return 1
     except RuntimeError:
         raise
     except Exception as e:
@@ -225,19 +304,24 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     host_check_command: ConfigureHostCommandHandler | None = None,
     host_sync_command: SyncInstructionsCommandHandler | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
     activate_skill_command: ActivateSkillCommandHandler | None = None,
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
+    update_check_command: UpdateCheckCommandHandler | None = None,
+    update_migrate_command: UpdateMigrateCommandHandler | None = None,
+    update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    locale_resolver: LocaleResolver | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
-    facts_app = typer.Typer(help="Gerenciar fatos de memoria")
-    audit_app = typer.Typer(help="Inspecionar eventos de auditoria")
-    snapshots_app = typer.Typer(help="Inspecionar snapshots")
-    host_app = typer.Typer(help="Configurar hosts de agente")
-    skills_app = typer.Typer(help="Gerenciar skills")
+    facts_app = typer.Typer(help="Manage memory facts")
+    audit_app = typer.Typer(help="Inspect audit events")
+    snapshots_app = typer.Typer(help="Inspect snapshots")
+    host_app = typer.Typer(help="Configure agent hosts")
+    skills_app = typer.Typer(help="Manage skills")
 
     app.add_typer(facts_app, name="facts")
     app.add_typer(audit_app, name="audit")
@@ -253,7 +337,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             typer.Option(
                 "--format",
                 "-f",
-                help="Formato global de saida.",
+                help="Global output format.",
                 case_sensitive=False,
                 click_type=click.Choice(["human", "json"], case_sensitive=False),
             ),
@@ -264,9 +348,13 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @app.command("init")
     def init_command(
         ctx: typer.Context,
+        runtimes: Annotated[
+            list[str] | None,
+            typer.Option("--runtime", help="Runtime to configure. May be used multiple times."),
+        ] = None,
         hosts: Annotated[
             list[str] | None,
-            typer.Option("--hosts", help="Host a configurar. Pode ser usado multiplas vezes."),
+            typer.Option("--hosts", help="Legacy host option. Prefer --runtime."),
         ] = None,
         yes: YesOption = False,
         output_format: OutputFormatOption = None,
@@ -278,10 +366,12 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             code=_run_init(
                 setup_project_command,
                 _effective_format(ctx, output_format),
+                selected_runtimes=runtimes,
                 selected_hosts=hosts,
                 yes=yes,
                 host_setup_command=host_setup_command,
                 host_check_command=host_check_command,
+                locale_resolver=locale_resolver,
             )
         )
 
@@ -294,6 +384,44 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             code=_run_status(status_command, output_format=_effective_format(ctx, output_format))
         )
 
+    @app.command("update")
+    def update(  # noqa: PLR0913
+        ctx: typer.Context,
+        check: Annotated[bool, typer.Option("--check", help="Check local update status.")] = False,
+        migrate: Annotated[
+            bool,
+            typer.Option("--migrate", help="Migrate config and memory to the current schema."),
+        ] = False,
+        benchmarks: Annotated[
+            bool,
+            typer.Option("--benchmarks", help="Update local benchmarks offline."),
+        ] = False,
+        skills: Annotated[
+            bool,
+            typer.Option("--skills", help="Synchronize active skills into native runtime targets."),
+        ] = False,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if update_check_command is None and not any([migrate, benchmarks, skills]):
+            msg = "CLI update_check_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_update(
+                check_command=update_check_command,
+                migrate_command=update_migrate_command,
+                benchmarks_command=update_benchmarks_command,
+                list_skills_command=list_skills_command,
+                update_skill_command=update_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                check=check,
+                migrate=migrate,
+                benchmarks=benchmarks,
+                skills=skills,
+                yes=yes,
+            )
+        )
+
     @app.command("context")
     def context(
         ctx: typer.Context,
@@ -301,17 +429,17 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str,
             typer.Option(
                 "--scope",
-                help="Escopo de contexto.",
+                help="Context scope.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
         max_size_chars: Annotated[
             int,
-            typer.Option("--max-size-chars", min=1, help="Limite maximo do contexto em chars."),
+            typer.Option("--max-size-chars", min=1, help="Maximum context size in chars."),
         ] = DEFAULT_CONTEXT_MAX_SIZE_CHARS,
         agent_session_key: Annotated[
             str | None,
-            typer.Option("--agent-session-key", help="Chave de sessao do agente."),
+            typer.Option("--agent-session-key", help="Agent session key."),
         ] = None,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -331,18 +459,18 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @app.command("remember")
     def remember(
         ctx: typer.Context,
-        content: Annotated[str, typer.Argument(help="Conteudo do fato a gravar.")],
+        content: Annotated[str, typer.Argument(help="Fact content to store.")],
         scope: Annotated[
             str,
             typer.Option(
                 "--scope",
-                help="Escopo do fato.",
+                help="Fact scope.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
         tags: Annotated[
             list[str] | None,
-            typer.Option("--tag", help="Tag do fato. Pode ser usada multiplas vezes."),
+            typer.Option("--tag", help="Fact tag. May be used multiple times."),
         ] = None,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -366,7 +494,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str | None,
             typer.Option(
                 "--scope",
-                help="Filtro de escopo.",
+                help="Scope filter.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = None,
@@ -374,7 +502,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str | None,
             typer.Option(
                 "--status",
-                help="Filtro de status.",
+                help="Status filter.",
                 click_type=click.Choice(
                     ["active", "stale", "archived", "purged"], case_sensitive=False
                 ),
@@ -397,12 +525,12 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @facts_app.command("purge")
     def facts_purge(
         ctx: typer.Context,
-        id: Annotated[str | None, typer.Option("--id", help="ID do fato para purgar.")] = None,
+        id: Annotated[str | None, typer.Option("--id", help="Fact ID to purge.")] = None,
         scope: Annotated[
             str | None,
             typer.Option(
                 "--scope",
-                help="Escopo para purgar.",
+                help="Scope to purge.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = None,
@@ -414,7 +542,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             raise RuntimeError(msg)
         if (id is None and scope is None) or (id is not None and scope is not None):
             _print_expected_error(
-                ValidationFailedError("Informe exatamente uma opcao: --id ou --scope."),
+                ValidationFailedError("Provide exactly one option: --id or --scope."),
                 output_format=_effective_format(ctx, output_format),
             )
             raise typer.Exit(code=1)
@@ -452,7 +580,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str,
             typer.Option(
                 "--scope",
-                help="Filtro de escopo.",
+                help="Scope filter.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
@@ -476,7 +604,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str,
             typer.Option(
                 "--scope",
-                help="Filtro de escopo.",
+                help="Scope filter.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
@@ -500,7 +628,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             str,
             typer.Option(
                 "--scope",
-                help="Escopo para rollback.",
+                help="Rollback scope.",
                 click_type=click.Choice(["project", "global"], case_sensitive=False),
             ),
         ] = "project",
@@ -526,13 +654,11 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @host_app.command("setup")
     def host_setup(  # noqa: PLR0913
         ctx: typer.Context,
-        host_id: Annotated[str, typer.Argument(help="Host a configurar.")],
+        host_id: Annotated[str, typer.Argument(help="Host to configure.")],
         yes: YesOption = False,
-        max_lines: Annotated[
-            int, typer.Option("--max-lines", help="Limite maximo de linhas.")
-        ] = 100,
+        max_lines: Annotated[int, typer.Option("--max-lines", help="Maximum line count.")] = 100,
         max_chars: Annotated[
-            int, typer.Option("--max-chars", help="Limite maximo de caracteres.")
+            int, typer.Option("--max-chars", help="Maximum character count.")
         ] = 4000,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -553,12 +679,10 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @host_app.command("check")
     def host_check(
         ctx: typer.Context,
-        host_id: Annotated[str, typer.Argument(help="Host a validar.")],
-        max_lines: Annotated[
-            int, typer.Option("--max-lines", help="Limite maximo de linhas.")
-        ] = 100,
+        host_id: Annotated[str, typer.Argument(help="Host to validate.")],
+        max_lines: Annotated[int, typer.Option("--max-lines", help="Maximum line count.")] = 100,
         max_chars: Annotated[
-            int, typer.Option("--max-chars", help="Limite maximo de caracteres.")
+            int, typer.Option("--max-chars", help="Maximum character count.")
         ] = 4000,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -576,20 +700,24 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         )
 
     @host_app.command("sync")
-    def host_sync(
+    def host_sync(  # noqa: PLR0913
         ctx: typer.Context,
         apply: Annotated[
             bool,
             typer.Option(
                 "--apply/--no-apply",
-                help="Aplicar a sincronizacao ou apenas exibir preview.",
+                help="Apply synchronization or only show a preview.",
             ),
         ] = False,
         yes: YesOption = False,
         host_id: Annotated[
             list[str] | None,
-            typer.Option("--host", help="Host a sincronizar. Pode ser usado multiplas vezes."),
+            typer.Option("--host", help="Host to synchronize. May be used multiple times."),
         ] = None,
+        max_lines: Annotated[int, typer.Option("--max-lines", help="Maximum line count.")] = 100,
+        max_chars: Annotated[
+            int, typer.Option("--max-chars", help="Maximum character count.")
+        ] = 4000,
         output_format: OutputFormatOption = None,
     ) -> None:
         if host_sync_command is None:
@@ -602,20 +730,29 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 host_ids=host_id or ["codex", "claude_code"],
                 apply=apply,
                 yes=yes,
+                max_lines=max_lines,
+                max_chars=max_chars,
             )
         )
 
     @skills_app.command("propose")
     def skills_propose(
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        latent_skill_id: Annotated[str, typer.Argument(help="Latent skill ID.")],
         decision: Annotated[
             str | None,
             typer.Option(
                 "--decision",
-                help="Decisao explicita: sim, sempre ou nao.",
+                help="Explicit decision: yes, always, or no.",
                 click_type=click.Choice(
-                    ["sim", "s", "sempre", "e", "nao", "não", "n"], case_sensitive=False
+                    [
+                        "yes",
+                        "y",
+                        "always",
+                        "no",
+                        "n",
+                    ],
+                    case_sensitive=False,
                 ),
             ),
         ] = None,
@@ -650,7 +787,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("detail")
     def skills_detail(
         ctx: typer.Context,
-        name_or_id: Annotated[str, typer.Argument(help="Nome ou ID da skill.")],
+        name_or_id: Annotated[str, typer.Argument(help="Skill name or ID.")],
         output_format: OutputFormatOption = None,
     ) -> None:
         if get_skill_detail_command is None:
@@ -664,16 +801,57 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
+    @skills_app.command("track")
+    def skills_track(  # noqa: PLR0913
+        ctx: typer.Context,
+        name: Annotated[str, typer.Option("--name", help="Skill name.")],
+        description: Annotated[str, typer.Option("--description", help="Skill description.")],
+        scope: Annotated[
+            LatentSkillScope,
+            typer.Option("--scope", help="Skill scope (project or global)."),
+        ] = LatentSkillScope.project,
+        evidence_summary: Annotated[
+            str,
+            typer.Option(
+                "--evidence-summary",
+                "--evidence",
+                help="Summary of the evidence that triggered this skill tracking.",
+            ),
+        ] = "Manual user invocation via CLI.",
+        tag: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--tag",
+                help="Tag/trigger for the skill. May be used multiple times.",
+            ),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if track_latent_skill_command is None:
+            msg = "CLI track_latent_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_track(
+                track_latent_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                name=name,
+                description=description,
+                scope=scope,
+                evidence_summary=evidence_summary,
+                tags=tag or [],
+            )
+        )
+
     @skills_app.command("generate")
     def skills_generate(
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill aprovada.")],
+        latent_skill_id: Annotated[str, typer.Argument(help="Approved latent skill ID.")],
         yes: YesOption = False,
         update_existing: Annotated[
             bool,
             typer.Option(
                 "--update-existing",
-                help="Atualizar skill existente em vez de criar slug alternativo.",
+                help="Update an existing skill instead of creating an alternate slug.",
             ),
         ] = False,
         output_format: OutputFormatOption = None,
@@ -694,7 +872,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("activate")
     def skills_activate(
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        latent_skill_id: Annotated[str, typer.Argument(help="Latent skill ID.")],
         output_format: OutputFormatOption = None,
     ) -> None:
         if activate_skill_command is None:
@@ -711,7 +889,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("deactivate")
     def skills_deactivate(
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
+        latent_skill_id: Annotated[str, typer.Argument(help="Latent skill ID.")],
         output_format: OutputFormatOption = None,
     ) -> None:
         if deactivate_skill_command is None:
@@ -728,19 +906,19 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @skills_app.command("update")
     def skills_update(  # noqa: PLR0913
         ctx: typer.Context,
-        latent_skill_id: Annotated[str, typer.Argument(help="ID da latent skill.")],
-        name: Annotated[str | None, typer.Option("--name", help="Novo nome da skill.")] = None,
+        latent_skill_id: Annotated[str, typer.Argument(help="Latent skill ID.")],
+        name: Annotated[str | None, typer.Option("--name", help="New skill name.")] = None,
         description: Annotated[
             str | None,
-            typer.Option("--description", help="Nova descricao da skill."),
+            typer.Option("--description", help="New skill description."),
         ] = None,
         trigger: Annotated[
             list[str] | None,
-            typer.Option("--trigger", help="Gatilho da skill. Pode ser usado multiplas vezes."),
+            typer.Option("--trigger", help="Skill trigger. May be used multiple times."),
         ] = None,
         file: Annotated[
             Path | None,
-            typer.Option("--file", help="Arquivo markdown com novo conteudo da skill."),
+            typer.Option("--file", help="Markdown file with new skill content."),
         ] = None,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -756,6 +934,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 description=description,
                 triggers=trigger,
                 file=file,
+                yes=False,
             )
         )
 
@@ -780,12 +959,17 @@ def build_main(  # noqa: PLR0913
     host_check_command: ConfigureHostCommandHandler,
     host_sync_command: SyncInstructionsCommandHandler,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
     activate_skill_command: ActivateSkillCommandHandler | None = None,
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
+    update_check_command: UpdateCheckCommandHandler | None = None,
+    update_migrate_command: UpdateMigrateCommandHandler | None = None,
+    update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    locale_resolver: LocaleResolver | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
         layout_port=layout_port,
@@ -810,12 +994,17 @@ def build_main(  # noqa: PLR0913
             host_check_command=host_check_command,
             host_sync_command=host_sync_command,
             propose_skill_command=propose_skill_command,
+            track_latent_skill_command=track_latent_skill_command,
             generate_skill_command=generate_skill_command,
             list_skills_command=list_skills_command,
             get_skill_detail_command=get_skill_detail_command,
             activate_skill_command=activate_skill_command,
             deactivate_skill_command=deactivate_skill_command,
             update_skill_command=update_skill_command,
+            update_check_command=update_check_command,
+            update_migrate_command=update_migrate_command,
+            update_benchmarks_command=update_benchmarks_command,
+            locale_resolver=locale_resolver,
         )
 
     return configured_main
@@ -863,59 +1052,116 @@ def _stderr_console() -> Console:
     return Console(file=sys.stderr, width=200)
 
 
+def _stream_is_tty(stream: Any) -> bool:
+    try:
+        return bool(stream.isatty())
+    except Exception:
+        return False
+
+
+def _ci_environment_enabled() -> bool:
+    value = os.environ.get("CI")
+    if value is None:
+        return False
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _terminal_color_enabled() -> bool:
+    if "NO_COLOR" in os.environ:
+        return False
+    term = os.environ.get("TERM", "")
+    return bool(term) and term != "dumb"
+
+
+def _should_render_init_splash(output_format: str) -> bool:
+    return (
+        output_format != "json"
+        and _stream_is_tty(sys.stdout)
+        and _stream_is_tty(sys.stdin)
+        and not _ci_environment_enabled()
+    )
+
+
+def _render_init_splash() -> None:
+    if _terminal_color_enabled():
+        banner = (
+            f"\x1b[36m{INIT_SPLASH_LINES[0]}\x1b[0m\n{INIT_SPLASH_ANSI}\n{INIT_SPLASH_LINES[2]}\n"
+        )
+    else:
+        banner = "\n".join(INIT_SPLASH_LINES) + "\n"
+    sys.stdout.write(banner)
+
+
 def _confirm(prompt: str, default: bool = False) -> bool:
     answer = input(prompt)
     val = answer.strip().lower()
     if not val:
         return default
-    return val in {"s", "sim", "y", "yes"}
+    return val in {"y", "yes"}
+
+
+def _prompt(prompt: str) -> str:
+    return input(prompt)
 
 
 def _run_init(  # noqa: PLR0913
     command: SetupProjectCommand,
     output_format: str,
     *,
+    selected_runtimes: list[str] | None = None,
     selected_hosts: list[str] | None = None,
     yes: bool = False,
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
+    locale_resolver: LocaleResolver | None = None,
 ) -> int:
+    resolve_locale = locale_resolver or (lambda: DEFAULT_LOCALE)
+    locale = resolve_locale() if output_format != "json" else DEFAULT_LOCALE
     try:
-        host_ids = _selected_init_hosts(
-            selected_hosts,
+        if _should_render_init_splash(output_format):
+            _render_init_splash()
+        runtime_ids = _selected_init_runtimes(
+            selected_runtimes,
+            selected_hosts=selected_hosts,
             output_format=output_format,
             yes=yes,
+            locale=locale,
         )
         if output_format == "json":
-            result = _execute_setup_project(command, Path.cwd(), host_ids)
+            result = _execute_setup_project(command, Path.cwd(), runtime_ids)
         else:
-            with _stderr_console().status("Inicializando scaffold do projeto...", spinner="dots"):
-                result = _execute_setup_project(command, Path.cwd(), host_ids)
+            with _stderr_console().status(
+                human_message("Initializing project scaffold...", locale=locale), spinner="dots"
+            ):
+                result = _execute_setup_project(command, Path.cwd(), runtime_ids)
+            locale = resolve_locale()
         host_results = _configure_init_hosts(
-            host_ids,
+            runtime_ids,
             output_format=output_format,
+            locale=locale,
             host_setup_command=host_setup_command,
             host_check_command=host_check_command,
         )
     except (KeyboardInterrupt, EOFError):
-        _stdout_console().print("\nOperacao cancelada pelo usuario.")
+        _stdout_console().print("\n" + human_message("Operation cancelled by user.", locale=locale))
         return 1
     except OSError as error:
-        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        _print_expected_error(StorageError(str(error)), output_format=output_format, locale=locale)
         return 1
     except DOMAIN_ERROR_TYPES as error:
-        _print_expected_error(error, output_format=output_format)
+        _print_expected_error(error, output_format=output_format, locale=locale)
         return 1
 
     if output_format == "json":
         payload = _success_envelope(result)
+        payload.update(_init_runtime_payload(runtime_ids, host_results))
         if host_results:
             payload["hosts"] = [asdict(res) for res in host_results]
         print(json.dumps(payload, sort_keys=True))
     else:
-        _stdout_console().print(_format_human_init_output(result))
+        _stdout_console().print(_format_human_init_output(result, locale=locale))
         if host_results:
-            _stdout_console().print(_format_human_init_host_results(host_results))
+            _stdout_console().print(_format_human_init_host_results(host_results, locale=locale))
 
     return 0
 
@@ -923,7 +1169,7 @@ def _run_init(  # noqa: PLR0913
 def _execute_setup_project(
     command: SetupProjectCommand,
     project_root: Path,
-    enabled_host_ids: list[str],
+    enabled_runtime_ids: list[str],
 ) -> SetupProjectResult:
     try:
         sig = signature(command)
@@ -936,63 +1182,133 @@ def _execute_setup_project(
         if (
             len(positional_params) >= min_positional_args
             or has_var_args
+            or "enabled_runtime_ids" in sig.parameters
             or "enabled_host_ids" in sig.parameters
         ):
-            return command(project_root, enabled_host_ids)  # type: ignore
+            return command(project_root, enabled_runtime_ids)  # type: ignore
     except (ValueError, TypeError):
         pass
     return command(project_root)  # type: ignore
 
 
-def _selected_init_hosts(
-    hosts: list[str] | None,
+def _selected_init_runtimes(
+    runtimes: list[str] | None,
     *,
+    selected_hosts: list[str] | None = None,
     output_format: str,
     yes: bool,
+    locale: str = DEFAULT_LOCALE,
 ) -> list[str]:
-    if hosts:
-        return _normalize_supported_hosts(hosts)
+    if runtimes:
+        return _normalize_supported_runtimes(runtimes)
+    if selected_hosts:
+        return _normalize_supported_runtimes(selected_hosts)
     if output_format == "json" or yes:
-        return list(DEFAULT_ENABLED_HOST_IDS)
+        return list(DEFAULT_ENABLED_RUNTIME_IDS)
     if not sys.stdin.isatty():
-        return list(DEFAULT_ENABLED_HOST_IDS)
+        return list(DEFAULT_ENABLED_RUNTIME_IDS)
 
-    selected = []
-    prompts = {
-        "codex": "Deseja configurar o host 'codex' (suporte a AGENTS.md)? [S/n]: ",
-        "claude_code": "Deseja configurar o host 'claude_code' (suporte a CLAUDE.md)? [S/n]: ",
-    }
-    for host_id in DEFAULT_ENABLED_HOST_IDS:
-        if _confirm(prompts[host_id], default=True):
-            selected.append(host_id)
+    registry = default_runtime_registry()
+    _stdout_console().print(
+        human_message("Which runtime(s) would you like to install for?", locale=locale)
+    )
+    for index, runtime in enumerate(registry.runtimes, start=1):
+        _stdout_console().print(f"{index}. {runtime.display_name} ({runtime.support_tier.value})")
+    answer = _prompt(
+        human_message(
+            "Which runtime(s) would you like to install for? [1 2 3 4 5]: ",
+            locale=locale,
+        )
+    )
+    return _parse_runtime_index_selection(answer, registry.runtimes)
+
+
+def _normalize_supported_runtimes(runtimes: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for runtime_id in runtimes:
+        cleaned = "_".join(runtime_id.strip().lower().split("-"))
+        if cleaned not in normalized:
+            normalized.append(cleaned)
+    supported = {runtime_id.value for runtime_id in default_runtime_registry().runtime_ids}
+    unsupported = [runtime_id for runtime_id in normalized if runtime_id not in supported]
+    if unsupported:
+        raise ValidationFailedError(f"Unsupported runtimes: {', '.join(unsupported)}")
+    return normalized
+
+
+def _parse_runtime_index_selection(
+    raw_selection: str,
+    runtimes: list[RuntimeAdapter],
+) -> list[str]:
+    if not raw_selection.strip():
+        return [runtime.runtime_id.value for runtime in runtimes]
+    tokens = [
+        token for comma_part in raw_selection.split(",") for token in comma_part.split() if token
+    ]
+    selected: list[str] = []
+    invalid: list[str] = []
+    for token in tokens:
+        if not token.isdecimal():
+            invalid.append(token)
+            continue
+        index = int(token)
+        if index < 1 or index > len(runtimes):
+            invalid.append(token)
+            continue
+        runtime_id = runtimes[index - 1].runtime_id.value
+        if runtime_id not in selected:
+            selected.append(runtime_id)
+    if invalid:
+        raise ValidationFailedError(
+            "Invalid runtime selection: "
+            f"{', '.join(invalid)}. Use numbers from 1 to {len(runtimes)}."
+        )
     return selected
 
 
-def _normalize_supported_hosts(hosts: list[str]) -> list[str]:
-    normalized: list[str] = []
-    for host_id in hosts:
-        cleaned = host_id.strip().lower()
-        if cleaned not in normalized:
-            normalized.append(cleaned)
-    unsupported = [host_id for host_id in normalized if host_id not in DEFAULT_ENABLED_HOST_IDS]
-    if unsupported:
-        raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
-    return normalized
+def _init_runtime_payload(
+    selected_runtime_ids: list[str],
+    host_results: list[ConfigureHostResult],
+) -> dict[str, Any]:
+    registry = default_runtime_registry()
+    selected = set(selected_runtime_ids)
+    target_paths: dict[str, list[str]] = {}
+    for result in host_results:
+        if result.host_id not in selected:
+            continue
+        paths = target_paths.setdefault(result.host_id, [])
+        for change in result.planned_changes:
+            path = change.get("path")
+            if isinstance(path, str) and path not in paths:
+                paths.append(path)
+
+    manual_steps_pending = [
+        {"runtime_id": result.host_id, "step": step}
+        for result in host_results
+        for step in result.manual_steps
+    ]
+    return {
+        "runtimes_selected": selected_runtime_ids,
+        "runtimes_skipped": [
+            runtime.runtime_id.value
+            for runtime in registry.runtimes
+            if runtime.runtime_id.value not in selected
+        ],
+        "target_paths": target_paths,
+        "manual_steps_pending": manual_steps_pending,
+    }
 
 
 def _configure_init_hosts(
     host_ids: list[str],
     *,
     output_format: str,
+    locale: str = "en",
     host_setup_command: ConfigureHostCommandHandler | None,
     host_check_command: ConfigureHostCommandHandler | None,
 ) -> list[ConfigureHostResult]:
+    host_ids = [host_id for host_id in host_ids if host_id in LEGACY_CONFIGURABLE_RUNTIME_IDS]
     if host_ids and (host_setup_command is None or host_check_command is None):
-        _stderr_console().print(
-            "[yellow]Warning: CLI host_setup_command or "
-            "host_check_command dependency was not configured. "
-            "Skipping automatic host setup.[/yellow]"
-        )
         return []
     if not host_ids:
         return []
@@ -1012,9 +1328,22 @@ def _configure_init_hosts(
             results.extend([setup_result, check_result])
             if output_format != "json":
                 for step in check_result.manual_steps:
-                    _stdout_console().print(f"Passo manual pendente ({host_id}): {step}")
+                    _stdout_console().print(
+                        human_message(
+                            "Pending manual step ({host_id}): {step}",
+                            locale=locale,
+                            host_id=host_id,
+                            step=step,
+                        )
+                    )
         except Exception as error:
-            raise ValidationFailedError(f"Falha ao configurar host '{host_id}': {error}") from error
+            msg = human_message(
+                "Host setup failed for '{host_id}': {error}",
+                locale=locale,
+                host_id=host_id,
+                error=error,
+            )
+            raise ValidationFailedError(msg) from error
     return results
 
 
@@ -1161,13 +1490,13 @@ def _run_facts_purge(
     try:
         if output_format == "json" and not yes:
             raise ValidationFailedError(
-                "A flag --yes / -y e obrigatoria para executar purge com saida JSON."
+                "The --yes / -y flag is required to run purge with JSON output."
             )
         if output_format != "json":
             _stdout_console().print(_format_human_purge_preview(id=id, scope=scope))
             if not yes:
-                if not _confirm("Confirmar purga permanente? [y/N]: ", default=False):
-                    _stdout_console().print("Purga cancelada.")
+                if not _confirm("Confirm permanent purge? [y/N]: ", default=False):
+                    _stdout_console().print("Purge cancelled.")
                     return 1
 
         result = command(PurgeFactCommand(id=id, scope=scope, origin="cli"))
@@ -1196,12 +1525,12 @@ def _run_facts_hygiene(
     try:
         if output_format != "json":
             _stdout_console().print(
-                "[yellow]Aviso: A execucao de fatos higiene ira otimizar e limpar "
-                "o contexto de memoria, podendo arquivar fatos obsoletos.[/yellow]"
+                "[yellow]Warning: facts hygiene will optimize and clean memory context, "
+                "and may archive obsolete facts.[/yellow]"
             )
             if not yes:
-                if not _confirm("Deseja prosseguir com a higiene? [s/N]: ", default=False):
-                    _stdout_console().print("Higiene cancelada.")
+                if not _confirm("Proceed with hygiene? [y/N]: ", default=False):
+                    _stdout_console().print("Hygiene cancelled.")
                     return 1
 
         if output_format == "json":
@@ -1287,20 +1616,20 @@ def _run_rollback(
     try:
         if output_format == "json" and not yes:
             raise SnapshotFailedError(
-                "A flag --yes / -y e obrigatoria para executar rollback com saida JSON."
+                "The --yes / -y flag is required to run rollback with JSON output."
             )
         preview = rollback_preview_command(scope)
         if output_format != "json":
             _stdout_console().print(_format_human_rollback_preview(preview))
             if not yes:
-                if not _confirm("Deseja prosseguir com o rollback? [s/N]: ", default=False):
-                    _stdout_console().print("Rollback cancelado.")
+                if not _confirm("Proceed with rollback? [y/N]: ", default=False):
+                    _stdout_console().print("Rollback cancelled.")
                     return 1
 
         if output_format == "json":
             result = command(RollbackCommand(scope=scope, origin="cli"))
         else:
-            with _stderr_console().status("Restaurando snapshot (rollback)...", spinner="dots"):
+            with _stderr_console().status("Restoring snapshot (rollback)...", spinner="dots"):
                 result = command(RollbackCommand(scope=scope, origin="cli"))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
@@ -1329,7 +1658,7 @@ def _run_host_setup(  # noqa: PLR0913
     try:
         if output_format == "json" and not yes:
             raise ValidationFailedError(
-                "A flag --yes / -y e obrigatoria para executar host setup com saida JSON."
+                "The --yes / -y flag is required to run host setup with JSON output."
             )
         if output_format != "json":
             preview = command(
@@ -1343,8 +1672,8 @@ def _run_host_setup(  # noqa: PLR0913
             )
             _stdout_console().print(_format_human_host_plan(preview, operation="setup"))
             if not yes:
-                if not _confirm("Aplicar configuracao do host? [s/N]: ", default=False):
-                    _stdout_console().print("Setup de host cancelado.")
+                if not _confirm("Apply host configuration? [y/N]: ", default=False):
+                    _stdout_console().print("Host setup cancelled.")
                     return 1
 
         result = command(
@@ -1415,37 +1744,43 @@ def _run_host_check(
     return 0
 
 
-def _run_host_sync(
+def _run_host_sync(  # noqa: PLR0913
     command: SyncInstructionsCommandHandler,
     *,
     output_format: str,
     host_ids: list[str],
     apply: bool,
     yes: bool,
+    max_lines: int = 100,
+    max_chars: int = 4000,
 ) -> int:
     try:
         if apply and output_format == "json" and not yes:
             raise ValidationFailedError(
-                "A flag --yes / -y e obrigatoria para executar host sync com saida JSON."
+                "The --yes / -y flag is required to run host sync with JSON output."
             )
         if apply and output_format != "json":
             preview = command(
                 SyncInstructionsCommand(
                     host_ids=host_ids,
                     apply=False,
+                    max_managed_lines=max_lines,
+                    max_managed_chars=max_chars,
                     origin="cli",
                 )
             )
             _stdout_console().print(_format_human_sync_plan(preview))
             if not yes:
-                if not _confirm("Aplicar sincronizacao de instrucoes? [s/N]: ", default=False):
-                    _stdout_console().print("Sincronizacao de instrucoes cancelada.")
+                if not _confirm("Apply instruction synchronization? [y/N]: ", default=False):
+                    _stdout_console().print("Instruction synchronization cancelled.")
                     return 1
 
         result = command(
             SyncInstructionsCommand(
                 host_ids=host_ids,
                 apply=apply,
+                max_managed_lines=max_lines,
+                max_managed_chars=max_chars,
                 origin="cli",
             )
         )
@@ -1470,6 +1805,144 @@ def _run_host_sync(
             _stdout_console().print()
         _stdout_console().print(_format_human_sync_success(result))
     return 0
+
+
+def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
+    *,
+    check_command: UpdateCheckCommandHandler | None,
+    migrate_command: UpdateMigrateCommandHandler | None,
+    benchmarks_command: UpdateBenchmarksCommandHandler | None,
+    list_skills_command: ListSkillsCommandHandler | None,
+    update_skill_command: UpdateSkillCommandHandler | None,
+    output_format: str,
+    check: bool,
+    migrate: bool,
+    benchmarks: bool,
+    skills: bool,
+    yes: bool,
+) -> int:
+    apply_default_update = not any([check, migrate, benchmarks, skills])
+    selected_count = sum([check, migrate, benchmarks, skills])
+    if not apply_default_update and selected_count != 1:
+        _print_expected_error(
+            ValidationFailedError("Provide only one update option per execution."),
+            output_format=output_format,
+        )
+        return 1
+
+    try:
+        if apply_default_update:
+            if check_command is None:
+                raise RuntimeError("CLI update_check_command dependency was not configured.")
+            check_result = check_command(UpdateCheckCommand(project_root=Path.cwd()))
+            migrate_result: UpdateMigrateResult | None = None
+            if check_result.migration_required:
+                if migrate_command is None:
+                    raise RuntimeError("CLI update_migrate_command dependency was not configured.")
+                if output_format == "json" and not yes:
+                    raise ValidationFailedError(
+                        "The --yes / -y flag is required to run update with JSON output when "
+                        "migration is required."
+                    )
+                if output_format != "json":
+                    _stdout_console().print(_format_human_update_check(check_result))
+                    _stdout_console().print()
+                    _stdout_console().print(_format_human_update_mutation_plan("update.migrate"))
+                    if not yes:
+                        if not _confirm("Apply pending update migration? [y/N]: ", default=False):
+                            _stdout_console().print("Update cancelled.")
+                            return 1
+                migrate_result = migrate_command(
+                    UpdateMigrateCommand(project_root=Path.cwd(), origin="cli")
+                )
+            if output_format == "json":
+                print(
+                    json.dumps(
+                        _update_apply_success_envelope(check_result, migrate_result),
+                        sort_keys=True,
+                    )
+                )
+            else:
+                _stdout_console().print(_format_human_update_apply(check_result, migrate_result))
+            return 0
+
+        if check:
+            if check_command is None:
+                raise RuntimeError("CLI update_check_command dependency was not configured.")
+            result = check_command(UpdateCheckCommand(project_root=Path.cwd()))
+            if output_format == "json":
+                print(json.dumps(_update_check_success_envelope(result), sort_keys=True))
+            else:
+                _stdout_console().print(_format_human_update_check(result))
+            return 0
+
+        if migrate:
+            if migrate_command is None:
+                raise RuntimeError("CLI update_migrate_command dependency was not configured.")
+            if output_format == "json" and not yes:
+                raise ValidationFailedError(
+                    "The --yes / -y flag is required to run update --migrate with JSON output."
+                )
+            if output_format != "json":
+                _stdout_console().print(_format_human_update_mutation_plan("update.migrate"))
+                if not yes:
+                    if not _confirm("Apply schema migration? [y/N]: ", default=False):
+                        _stdout_console().print("Migration cancelled.")
+                        return 1
+            result = migrate_command(UpdateMigrateCommand(project_root=Path.cwd(), origin="cli"))
+            if output_format == "json":
+                print(json.dumps(_update_migrate_success_envelope(result), sort_keys=True))
+            else:
+                _stdout_console().print(_format_human_update_migrate(result))
+            return 0
+
+        if benchmarks:
+            if benchmarks_command is None:
+                raise RuntimeError("CLI update_benchmarks_command dependency was not configured.")
+            if output_format == "json" and not yes:
+                raise ValidationFailedError(
+                    "The --yes / -y flag is required to run update --benchmarks with JSON output."
+                )
+            if output_format != "json":
+                _stdout_console().print(_format_human_update_mutation_plan("update.benchmarks"))
+                if not yes:
+                    if not _confirm("Update local benchmarks? [y/N]: ", default=False):
+                        _stdout_console().print("Benchmark update cancelled.")
+                        return 1
+            result = benchmarks_command(
+                UpdateBenchmarksCommand(project_root=Path.cwd(), origin="cli")
+            )
+            if output_format == "json":
+                print(json.dumps(_update_benchmarks_success_envelope(result), sort_keys=True))
+            else:
+                _stdout_console().print(_format_human_update_benchmarks(result))
+            return 0
+
+        if skills:
+            if list_skills_command is None or update_skill_command is None:
+                raise RuntimeError("CLI skill update dependencies were not configured.")
+            result = _sync_active_skills_for_update(
+                list_skills_command,
+                update_skill_command,
+                output_format=output_format,
+                yes=yes,
+            )
+            if output_format == "json":
+                print(json.dumps(_update_skills_success_envelope(result), sort_keys=True))
+            else:
+                _stdout_console().print(_format_human_update_skills(result))
+            return 0
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except (ValidationError, ValueError) as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+
+    return 1
 
 
 def _run_skills_list(
@@ -1511,7 +1984,7 @@ def _run_skills_detail(
 
 def _map_skill_read_error(error: Exception) -> Exception:
     if isinstance(error, KeyError):
-        return ValidationFailedError("Skill nao encontrada.")
+        return ValidationFailedError("Skill not found.")
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
     if isinstance(error, OSError) and not isinstance(error, DOMAIN_ERROR_TYPES):
@@ -1526,13 +1999,13 @@ def _prompt_skills_decision(
 ) -> ProposeSkillResult | None:
     _stdout_console().print(_format_human_skill_proposal(result))
     try:
-        answer = input("Decisao [Sim/Sempre/Não]: ")
+        answer = input("Decision [yes/always/no]: ")
     except (EOFError, KeyboardInterrupt):
-        _stdout_console().print("\nCancelado.")
+        _stdout_console().print("\nCancelled.")
         return None
     prompted_decision = _skill_decision(answer)
     if prompted_decision is None:
-        raise ValidationFailedError("Decisao invalida fornecida. Use Sim, Sempre ou Não.")
+        raise ValidationFailedError("Invalid decision provided. Use yes, always, or no.")
     return command(
         ProposeSkillCommand(
             latent_skill_id=latent_skill_id,
@@ -1545,7 +2018,7 @@ def _prompt_skills_decision(
 def _map_propose_error(error: Exception, latent_skill_id: str) -> Exception:
     if isinstance(error, KeyError):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
@@ -1565,10 +2038,10 @@ def _run_skills_propose(
     try:
         resolved_decision = ProposeSkillDecision.sim if yes and decision is None else decision
         if resolved_decision is None and not sys.stdin.isatty():
-            raise ValidationFailedError("Ambiente nao-TTY exige --decision ou --yes.")
+            raise ValidationFailedError("Non-TTY environment requires --decision or --yes.")
         if output_format == "json" and resolved_decision is None:
             raise ValidationFailedError(
-                "Informe --decision ou --yes para executar skills propose com saida JSON."
+                "Provide --decision or --yes to run skills propose with JSON output."
             )
         if resolved_decision is not None:
             result = command(
@@ -1603,33 +2076,114 @@ def _prompt_generate_collision(
 ) -> tuple[bool, int]:
     if update_existing:
         _stdout_console().print(
-            f"[bold yellow]AVISO: O diretorio da skill '{result.slug}' "
-            "ja existe e sera SOBRESCRITO![/bold yellow]"
+            f"[bold yellow]WARNING: skill directory '{result.slug}' "
+            "already exists and will be overwritten![/bold yellow]"
         )
-        if not _confirm("Confirmar sobreescrita e geracao? [s/N]: ", default=False):
-            _stdout_console().print("Geracao de skill cancelada.")
+        if not _confirm("Confirm overwrite and generation? [y/N]: ", default=False):
+            _stdout_console().print("Skill generation cancelled.")
             return False, 1
         return True, 0
 
     _stdout_console().print(
-        f"[bold yellow]Conflito: O diretorio da skill '{result.slug}' ja existe.[/bold yellow]"
+        f"[bold yellow]Conflict: skill directory '{result.slug}' already exists.[/bold yellow]"
     )
     _stdout_console().print(
-        f"Sugestao alternativa proposta pelo sistema: '{result.suggested_slug}'"
+        f"Alternative suggestion proposed by the system: '{result.suggested_slug}'"
     )
     choice = ""
     prompt_msg = (
-        "O que deseja fazer? [u] Atualizar existente, "
-        "[a] Usar slug alternativo proposto, [c] Cancelar [u/a/C]: "
+        "What do you want to do? [u] Update existing, "
+        "[a] Use proposed alternate slug, [c] Cancel [u/a/C]: "
     )
     while choice not in {"u", "a", "c"}:
         choice = input(prompt_msg).strip().lower()
         if not choice:
             choice = "c"
     if choice == "c":
-        _stdout_console().print("Geracao de skill cancelada.")
+        _stdout_console().print("Skill generation cancelled.")
         return False, 1
     return choice == "u", 0
+
+
+def _run_skills_track(  # noqa: PLR0913
+    command: TrackLatentSkillCommandHandler,
+    *,
+    output_format: str,
+    name: str,
+    description: str,
+    scope: LatentSkillScope,
+    evidence_summary: str,
+    tags: list[str],
+) -> int:
+    try:
+        result = command(
+            TrackLatentSkillCommand(
+                name=name,
+                description=description,
+                scope=scope,
+                origin="cli",
+                evidence_summary=evidence_summary,
+                tags=tags,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, name), output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_track_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_track(result))
+    return 0
+
+
+def _skill_track_success_envelope(result: TrackLatentSkillResult) -> dict[str, Any]:
+    skill = result.latent_skill
+    return {
+        "ok": True,
+        "operation": "skills.track",
+        "scope": skill.scope.value,
+        "data": {
+            "latent_skill": {
+                "id": skill.id,
+                "name": skill.name,
+                "description": skill.description,
+                "scope": skill.scope.value,
+                "status": skill.status.value,
+                "recurrence_count": skill.recurrence_count,
+                "metadata": skill.metadata,
+                "created_at": format_utc_iso(skill.created_at),
+                "updated_at": format_utc_iso(skill.updated_at),
+            },
+            "matched_existing": result.matched_existing,
+            "audit_reference": result.audit_reference,
+            "snapshot_reference": result.snapshot_reference,
+        },
+        "warnings": [],
+    }
+
+
+def _format_human_skill_track(result: TrackLatentSkillResult) -> str:
+    skill = result.latent_skill
+    affected_paths = [_latent_skill_store_path(skill.scope)]
+    lines = [
+        "Operation: skills.track",
+        f"Scope: {skill.scope.value}",
+        f"Latent skill: {skill.id}",
+        f"Name: {skill.name}",
+        f"Status: {skill.status.value}",
+        f"Recurrence count: {skill.recurrence_count}",
+        f"Matched existing: {'Yes' if result.matched_existing else 'No'}",
+        "Affected relative paths:",
+    ]
+    lines.extend(f"  - {path}" for path in affected_paths)
+    lines.extend(
+        [
+            f"Snapshot: {result.snapshot_reference}",
+            f"Audit: {result.audit_reference}",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _run_skills_generate(
@@ -1643,11 +2197,13 @@ def _run_skills_generate(
     try:
         if output_format == "json" and not yes:
             raise ValidationFailedError(
-                "A flag --yes / -y e obrigatoria para executar skills generate com saida JSON."
+                "The --yes / -y flag is required to run skills generate with JSON output."
             )
         if output_format != "json":
             if not yes and (not sys.stdin.isatty() or not sys.stdout.isatty()):
-                raise ValidationFailedError("Ambiente nao-TTY exige --yes para gerar skill.")
+                raise ValidationFailedError(
+                    "Non-TTY environment requires --yes to generate a skill."
+                )
 
             # Perform a dry_run to get real resolved paths and check for collision
             dry_run_result = command(
@@ -1667,8 +2223,8 @@ def _run_skills_generate(
                     )
                     if code != 0:
                         return code
-                elif not _confirm("Gerar estrutura da skill? [s/N]: ", default=False):
-                    _stdout_console().print("Geracao de skill cancelada.")
+                elif not _confirm("Generate skill structure? [y/N]: ", default=False):
+                    _stdout_console().print("Skill generation cancelled.")
                     return 1
 
         result = command(
@@ -1679,6 +2235,18 @@ def _run_skills_generate(
                 dry_run=False,
             )
         )
+        if output_format != "json" and not yes and _has_native_drift_warning(result):
+            choice = _prompt_native_drift_decision()
+            if choice == "overwrite":
+                result = command(
+                    GenerateSkillCommand(
+                        latent_skill_id=latent_skill_id,
+                        origin="cli",
+                        update_existing=True,
+                        dry_run=False,
+                        native_drift_decision="overwrite",
+                    )
+                )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
         exc = _map_generate_error(error, latent_skill_id)
         _print_expected_error(exc, output_format=output_format)
@@ -1689,6 +2257,26 @@ def _run_skills_generate(
     else:
         _stdout_console().print(_format_human_skill_generate_success(result))
     return 0
+
+
+def _has_native_drift_warning(result: GenerateSkillResult | UpdateSkillResult) -> bool:
+    return any(
+        "Warning: Native target has manual changes." in warning for warning in result.warnings
+    )
+
+
+def _prompt_native_drift_decision() -> str:
+    prompt_msg = (
+        "Warning: Native target has manual changes. Overwriting it might break your "
+        "current agent workflow. Keep local version or Overwrite with canonical library "
+        "version? [Keep/Overwrite] "
+    )
+    choice = ""
+    while choice not in {"keep", "overwrite"}:
+        choice = input(prompt_msg).strip().lower()
+        if not choice:
+            choice = "keep"
+    return choice
 
 
 def _run_skills_activate(
@@ -1738,6 +2326,7 @@ def _run_skills_update(  # noqa: PLR0913
     description: str | None,
     triggers: list[str] | None,
     file: Path | None,
+    yes: bool,
 ) -> int:
     try:
         raw_markdown = _read_skill_update_file(file) if file is not None else None
@@ -1751,8 +2340,25 @@ def _run_skills_update(  # noqa: PLR0913
                 if triggers is not None
                 else None,
                 raw_markdown=raw_markdown,
+                native_drift_decision=_default_native_drift_decision(output_format),
             )
         )
+        if _should_prompt_native_drift(result, output_format=output_format, yes=yes):
+            choice = _prompt_native_drift_decision()
+            if choice == "overwrite":
+                result = command(
+                    UpdateSkillCommand(
+                        latent_skill_id=latent_skill_id,
+                        origin="cli",
+                        name=name.strip() if name is not None else None,
+                        description=description.strip() if description is not None else None,
+                        triggers=[trigger.strip() for trigger in triggers or [] if trigger.strip()]
+                        if triggers is not None
+                        else None,
+                        raw_markdown=raw_markdown,
+                        native_drift_decision="overwrite",
+                    )
+                )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
         _print_expected_error(_map_skill_mutation_error(error, latent_skill_id), output_format)
         return 1
@@ -1766,23 +2372,101 @@ def _run_skills_update(  # noqa: PLR0913
 
 def _read_skill_update_file(path: Path) -> str:
     if not path.is_file():
-        raise ValidationFailedError(f"Arquivo markdown nao encontrado: {path.as_posix()}")
+        raise ValidationFailedError(f"Markdown file not found: {path.as_posix()}")
     try:
         return path.read_text(encoding="utf-8")
     except OSError as error:
         raise StorageError(str(error)) from error
 
 
+def _default_native_drift_decision(output_format: str) -> NativeDriftDecision | None:
+    if output_format == "json" or not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return "keep"
+    return None
+
+
+def _should_prompt_native_drift(
+    result: UpdateSkillResult,
+    *,
+    output_format: str,
+    yes: bool,
+) -> bool:
+    return (
+        output_format != "json"
+        and not yes
+        and sys.stdin.isatty()
+        and sys.stdout.isatty()
+        and _has_native_drift_warning(result)
+    )
+
+
+def _sync_active_skills_for_update(
+    list_command: ListSkillsCommandHandler,
+    update_command: UpdateSkillCommandHandler,
+    *,
+    output_format: str,
+    yes: bool,
+) -> list[UpdateSkillResult]:
+    list_command(ListSkillsCommand(status=LatentSkillStatus.active))
+    skill_ids = _active_project_skill_ids(Path.cwd())
+    results: list[UpdateSkillResult] = []
+    for skill_id in skill_ids:
+        result = update_command(
+            UpdateSkillCommand(
+                latent_skill_id=skill_id,
+                origin="cli_update_skills",
+                native_drift_decision=_default_native_drift_decision(output_format),
+            )
+        )
+        if _should_prompt_native_drift(result, output_format=output_format, yes=yes):
+            choice = _prompt_native_drift_decision()
+            if choice == "overwrite":
+                result = update_command(
+                    UpdateSkillCommand(
+                        latent_skill_id=skill_id,
+                        origin="cli_update_skills",
+                        native_drift_decision="overwrite",
+                    )
+                )
+        results.append(result)
+    return results
+
+
+def _active_project_skill_ids(project_root: Path) -> list[str]:
+    path = project_root / ".umem" / "memory" / "latent_skills.jsonl"
+    if not path.is_file():
+        return []
+    skill_ids: list[str] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise StorageError(str(error)) from error
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValidationFailedError(
+                f"Invalid latent skills store: {path.as_posix()}"
+            ) from error
+        if payload.get("status") == LatentSkillStatus.active.value and isinstance(
+            payload.get("id"), str
+        ):
+            skill_ids.append(payload["id"])
+    return skill_ids
+
+
 def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
     if isinstance(error, KeyError):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     if isinstance(error, StorageError) and str(error) == (
         f"Latent skill not found: {latent_skill_id}"
     ):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
@@ -1794,7 +2478,7 @@ def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Excepti
 def _map_generate_error(error: Exception, latent_skill_id: str) -> Exception:
     if isinstance(error, KeyError):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' nao encontrada no repositorio."
+            f"Latent skill '{latent_skill_id}' not found in the repository."
         )
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
@@ -1918,7 +2602,20 @@ def _skill_update_success_envelope(result: UpdateSkillResult) -> dict[str, Any]:
         "operation": "skills.update",
         "scope": result.latent_skill.scope.value,
         "data": _skill_mutation_payload(result),
-        "warnings": [],
+        "warnings": result.warnings,
+    }
+
+
+def _update_skills_success_envelope(results: list[UpdateSkillResult]) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "update.skills",
+        "scope": "project",
+        "data": {
+            "updated_count": len(results),
+            "skills": [_skill_mutation_payload(result) for result in results],
+        },
+        "warnings": [warning for result in results for warning in result.warnings],
     }
 
 
@@ -2060,6 +2757,60 @@ def _host_success_envelope(
     }
 
 
+def _update_check_success_envelope(result: UpdateCheckResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "update.check",
+        "scope": "project",
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
+def _update_migrate_success_envelope(result: UpdateMigrateResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "update.migrate",
+        "scope": "project",
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
+def _update_benchmarks_success_envelope(result: UpdateBenchmarksResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "update.benchmarks",
+        "scope": "project",
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
+def _update_apply_success_envelope(
+    check_result: UpdateCheckResult,
+    migrate_result: UpdateMigrateResult | None,
+) -> dict[str, Any]:
+    warnings = [*check_result.warnings]
+    if migrate_result is not None:
+        warnings.extend(migrate_result.warnings)
+    return {
+        "ok": True,
+        "operation": "update",
+        "scope": "project",
+        "data": {
+            "check": check_result.to_payload(),
+            "migration_applied": migrate_result is not None,
+            "migrated_files": migrate_result.migrated_files if migrate_result is not None else [],
+            "audit_reference": migrate_result.audit_reference if migrate_result is not None else "",
+            "snapshot_references": (
+                migrate_result.snapshot_references if migrate_result is not None else []
+            ),
+        },
+        "warnings": warnings,
+    }
+
+
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
     project_root = result.project_path
     return {
@@ -2139,32 +2890,42 @@ def _remember_payload(result: RememberFactResult) -> dict[str, Any]:
     }
 
 
-def _format_human_init_output(result: SetupProjectResult) -> str:
+def _format_human_init_output(result: SetupProjectResult, *, locale: str = "en") -> str:
     status = (
-        "Memoria local criada em .umem/." if result.created else "Memoria local ja inicializada."
+        "Local memory created at .umem/." if result.created else "Local memory already initialized."
     )
-    paths_label = "Caminhos criados:" if result.created else "Caminhos reutilizados:"
+    paths_label = "Created paths:" if result.created else "Reused paths:"
     paths = result.created_paths if result.created else result.existing_paths
     rendered_paths = "\n".join(f"- {path}" for path in paths)
 
     return "\n".join(
         [
-            status,
-            paths_label,
+            human_message(status, locale=locale),
+            human_message(paths_label, locale=locale),
             rendered_paths,
-            f"Auditoria: {AUDIT_REFERENCE_PLACEHOLDER}",
-            "Proximo comando sugerido: umem status",
+            human_message(
+                "Audit: {audit_reference}",
+                locale=locale,
+                audit_reference=AUDIT_REFERENCE_PLACEHOLDER,
+            ),
+            human_message("Suggested next command: umem status", locale=locale),
         ]
     )
 
 
-def _format_human_init_host_results(results: list[ConfigureHostResult]) -> str:
-    lines = ["Hosts configurados no onboarding:"]
+def _format_human_init_host_results(
+    results: list[ConfigureHostResult], *, locale: str = "en"
+) -> str:
+    lines = [human_message("Hosts configured during onboarding:", locale=locale)]
     for result in results:
-        changes = ", ".join(change["path"] for change in result.planned_changes) or "(validacao)"
+        changes = ", ".join(change["path"] for change in result.planned_changes) or (
+            "(" + human_message("validation", locale=locale) + ")"
+        )
         lines.append(
-            f"- {result.host_id}: {result.validation_status}; arquivos={changes}; "
-            f"snapshot={result.snapshot_reference}; auditoria={result.audit_reference}"
+            f"- {result.host_id}: {result.validation_status}; "
+            f"{human_message('files', locale=locale)}={changes}; "
+            f"{human_message('snapshot', locale=locale)}={result.snapshot_reference}; "
+            f"{human_message('audit', locale=locale)}={result.audit_reference}"
         )
     return "\n".join(lines)
 
@@ -2173,19 +2934,19 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
     if not result.initialized:
         return "\n".join(
             [
-                "Memoria local nao inicializada.",
-                f"Projeto: {result.project_path}",
-                f"Proxima acao: {result.recommended_action}",
+                "Local memory is not initialized.",
+                f"Project: {result.project_path}",
+                f"Next action: {result.recommended_action}",
             ]
         )
 
     lines = [
-        "Memoria local inicializada.",
-        f"Projeto: {result.project_path}",
-        f"Tamanho aproximado: {result.approximate_size_bytes} bytes",
-        f"Ultimo health check: {result.last_health_check}",
-        f"Regras ativas: {result.active_rules_count}",
-        f"Skills registradas: {result.registered_skills_count}",
+        "Local memory initialized.",
+        f"Project: {result.project_path}",
+        f"Approximate size: {result.approximate_size_bytes} bytes",
+        f"Last health check: {result.last_health_check}",
+        f"Active rules: {result.active_rules_count}",
+        f"Registered skills: {result.registered_skills_count}",
         "Hosts:",
     ]
     for host, validation in result.host_validation.items():
@@ -2194,12 +2955,12 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
         audit_reference = validation.get("audit_reference")
         suffix_parts = []
         if method:
-            suffix_parts.append(f"metodo={method}")
+            suffix_parts.append(f"method={method}")
         if audit_reference:
-            suffix_parts.append(f"auditoria={audit_reference}")
+            suffix_parts.append(f"audit={audit_reference}")
         suffix = f" ({', '.join(suffix_parts)})" if suffix_parts else ""
         lines.append(f"- {host}: {status}{suffix}")
-    lines.append("Fatos por escopo/status:")
+    lines.append("Facts by scope/status:")
     for scope, counts in result.fact_counts.items():
         rendered_counts = ", ".join(f"{status}: {count}" for status, count in counts.items())
         lines.append(f"- {scope} {rendered_counts}")
@@ -2209,13 +2970,127 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
 def _format_human_context_output(result: AssembleContextSummaryResult) -> str:
     summary = result.context_summary
     lines = [
-        "Contexto montado.",
-        f"Resumo do projeto: {summary.project_summary or '(vazio)'}",
-        f"Preferencias universais: {summary.universal_preferences or '(vazio)'}",
-        f"Regras ativas: {summary.active_rules or '(vazio)'}",
-        "Fontes: "
-        f"{', '.join(result.included_fact_ids) if result.included_fact_ids else '(nenhuma)'}",
+        "Context assembled.",
+        f"Project summary: {summary.project_summary or '(empty)'}",
+        f"Universal preferences: {summary.universal_preferences or '(empty)'}",
+        f"Active rules: {summary.active_rules or '(empty)'}",
+        f"Sources: {', '.join(result.included_fact_ids) if result.included_fact_ids else '(none)'}",
     ]
+    return "\n".join(lines)
+
+
+def _format_human_update_check(result: UpdateCheckResult) -> str:
+    memory = ", ".join(
+        f"{name}: {versions or ['legacy']}"
+        for name, versions in sorted(result.memory_schema_versions.items())
+    )
+    lines = [
+        "Update check completed.",
+        "Scope: project",
+        f"Installed version: {result.installed_version}",
+        f"Target schema: {result.target_schema_version}",
+        f"Config schema: {result.project_config_schema_version or 'legacy'}",
+        f"Memory schemas: {memory or '(no files found)'}",
+        f"Benchmarks: {result.benchmarks_status}",
+        f"Updates available: {result.updates_available}",
+        f"Migration required: {str(result.migration_required).lower()}",
+    ]
+    if result.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in result.warnings)
+    if result.migration_required:
+        lines.append("Next action: umem update --yes")
+    else:
+        lines.append("Next action: no local update action required.")
+    return "\n".join(lines)
+
+
+def _format_human_update_apply(
+    check_result: UpdateCheckResult,
+    migrate_result: UpdateMigrateResult | None,
+) -> str:
+    lines = [
+        "Update completed.",
+        "Scope: project",
+        f"Installed version: {check_result.installed_version}",
+        f"Target schema: {check_result.target_schema_version}",
+        f"Updates available: {check_result.updates_available}",
+        f"Migration required: {str(check_result.migration_required).lower()}",
+        f"Migration applied: {str(migrate_result is not None).lower()}",
+    ]
+    if migrate_result is not None:
+        lines.append("Migrated files:")
+        lines.extend(f"- {path}" for path in migrate_result.migrated_files)
+        snapshots = (
+            ", ".join(migrate_result.snapshot_references)
+            if migrate_result.snapshot_references
+            else "(none)"
+        )
+        lines.extend(
+            [
+                f"Snapshots: {snapshots}",
+                f"Audit: {migrate_result.audit_reference or '(no changes)'}",
+            ]
+        )
+    else:
+        lines.append("No local update actions were required.")
+    warnings = [*check_result.warnings]
+    if migrate_result is not None:
+        warnings.extend(migrate_result.warnings)
+    if warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in warnings)
+    return "\n".join(lines)
+
+
+def _format_human_update_mutation_plan(operation: str) -> str:
+    return "\n".join(
+        [
+            f"Operation: {operation}",
+            "Scope: project",
+            "Snapshot: created by the safe pipeline before each write.",
+            "Audit: safe mutation event expected.",
+            "Default: do not confirm.",
+        ]
+    )
+
+
+def _format_human_update_migrate(result: UpdateMigrateResult) -> str:
+    lines = [
+        "Migration completed.",
+        "Scope: project",
+        f"Target schema: {result.target_schema_version}",
+        "Migrated files:",
+    ]
+    lines.extend(f"- {path}" for path in result.migrated_files)
+    snapshots = ", ".join(result.snapshot_references) if result.snapshot_references else "(none)"
+    lines.extend(
+        [
+            f"Snapshots: {snapshots}",
+            f"Audit: {result.audit_reference or '(no changes)'}",
+        ]
+    )
+    if result.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in result.warnings)
+    return "\n".join(lines)
+
+
+def _format_human_update_benchmarks(result: UpdateBenchmarksResult) -> str:
+    lines = [
+        "Benchmarks updated.",
+        "Scope: project",
+        f"File: {result.retrieval_results_path}",
+        f"Synthetic facts: {result.fact_count}",
+        f"Queries: {result.query_count}",
+        f"Default strategy: {result.selected_default_strategy}",
+        f"p95 latency ms: {result.p95_latency_ms}",
+        f"Snapshot: {result.snapshot_reference}",
+        f"Audit: {result.audit_reference}",
+    ]
+    if result.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in result.warnings)
     return "\n".join(lines)
 
 
@@ -2223,26 +3098,26 @@ def _format_human_remember_output(result: RememberFactResult) -> str:
     fact = result.fact
     return "\n".join(
         [
-            "Fato salvo.",
+            "Fact saved.",
             f"ID: {fact.id}",
-            f"Escopo: {fact.scope.value}",
+            f"Scope: {fact.scope.value}",
             f"Status: {fact.status.value}",
-            f"Tags: {', '.join(fact.tags) if fact.tags else '(nenhuma)'}",
-            f"Auditoria: {result.audit_reference}",
+            f"Tags: {', '.join(fact.tags) if fact.tags else '(none)'}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
 
 def _format_human_facts_list_output(result: ListFactsResult) -> Table | str:
     if not result.facts:
-        return "Nenhum fato encontrado."
+        return "No facts found."
 
-    table = Table(title="Fatos:", show_header=True)
+    table = Table(title="Facts:", show_header=True)
     table.add_column("ID")
-    table.add_column("Escopo")
+    table.add_column("Scope")
     table.add_column("Status")
-    table.add_column("Fonte")
-    table.add_column("Conteudo")
+    table.add_column("Source")
+    table.add_column("Content")
     for fact in result.facts:
         table.add_row(
             fact.id,
@@ -2255,15 +3130,15 @@ def _format_human_facts_list_output(result: ListFactsResult) -> Table | str:
 
 
 def _format_human_purge_preview(*, id: str | None, scope: FactScope | None) -> str:
-    target = f"ID: {id}" if id is not None else f"Escopo: {scope.value if scope else 'n/a'}"
+    target = f"ID: {id}" if id is not None else f"Scope: {scope.value if scope else 'n/a'}"
     return "\n".join(
         [
-            "Purga permanente selecionada:",
+            "Permanent purge selected:",
             target,
-            "Caminho afetado: .umem/memory/facts.jsonl",
-            "Snapshot: criado pelo pipeline seguro quando configurado",
-            "Auditoria: evento de mutacao segura esperado",
-            "Padrao: nao confirmar.",
+            "Affected path: .umem/memory/facts.jsonl",
+            "Snapshot: created by the safe pipeline when configured",
+            "Audit: safe mutation event expected",
+            "Default: do not confirm.",
         ]
     )
 
@@ -2271,10 +3146,10 @@ def _format_human_purge_preview(*, id: str | None, scope: FactScope | None) -> s
 def _format_human_purge_success(result: PurgeFactResult) -> str:
     return "\n".join(
         [
-            "Purga concluida.",
-            f"Itens purgados: {result.purged_count}",
-            f"IDs afetados: {', '.join(result.affected_ids)}",
-            f"Auditoria: {result.audit_reference}",
+            "Purge completed.",
+            f"Purged items: {result.purged_count}",
+            f"Affected IDs: {', '.join(result.affected_ids)}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
@@ -2282,25 +3157,25 @@ def _format_human_purge_success(result: PurgeFactResult) -> str:
 def _format_human_hygiene_success(result: ContextHygieneResult) -> str:
     return "\n".join(
         [
-            "Higiene de contexto concluida.",
-            f"Fatos marcados como stale: {result.stale_count}",
-            f"Fatos arquivados: {result.archived_count}",
-            f"Auditoria: {result.audit_reference}",
+            "Context hygiene completed.",
+            f"Facts marked stale: {result.stale_count}",
+            f"Facts archived: {result.archived_count}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
 
 def _format_human_audit_output(result: ListAuditLogResult) -> Table | str:
     if not result.events:
-        return "Nenhum evento de auditoria encontrado."
+        return "No audit events found."
 
-    table = Table(title="Eventos de auditoria:", show_header=True)
+    table = Table(title="Audit events:", show_header=True)
     table.add_column("Timestamp")
-    table.add_column("Escopo")
-    table.add_column("Origem")
-    table.add_column("Acao")
-    table.add_column("Resultado")
-    table.add_column("Auditoria")
+    table.add_column("Scope")
+    table.add_column("Origin")
+    table.add_column("Action")
+    table.add_column("Result")
+    table.add_column("Audit")
     table.add_column("Snapshot")
     for event in result.events:
         table.add_row(
@@ -2317,16 +3192,16 @@ def _format_human_audit_output(result: ListAuditLogResult) -> Table | str:
 
 def _format_human_snapshots_output(result: ListSnapshotsResult) -> Table | str:
     if not result.snapshots:
-        return "Nenhum snapshot encontrado."
+        return "No snapshots found."
 
     table = Table(title="Snapshots:", show_header=True)
     table.add_column("Timestamp")
-    table.add_column("Escopo")
-    table.add_column("Origem")
-    table.add_column("Acao")
-    table.add_column("Arquivo")
+    table.add_column("Scope")
+    table.add_column("Origin")
+    table.add_column("Action")
+    table.add_column("File")
     table.add_column("Hash")
-    table.add_column("Manifesto")
+    table.add_column("Manifest")
     for snapshot in result.snapshots:
         table.add_row(
             snapshot.timestamp,
@@ -2343,12 +3218,12 @@ def _format_human_snapshots_output(result: ListSnapshotsResult) -> Table | str:
 def _format_human_rollback_preview(snapshot: Snapshot) -> str:
     return "\n".join(
         [
-            "Rollback selecionado:",
-            f"Escopo: {snapshot.scope.value}",
+            "Rollback selected:",
+            f"Scope: {snapshot.scope.value}",
             f"Snapshot: {snapshot.id}",
             f"Timestamp: {snapshot.timestamp.isoformat()}",
-            f"Acao original: {snapshot.action}",
-            f"Arquivo: {snapshot.relative_path}",
+            f"Original action: {snapshot.action}",
+            f"File: {snapshot.relative_path}",
         ]
     )
 
@@ -2356,11 +3231,11 @@ def _format_human_rollback_preview(snapshot: Snapshot) -> str:
 def _format_human_rollback_success(result: RollbackResult) -> str:
     return "\n".join(
         [
-            "Rollback concluido.",
-            f"Escopo: {result.scope.value}",
+            "Rollback completed.",
+            f"Scope: {result.scope.value}",
             f"Snapshot: {result.snapshot_reference}",
-            f"Arquivos restaurados: {', '.join(result.restored_paths)}",
-            f"Auditoria: {result.audit_reference}",
+            f"Restored files: {', '.join(result.restored_paths)}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
@@ -2370,14 +3245,14 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
     is_global = scope == "global"
 
     skill_path = "memory/latent_skills.jsonl" if is_global else ".umem/memory/latent_skills.jsonl"
-    config_path = "~/.config/universal-memory/config.toml" if is_global else ".umem/config.toml"
+    config_path = "~/.config/umem/config.toml" if is_global else ".umem/config.toml"
 
     lines = [
-        "Operacao: skills.propose",
-        f"Escopo: {scope}",
-        f"Nome sugerido: {result.proposal['suggested_name']}",
-        f"Proposito: {result.proposal['purpose']}",
-        "Evidencias:",
+        "Operation: skills.propose",
+        f"Scope: {scope}",
+        f"Suggested name: {result.proposal['suggested_name']}",
+        f"Purpose: {result.proposal['purpose']}",
+        "Evidence:",
     ]
     evidence = result.proposal.get("evidence", [])
     lines.extend(f"  - {item}" for item in evidence)
@@ -2385,20 +3260,20 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
     lines.extend(
         [
             "",
-            "Caminhos relativos afetados:",
-            f"  - Decisao Sim: {skill_path}",
-            f"  - Decisao Sempre: {skill_path} E {config_path}",
-            f"  - Decisao Nao: {skill_path}",
+            "Affected relative paths:",
+            f"  - Decision yes: {skill_path}",
+            f"  - Decision always: {skill_path} AND {config_path}",
+            f"  - Decision no: {skill_path}",
             "",
-            "Snapshot: Um snapshot de seguranca sera criado antes de qualquer gravacao.",
-            "Evento de auditoria esperado: propose_skill_decision ou "
-            "update_skill_auto_approval (para Sempre).",
-            "Opcoes: Sim, Sempre, Não",
+            "Snapshot: a safety snapshot will be created before any write.",
+            "Expected audit event: propose_skill_decision or "
+            "update_skill_auto_approval (for always).",
+            "Options: yes, always, no",
         ]
     )
 
     if result.audit_reference:
-        lines.append(f"Auditoria: {result.audit_reference}")
+        lines.append(f"Audit: {result.audit_reference}")
     if result.snapshot_reference:
         lines.append(f"Snapshot: {result.snapshot_reference}")
     return "\n".join(lines)
@@ -2406,19 +3281,19 @@ def _format_human_skill_proposal(result: ProposeSkillResult) -> str:
 
 def _format_human_skill_list(result: ListSkillsResult) -> Table | str:
     if not result.skills:
-        lines = ["Nenhuma skill registrada."]
+        lines = ["No skills registered."]
         if result.recommended_action:
             lines.append(result.recommended_action)
         return "\n".join(lines)
 
-    table = Table(title="Skills registradas")
-    table.add_column("Nome")
-    table.add_column("Escopo")
+    table = Table(title="Registered skills")
+    table.add_column("Name")
+    table.add_column("Scope")
     table.add_column("Status")
-    table.add_column("Caminho relativo")
-    table.add_column("Origem")
-    table.add_column("Criada em")
-    table.add_column("Atualizada em")
+    table.add_column("Relative path")
+    table.add_column("Origin")
+    table.add_column("Created at")
+    table.add_column("Updated at")
     status_styles = {
         "active": "green",
         "candidate": "yellow",
@@ -2439,18 +3314,18 @@ def _format_human_skill_list(result: ListSkillsResult) -> Table | str:
 
 def _format_human_skill_detail(result: GetSkillDetailResult) -> str:
     lines = [
-        "Operacao: skills.detail",
-        f"Nome: {result.name}",
-        f"Escopo: {result.scope}",
+        "Operation: skills.detail",
+        f"Name: {result.name}",
+        f"Scope: {result.scope}",
         f"Status: {result.status}",
-        f"Caminho relativo: {result.relative_path or '-'}",
-        "Gatilhos:",
+        f"Relative path: {result.relative_path or '-'}",
+        "Triggers:",
     ]
     lines.extend(f"  - {trigger}" for trigger in result.triggers)
     lines.extend(
         [
-            f"Auditoria: {result.audit_reference}",
-            f"References carregadas: {str(result.references_loaded).lower()}",
+            f"Audit: {result.audit_reference}",
+            f"References loaded: {str(result.references_loaded).lower()}",
         ]
     )
     return "\n".join(lines)
@@ -2458,10 +3333,10 @@ def _format_human_skill_detail(result: GetSkillDetailResult) -> str:
 
 def _format_human_skill_generate_plan(result: GenerateSkillResult) -> str:
     lines = [
-        "Operacao: skills.generate",
-        f"Escopo: {result.latent_skill.scope.value}",
+        "Operation: skills.generate",
+        f"Scope: {result.latent_skill.scope.value}",
         f"Latent skill: {result.latent_skill.id}",
-        "Caminhos relativos afetados:",
+        "Affected relative paths:",
         f"  - {result.skill_file}",
     ]
     metadata = result.latent_skill.metadata or {}
@@ -2471,9 +3346,9 @@ def _format_human_skill_generate_plan(result: GenerateSkillResult) -> str:
         lines.append(f"  - {result.skill_dir}/references/.gitkeep")
     lines.extend(
         [
-            "Snapshot: criado pelo pipeline seguro antes de cada gravacao.",
-            "Auditoria: evento generate_skill esperado.",
-            "Padrao: nao confirmar.",
+            "Snapshot: created by the safe pipeline before each write.",
+            "Audit: generate_skill event expected.",
+            "Default: do not confirm.",
         ]
     )
     return "\n".join(lines)
@@ -2481,21 +3356,21 @@ def _format_human_skill_generate_plan(result: GenerateSkillResult) -> str:
 
 def _format_human_skill_generate_success(result: GenerateSkillResult) -> str:
     lines = [
-        "Operacao: skills.generate",
-        f"Escopo: {result.latent_skill.scope.value}",
-        f"Nome: {result.latent_skill.name}",
+        "Operation: skills.generate",
+        f"Scope: {result.latent_skill.scope.value}",
+        f"Name: {result.latent_skill.name}",
         f"Slug: {result.slug}",
-        "Caminhos relativos afetados:",
+        "Affected relative paths:",
     ]
     lines.extend(f"  - {path}" for path in result.affected_paths)
     lines.extend(
         [
             f"Snapshot: {result.snapshot_reference}",
-            f"Auditoria: {result.audit_reference}",
+            f"Audit: {result.audit_reference}",
         ]
     )
     if result.collision_detected and result.suggested_slug and result.suggested_slug != result.slug:
-        lines.append(f"Colisao: slug alternativo usado ({result.suggested_slug}).")
+        lines.append(f"Collision: alternate slug used ({result.suggested_slug}).")
     return "\n".join(lines)
 
 
@@ -2511,23 +3386,36 @@ def _format_human_skill_mutation_success(
         affected_paths.insert(0, skill_file)
 
     lines = [
-        f"Operacao: {operation}",
-        f"Escopo: {skill.scope.value}",
+        f"Operation: {operation}",
+        f"Scope: {skill.scope.value}",
         f"Latent skill: {skill.id}",
-        f"Nome: {skill.name}",
+        f"Name: {skill.name}",
         f"Status: {skill.status.value}",
-        "Caminhos relativos afetados:",
+        "Affected relative paths:",
     ]
     lines.extend(f"  - {path}" for path in affected_paths)
     lines.extend(
         [
             f"Snapshot: {result.snapshot_reference}",
-            f"Auditoria: {result.audit_reference}",
+            f"Audit: {result.audit_reference}",
         ]
     )
     rollback_hint = getattr(result, "rollback_hint", None)
     if rollback_hint:
         lines.append(f"Rollback: {rollback_hint}")
+    warnings = getattr(result, "warnings", [])
+    if warnings:
+        lines.append("Warnings:")
+        lines.extend(f"  - {warning}" for warning in warnings)
+    return "\n".join(lines)
+
+
+def _format_human_update_skills(results: list[UpdateSkillResult]) -> str:
+    lines = ["Operation: update.skills", f"Updated skills: {len(results)}"]
+    warnings = [warning for result in results for warning in result.warnings]
+    if warnings:
+        lines.append("Warnings:")
+        lines.extend(f"  - {warning}" for warning in warnings)
     return "\n".join(lines)
 
 
@@ -2539,14 +3427,14 @@ def _latent_skill_store_path(scope: Any) -> str:
 
 def _format_human_host_plan(result: ConfigureHostResult, *, operation: str) -> Table | str:
     if not result.planned_changes:
-        return f"Nenhuma alteracao planejada para host {result.host_id}."
+        return f"No changes planned for host {result.host_id}."
 
-    table = Table(title=f"Plano de {operation} do host {result.host_id}", show_header=True)
-    table.add_column("Alvo")
-    table.add_column("Acao")
-    table.add_column("Caminho")
+    table = Table(title=f"Host {operation} plan for {result.host_id}", show_header=True)
+    table.add_column("Target")
+    table.add_column("Action")
+    table.add_column("Path")
     table.add_column("Snapshot")
-    table.add_column("Auditoria")
+    table.add_column("Audit")
     for change in result.planned_changes:
         table.add_row(
             change["target"],
@@ -2567,48 +3455,48 @@ def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -
         }
         style = status_styles.get(result.validation_status, "white")
         lines = [
-            "[bold]Host check concluido.[/bold]",
+            "[bold]Host check completed.[/bold]",
             f"Host: {result.host_id}",
-            f"Alvos: {', '.join(result.instruction_targets)}",
-            f"Validacao: [{style}]{result.validation_status}[/{style}]",
-            f"Auditoria: {result.audit_reference}",
+            f"Targets: {', '.join(result.instruction_targets)}",
+            f"Validation: [{style}]{result.validation_status}[/{style}]",
+            f"Audit: {result.audit_reference}",
         ]
         if result.warnings:
             if result.validation_status == "failure":
-                lines.append("Erros de Validação:")
+                lines.append("Validation errors:")
             else:
-                lines.append("Alertas:")
+                lines.append("Warnings:")
             lines.extend(f"- {warning}" for warning in result.warnings)
         return Panel.fit("\n".join(lines), border_style=style)
 
-    changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
+    changes = ", ".join(change["path"] for change in result.planned_changes) or "(none)"
     return "\n".join(
         [
-            f"Host {operation} concluido.",
+            f"Host {operation} completed.",
             f"Host: {result.host_id}",
-            f"Alvos: {', '.join(result.instruction_targets)}",
-            f"Arquivos: {changes}",
-            f"Validacao: {result.validation_status}",
-            f"Auditoria: {result.audit_reference}",
+            f"Targets: {', '.join(result.instruction_targets)}",
+            f"Files: {changes}",
+            f"Validation: {result.validation_status}",
+            f"Audit: {result.audit_reference}",
         ]
     )
 
 
 def _format_human_sync_success(result: SyncInstructionsResult) -> str:
-    changes = ", ".join(change["path"] for change in result.planned_changes) or "(nenhuma)"
+    changes = ", ".join(change["path"] for change in result.planned_changes) or "(none)"
     msg = (
-        "Host sync concluido."
+        "Host sync completed."
         if result.validation_status == "success"
-        else "Dry-run concluido. Nenhuma alteracao foi aplicada ao sistema de arquivos."
+        else "Dry-run completed. No changes were applied to the filesystem."
     )
     return "\n".join(
         [
             msg,
             f"Hosts: {', '.join(result.host_ids)}",
-            f"Alvos: {', '.join(result.instruction_targets)}",
-            f"Arquivos: {changes}",
-            f"Validacao: {result.validation_status}",
-            f"Auditoria: {result.audit_reference}",
+            f"Targets: {', '.join(result.instruction_targets)}",
+            f"Files: {changes}",
+            f"Validation: {result.validation_status}",
+            f"Audit: {result.audit_reference}",
             f"Snapshots: {result.snapshot_reference}",
         ]
     )
@@ -2616,15 +3504,15 @@ def _format_human_sync_success(result: SyncInstructionsResult) -> str:
 
 def _format_human_sync_plan(result: SyncInstructionsResult) -> Table | str:
     if not result.planned_changes:
-        return "Nenhuma alteracao planejada para sincronizacao de instrucoes."
+        return "No changes planned for instruction synchronization."
 
-    table = Table(title="Plano de sincronizacao de instrucoes", show_header=True)
-    table.add_column("Alvo")
-    table.add_column("Acao")
-    table.add_column("Caminho")
-    table.add_column("Escopo")
+    table = Table(title="Instruction synchronization plan", show_header=True)
+    table.add_column("Target")
+    table.add_column("Action")
+    table.add_column("Path")
+    table.add_column("Scope")
     table.add_column("Snapshot")
-    table.add_column("Auditoria")
+    table.add_column("Audit")
     for change in result.planned_changes:
         table.add_row(
             change["target"],
@@ -2641,10 +3529,13 @@ def _recovery_hint(error: Exception) -> str:
     return recovery_hint(error)
 
 
-def _print_expected_error(error: Exception, output_format: str) -> None:
+def _print_expected_error(
+    error: Exception, output_format: str, *, locale: str | None = None
+) -> None:
+    message_locale = DEFAULT_LOCALE if output_format == "json" else (locale or DEFAULT_LOCALE)
     payload = {
         "ok": False,
-        "error": error_payload(error, message_locale="pt-BR"),
+        "error": error_payload(error, message_locale=message_locale),
     }
 
     if output_format == "json":
@@ -2655,13 +3546,16 @@ def _print_expected_error(error: Exception, output_format: str) -> None:
         Text.from_markup(
             "\n".join(
                 [
-                    f"[bold]Falha:[/bold] {payload['error']['message']}",
-                    f"[bold]Detalhe:[/bold] {payload['error']['detail']}",
-                    f"[bold]Recuperacao:[/bold] {payload['error']['recovery_hint']}",
+                    f"[bold]{human_message('Failure:', locale=message_locale)}[/bold] "
+                    f"{payload['error']['message']}",
+                    f"[bold]{human_message('Detail:', locale=message_locale)}[/bold] "
+                    f"{payload['error']['detail']}",
+                    f"[bold]{human_message('Recovery:', locale=message_locale)}[/bold] "
+                    f"{payload['error']['recovery_hint']}",
                 ]
             )
         ),
-        title="Erro",
+        title=human_message("Error", locale=message_locale),
         border_style="red",
     )
     _stderr_console().print(panel)
@@ -2714,10 +3608,10 @@ def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
     if value is None:
         return None
     normalized = value.strip().casefold()
-    if normalized in {"s", "sim", "y", "yes"}:
+    if normalized in {"y", "yes"}:
         return ProposeSkillDecision.sim
-    if normalized in {"e", "sempre", "always"}:
+    if normalized == "always":
         return ProposeSkillDecision.sempre
-    if normalized in {"n", "nao", "não", "no"}:
+    if normalized in {"n", "no"}:
         return ProposeSkillDecision.nao
     return None

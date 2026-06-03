@@ -31,8 +31,10 @@ classification:
   projectContext: greenfield
 workflowType: 'prd'
 date: '2026-04-25'
-lastEdited: '2026-05-19'
+lastEdited: '2026-05-31'
 editHistory:
+  - date: '2026-05-31'
+    changes: 'Sprint change proposal integration: terminal visual identity, English as default, multi-runtime onboarding, native skill directories, and interactive skill updates/synchronization with conflict warning guardrails.'
   - date: '2026-05-19'
     changes: 'Validation-guided edit: measurable success criteria, post-MVP import/export, developer-tool sections, measurable NFRs, and implementation-leakage cleanup.'
   - date: '2026-05-19'
@@ -92,8 +94,10 @@ O **universal-memory** é uma camada de persistência cognitiva agnóstica proje
 ### MVP - Minimum Viable Product
 
 *   **Core Memory Engine:** Sistema de persistência local (JSON/Markdown) para armazenamento de fatos, preferências e histórico consolidado.
-*   **Auto-Adaptation Motor:** Um agente/rotina dedicado que analisa a memória e atualiza o arquivo `AGENTS.md` (instruções globais) para refletir o comportamento do usuário.
-*   **On-Demand Skill Creation:** Capacidade de gerar novas skills (ferramentas/scripts) baseadas na necessidade detectada durante o fluxo de trabalho.
+*   **Auto-Adaptation Motor:** Um agente/rotina dedicado que analisa a memória e atualiza manifests compartilhados e arquivos nativos de runtimes suportados para refletir o comportamento do usuário sem drift.
+*   **On-Demand Skill Creation and Native Skill Installation:** Capacidade de gerar Agent Skills canônicas e instalá-las em diretórios nativos de agentes suportados quando o runtime consumir skills nativamente.
+*   **Multi-Runtime Onboarding:** Fluxo CLI para seleção múltipla de runtimes/agentes, com inglês como idioma default e feedback visual de terminal.
+*   **Interactive Update & Synchronization:** Capacidade de atualizar skills canônicas, propagar alterações para runtimes locais, sincronizar benchmarks/dados locais e interagir ativamente com o usuário em caso de conflitos em regras nativas (ex: Cursor).
 *   **Universal Interface:** CLI ou protocolo simples para que qualquer agente possa ler/escrever na memória.
 *   **Backup & Rollback Guardrails:** Proteção local contra perda de dados antes de alterações automáticas em memórias, regras, skills e arquivos de instrução.
 
@@ -146,14 +150,23 @@ O **universal-memory** é uma camada de persistência cognitiva agnóstica proje
     *   **Clímax:** O sistema gera o boilerplate e a lógica de uma nova skill `generate-sdd-spec` e a registra no sistema.
     *   **Resolução:** Na próxima vez, Yan apenas diz "crie a spec SDD para o módulo Y", invocando a skill em vez de re-explicar a metodologia.
 
-### Journey 4: O Integrador de Novo Agente (Portabilidade entre Vendors)
-*   **Persona:** Yan, avaliando uma nova ferramenta de IA no fluxo de desenvolvimento.
-*   **Cenário:** Yan quer usar a mesma memória e diretrizes comportamentais em um agente diferente sem reconstruir contexto manualmente.
+### Journey 4: O Integrador de Multi-Runtimes (Onboarding e Portabilidade)
+*   **Persona:** Yan, configurando o ambiente para trabalhar simultaneamente com Claude Code, OpenCode e Cursor.
+*   **Cenário:** Yan want to initialize context in a new project and configure all tools at once.
 *   **A Jornada:**
-    *   **Início:** Yan executa o fluxo de configuração para um novo host/agente suportado.
-    *   **Ação:** O sistema aplica as instruções de inicialização, conecta o agente ao servidor MCP e valida uma leitura de contexto.
-    *   **Clímax:** O novo agente responde com as mesmas preferências, restrições e memória de projeto já usadas nos agentes anteriores.
-    *   **Resolução:** Yan confirma que a identidade operacional foi portada em menos de 10 minutos, sem reescrever prompts longos.
+    *   **Início:** Yan executa `umem init` no terminal. Ele é recebido por uma bela arte em ASCII/ANSI simulando a conexão de um pendrive no terminal de forma minimalista.
+    *   **Ação:** O prompt interativo em inglês pergunta: `Which runtime(s) would you like to install for?`. Yan seleciona múltiplos runtimes (Claude Code, OpenCode, Cursor) fornecendo os caminhos apropriados.
+    *   **Clímax:** O instalador detecta as pastas locais de cada agente, realiza o backup automático (snapshot) e insere as regras de inicialização e diretórios nativos de skills (como `.claude/`, `.opencode/` e `.cursor/rules/`) com zero fricção.
+    *   **Resolução:** Todos os agentes são sincronizados instantaneamente para ler a mesma base de memórias locais e skills de maneira portátil e consistente.
+
+### Journey 5: O Curador de Versões (Atualização com Proteção contra Deriva)
+*   **Persona:** Yan, que customizou manualmente uma regra de instrução nativa do Cursor (`.cursor/rules/sdd-rules.md`).
+*   **Cenário:** O `umem` atualiza a biblioteca local e propõe atualizar a respectiva skill canônica em todos os runtimes.
+*   **A Jornada:**
+    *   **Início:** Yan executa `umem update --skills` para propagar melhorias de skills.
+    *   **Ação:** O `umem` detecta que o arquivo local do Cursor divergiu da versão canônica.
+    *   **Clímax:** Em vez de sobrescrever silenciosamente, a CLI do `umem` exibe um aviso interativo destacado em inglês: `Warning: Native Cursor target sdd-rules.md has manual changes. Overwriting it might break your current agent workflow. Keep local Cursor version or Overwrite with canonical library version? [Keep/Overwrite]`.
+    *   **Resolução:** Yan escolhe `Keep` (Manter). O `umem` preserva a customização local dele no Cursor, cria um snapshot de backup da skill, e atualiza as demais ferramentas sem drift cognitivo.
 
 ### Journey Requirements Summary
 
@@ -162,7 +175,8 @@ Essas jornadas revelam a necessidade das seguintes capacidades:
 *   **Motor de Análise de Relevância:** Lógica de pontuação baseada em recorrência (2-3 vezes) para transformar fatos efêmeros em regras permanentes.
 *   **Repositório de Metadados por Repo:** Capacidade de separar o que é "Universal" do que é específico de um projeto/pasta.
 *   **Motor de Geração de Código (Skills):** Infraestrutura para que um agente possa escrever, testar e registrar novos scripts/ferramentas no ambiente do usuário.
-*   **Fluxo de Integração de Host:** Procedimento repetível para configurar um novo agente, validar leitura de memória e confirmar consistência de comportamento.
+*   **Fluxo de Integração de Host:** Procedimento repetível para configurar múltiplos runtimes, configurar seus diretórios nativos de skills/regras, validar leitura de memória e confirmar consistência de comportamento de ponta a ponta.
+*   **Motor de Sincronização e Resolução de Conflitos:** Lógica para detectar divergências entre arquivos nativos de runtimes e o repositório canônico de skills, com prompts de confirmação de quebra de fluxo para o usuário.
 
 ## Domain-Specific Requirements
 
@@ -204,12 +218,26 @@ Essas jornadas revelam a necessidade das seguintes capacidades:
 - **Offline Operation:** Todas as capacidades essenciais do MVP devem funcionar sem conectividade externa após instalação e configuração local.
 
 ### Runtime & Host Support Matrix
+
+O ecossistema é modelado em **Tiers de Suporte de Runtime** para gerenciar o escopo de compatibilidade de caminhos nativos de instruções e skills:
+
+| Runtime | Tier | Path Alvo Inicial / Diretórios Nativos |
+| --- | --- | --- |
+| **Claude Code** | Tier 1 (MVP completo) | `~/.claude/`, `.claude/`, `CLAUDE.md` |
+| **OpenCode** | Tier 1 (MVP completo) | `~/.config/opencode/`, `.opencode/`, `AGENTS.md` |
+| **Codex (OpenAI)** | Tier 1 (MVP completo) | `AGENTS.md`, paths locais de configuração do host |
+| **Cursor** | Tier 2 (MVP básico) | `~/.cursor/`, `.cursor/rules/` |
+| **Antigravity** | Tier 2 (MVP básico) | `~/.gemini/antigravity/` ou path do runtime adapter |
+| **Gemini** | Tier 2 (MVP básico) | `~/.gemini/`, `GEMINI.md` |
+
+#### Critérios de Aceite de Integração de Runtimes:
+
 | Surface | MVP Support Target | Acceptance Criteria |
 | --- | --- | --- |
 | Python runtime | Python 3.12+ | `universal-memory --version` executa com sucesso em ambiente Python 3.12 limpo. |
 | Package install | PyPI e `uvx` | Instalação via `pip install universal-memory` e execução via `uvx universal-memory --help` documentadas e verificadas. |
-| Host 1 | Host baseado em `AGENTS.md` | Host lê contexto de projeto via MCP e respeita instrução de consulta de memória. |
-| Host 2 | Host baseado em arquivo de instruções equivalente, como `CLAUDE.md` | Host lê a mesma base de memória e preserva comportamento consistente com o Host 1. |
+| Tier 1 Runtimes | Claude Code, OpenCode, Codex | Setup interativo, injeção de instruções em caminhos nativos, instalação de skills em diretórios de skills locais, testes automatizados e rollback completo. |
+| Tier 2 Runtimes | Cursor, Antigravity, Gemini | Detecção básica de caminhos, instalação de regras/instruções quando o formato é conhecido, documentação de integração. |
 | Offline mode | CLI, MCP, persistência, auditoria e rollback | Fluxo de leitura, escrita, auditoria e rollback passa com rede desabilitada após instalação local. |
 
 ### Installation & Environment
@@ -241,7 +269,8 @@ Essas jornadas revelam a necessidade das seguintes capacidades:
 - **Config Schema:** Configurações locais devem declarar caminhos de memória, hosts habilitados, política de confirmação e limites de contexto.
 
 ### Usage Examples
-- **Novo Projeto:** `umem init --project .` registra a memória de curto prazo do repositório atual e retorna os caminhos de configuração criados ou detectados.
+- **Novo Projeto (Interativo):** `umem init` inicia o onboarding interativo com o terminal splash minimalista e pergunta múltipla de runtimes.
+- **Novo Projeto (Não-interativo):** `umem init --project . --runtime claude-code --runtime opencode` registra a memória de curto prazo e configura múltiplos runtimes sem interação.
 - **Salvar Fato:** `umem remember --scope project "Priorizar TDD para endpoints de autenticação"` grava um fato local e retorna identificador, escopo e origem.
 - **Consultar Contexto:** `umem context --format json` retorna resumo de memória aplicável ao diretório atual, incluindo fatos de projeto, preferências universais e regras ativas.
 - **Nova Regra:** `umem rules propose --from-recurrence` lista preferências recorrentes candidatas à promoção e exige resposta explícita: `yes`, `always` ou `no`.
@@ -318,8 +347,8 @@ Essas jornadas revelam a necessidade das seguintes capacidades:
 - **FR6:** O sistema deve executar rotinas de "Context Hygiene" para arquivar ou remover fatos de curto prazo obsoletos após a conclusão de tarefas.
 
 ### 2. Onboarding & Setup (Instalação e Ativação)
-- **FR7:** Durante a configuração inicial, o sistema deve permitir que o usuário selecione os provedores de agentes suportados (ex: Claude, Gemini, ChatGPT).
-- **FR8:** O sistema deve configurar automaticamente os arquivos de instrução dos agentes selecionados (ex: `CLAUDE.md`, `AGENTS.md`) para inicializar o uso da memória universal imediatamente após a instalação.
+- **FR7:** During initial setup, the system must allow the user to select one or more supported runtimes/agents from a registry, including at least Claude Code, OpenCode and Codex/OpenAI-class AGENTS.md hosts, with Cursor and Antigravity represented according to their support tier.
+- **FR8:** The system must configure the selected runtimes by writing or updating their supported instruction targets and native skill targets, such as `AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/`, `.cursor/`, `.opencode/` or equivalent runtime-specific paths, with snapshot and audit protection before every mutation.
 - **FR9:** O usuário deve poder inicializar o `universal-memory` em um novo projeto/diretório via comando CLI (ex: `umem init`).
 
 ### 3. Command Line Interface (CLI)
@@ -339,8 +368,8 @@ Essas jornadas revelam a necessidade das seguintes capacidades:
 ### 6. Skill Creation Engine (Padrão Agent Skills)
 - **FR18:** O sistema deve rastrear e contabilizar "Latent Skills" (instruções/metodologias recorrentes do usuário).
 - **FR19:** O sistema deve solicitar aprovação explícita (Sim/Sempre/Não) ao atingir o gatilho de recorrência para criar uma nova Skill.
-- **FR20:** O sistema deve gerar a estrutura de pastas e o arquivo `SKILL.md` seguindo o padrão `agentskills.io`.
-- **FR21:** O usuário deve poder listar, ativar, editar e desativar Skills registradas através da CLI.
+- **FR20:** The system must generate a canonical Agent Skill structure with `SKILL.md`, optional `scripts/` and optional `references/`, then install or link it into native skill directories for selected runtimes when supported by that runtime adapter.
+- **FR21:** The user must be able to list, activate, edit, disable and inspect both canonical skills and per-runtime installed skill targets through CLI and MCP-equivalent capabilities.
 
 ### 7. Security & Safety Guardrails
 - **FR22:** O sistema deve escanear passivamente todos os dados recebidos para interceptar chaves de API, credenciais ou variáveis de ambiente sensíveis antes da gravação.
@@ -352,6 +381,15 @@ Essas jornadas revelam a necessidade das seguintes capacidades:
 - **FR26:** O sistema deve bloquear a alteração automática quando o snapshot prévio falhar.
 - **FR27:** O usuário deve poder listar snapshots disponíveis e identificar timestamp, escopo, origem e ação responsável por cada snapshot.
 - **FR28:** O usuário deve poder reverter a última alteração automática por escopo via CLI.
+
+### 9. Language & Visual Identity Guardrails
+- **FR29:** The product must use English as the default language for CLI prompts, help text, generated instructions, skill scaffolds and documentation templates, while allowing an explicit locale configuration for other supported languages such as Portuguese.
+- **FR30:** The CLI onboarding experience should include a compact terminal brand element for `umem`, implemented as ANSI/ASCII splash art with a no-color fallback and disabled automatically for JSON/non-interactive output.
+
+### 10. Update & Synchronization Guardrails
+- **FR31:** The system must allow the user to trigger updates and synchronize local canonical skills from `.umem/skills/` or local package templates to all active native runtime target paths.
+- **FR32:** During synchronization, if a native target file has been modified manually and diverges from the canonical source, the system must interactively prompt the user with choices (Keep Local Target / Overwrite with Canonical) and display a warning that overwriting could break the custom agent workflow.
+- **FR33:** The CLI must support checking for new library versions, migrating local configuration schema safely, and updating local benchmark datasets without losing user history or custom rules.
 
 ## Non-Functional Requirements
 

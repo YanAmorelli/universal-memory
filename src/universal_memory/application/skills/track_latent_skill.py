@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import LatentSkill, LatentSkillScope, LatentSkillStatus
 from universal_memory.domain.ports import LatentSkillRepository
 
@@ -42,6 +43,7 @@ class TrackLatentSkillUseCase:
         self.repository = repository
 
     def execute(self, command: TrackLatentSkillCommand) -> TrackLatentSkillResult:
+        command = self._validated(command)
         existing = self._find_high_confidence_match(command)
         if existing is None:
             skill = self._new_skill(command)
@@ -63,6 +65,14 @@ class TrackLatentSkillUseCase:
             audit_reference=audit_ref,
             snapshot_reference=snapshot_ref,
         )
+
+    @staticmethod
+    def _validated(command: TrackLatentSkillCommand) -> TrackLatentSkillCommand:
+        name = command.name.strip()
+        description = command.description.strip()
+        if not name or not description:
+            raise ValidationFailedError("Skill name and description are required.")
+        return replace(command, name=name, description=description)
 
     def _find_high_confidence_match(self, command: TrackLatentSkillCommand) -> LatentSkill | None:
         candidates = self.repository.list(scope=command.scope, status=LatentSkillStatus.proposed)

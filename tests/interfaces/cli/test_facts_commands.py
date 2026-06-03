@@ -70,7 +70,7 @@ def test_facts_list_human_excludes_archived_by_default(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert captured.err == ""
-    assert "Fatos:" in captured.out
+    assert "Facts:" in captured.out
     assert "Fato ativo do projeto" in captured.out
     assert "Fato global" in captured.out
     assert "Fato arquivado do projeto" not in captured.out
@@ -111,7 +111,7 @@ def test_facts_purge_by_id_requires_confirmation_and_removes_fact(
     remaining = LocalFactRepository(project_root=tmp_path, data_root=tmp_path / ".umem").list()
     assert exit_code == 0
     assert captured.err == ""
-    assert "Purga concluida." in captured.out
+    assert "Purge completed." in captured.out
     assert facts[0].id not in [fact.id for fact in remaining]
 
 

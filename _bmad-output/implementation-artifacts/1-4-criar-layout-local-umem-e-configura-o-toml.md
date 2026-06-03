@@ -54,7 +54,7 @@ para que eu possa versionar, inspecionar e editar manualmente a memória do proj
   - [x] Não introduzir adapter CLI nesta story; `src/universal_memory/__main__.py` deve continuar mínimo até a Story 1.5.
 
 - [x] **Task 4: Validar reconhecimento e resolução de configuração global + projeto** (AC: 2)
-  - [x] Cobrir o caminho global `~/.config/universal-memory/config.toml` apenas como entrada de leitura/resolução nesta story.
+  - [x] Cobrir o caminho global `~/.config/umem/config.toml` apenas como entrada de leitura/resolução nesta story (atualizado por BUG-002).
   - [x] Garantir que a configuração de projeto viva em `.umem/config.toml`.
   - [x] Garantir que caminhos de projeto retornados sejam relativos quando fizer sentido para output/diagnóstico e absolutos apenas internamente quando necessário para I/O.
   - [x] Garantir que cenários inválidos de TOML resultem em `InvalidConfigError`, sem uso de `ValueError`/`RuntimeError` para erros conhecidos.
@@ -93,7 +93,7 @@ para que eu possa versionar, inspecionar e editar manualmente a memória do proj
 
 - **Formato e comportamento de configuração:**
   - Ler TOML com `tomllib` e escrever/preparar TOML com `tomli-w`.
-  - Configuração global: `~/.config/universal-memory/config.toml`.
+  - Configuração global: `~/.config/umem/config.toml` (atualizado por BUG-002).
   - Configuração por projeto: `.umem/config.toml`.
   - O fluxo deve resolver ambas localmente, offline, e tratar config inválida com `InvalidConfigError`.
 

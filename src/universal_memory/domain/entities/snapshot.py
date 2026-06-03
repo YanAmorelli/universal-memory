@@ -25,6 +25,7 @@ class Snapshot(BaseEntity):
     action: str
     relative_path: str
     hash: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    previous_file_existed: bool = True
     status: SnapshotStatus
 
     @field_validator("timestamp")

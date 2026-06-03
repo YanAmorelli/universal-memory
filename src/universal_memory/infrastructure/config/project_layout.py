@@ -27,10 +27,10 @@ DIRECTORY_LAYOUT_PATHS = {
 def ensure_project_layout(project_root: Path) -> ProjectLayoutResult:
     umem_root = project_root / ".umem"
     if umem_root.exists():
-        existing_paths = _validate_existing_layout(umem_root)
+        created_paths, existing_paths = _ensure_existing_layout(umem_root)
         return ProjectLayoutResult(
-            created=False,
-            created_paths=[],
+            created=bool(created_paths),
+            created_paths=created_paths,
             existing_paths=existing_paths,
         )
 
@@ -89,31 +89,31 @@ def _default_files() -> dict[str, str]:
     }
 
 
-def _validate_existing_layout(umem_root: Path) -> list[str]:
+def _ensure_existing_layout(umem_root: Path) -> tuple[list[str], list[str]]:
     if not umem_root.is_dir():
         raise StorageError("Project layout root '.umem' exists but is not a directory")
 
+    created_paths: list[str] = []
     existing_paths: list[str] = []
-    missing_paths: list[str] = []
     tracked_paths = _tracked_paths(umem_root)
+    default_files = _default_files()
 
     for relative_path in PROJECT_LAYOUT_PATHS:
         target = tracked_paths[relative_path]
         if not target.exists():
-            missing_paths.append(relative_path)
+            if relative_path in DIRECTORY_LAYOUT_PATHS:
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(default_files[relative_path], encoding="utf-8")
+            created_paths.append(relative_path)
             continue
         if not _matches_expected_kind(relative_path, target):
             expected_kind = "directory" if relative_path in DIRECTORY_LAYOUT_PATHS else "file"
             raise StorageError(f"Project layout path '{relative_path}' must be a {expected_kind}")
         existing_paths.append(relative_path)
 
-    if missing_paths:
-        raise StorageError(
-            "Project layout '.umem' is partial or corrupted; missing canonical paths: "
-            + ", ".join(missing_paths)
-        )
-
-    return existing_paths
+    return created_paths, existing_paths
 
 
 def _matches_expected_kind(relative_path: str, target: Path) -> bool:

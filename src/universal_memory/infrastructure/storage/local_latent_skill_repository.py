@@ -25,6 +25,10 @@ from universal_memory.domain.entities import (
     LatentSkillStatus,
 )
 from universal_memory.domain.ports import LatentSkillRepository
+from universal_memory.infrastructure.security import (
+    LocalAuditLogRepository,
+    LocalSnapshotRepository,
+)
 
 STALE_LOCK_SECONDS = 10.0
 
@@ -64,11 +68,11 @@ class LocalLatentSkillRepository(LatentSkillRepository):
         if sys.platform == "win32":
             local_appdata = os.environ.get("LOCALAPPDATA")
             if local_appdata:
-                self.global_data_root = Path(local_appdata) / "universal-memory"
+                self.global_data_root = Path(local_appdata) / "umem"
             else:
-                self.global_data_root = self.global_home / "AppData" / "Local" / "universal-memory"
+                self.global_data_root = self.global_home / "AppData" / "Local" / "umem"
         else:
-            self.global_data_root = self.global_home / ".local" / "share" / "universal-memory"
+            self.global_data_root = self.global_home / ".local" / "share" / "umem"
 
         self.global_memory_root = self.global_data_root / "memory"
         self.global_latent_skills_path = self.global_memory_root / "latent_skills.jsonl"
@@ -77,8 +81,14 @@ class LocalLatentSkillRepository(LatentSkillRepository):
         self.global_safe_write_use_case = SafeWriteUseCase(
             project_root=self.global_data_root,
             secret_scanner=safe_write_use_case.secret_scanner,
-            snapshot_repository=safe_write_use_case.snapshot_repository,
-            audit_log_repository=safe_write_use_case.audit_log_repository,
+            snapshot_repository=LocalSnapshotRepository(
+                project_root=self.global_data_root,
+                data_root=self.global_data_root,
+            ),
+            audit_log_repository=LocalAuditLogRepository(
+                project_root=self.global_data_root,
+                data_root=self.global_data_root,
+            ),
         )
 
     @contextmanager

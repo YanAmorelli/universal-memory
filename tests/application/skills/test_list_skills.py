@@ -77,7 +77,9 @@ def test_list_skills_empty_returns_recommended_action(tmp_path: Path) -> None:
     assert result.to_payload() == {
         "skills": [],
         "recommended_action": (
-            "Execute `umem skills propose <latent_skill_id>` para revisar uma skill candidata."
+            "Latent skills aparecem quando o universal-memory registra padroes recorrentes. "
+            'Continue usando `umem remember "..."` para registrar memoria; quando uma '
+            "candidata aparecer, rode `umem skills list` novamente para acompanhar as skills."
         ),
     }
 

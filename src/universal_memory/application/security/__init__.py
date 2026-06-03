@@ -18,6 +18,7 @@ from universal_memory.application.security.rollback_use_case import (
     RollbackUseCase,
 )
 from universal_memory.application.security.safe_write_use_case import (
+    PreparedSafeWrite,
     SafeWriteCommand,
     SafeWriteResult,
     SafeWriteUseCase,
@@ -31,6 +32,7 @@ __all__ = [
     "ListSnapshotsCommand",
     "ListSnapshotsResult",
     "ListSnapshotsUseCase",
+    "PreparedSafeWrite",
     "RollbackCommand",
     "RollbackResult",
     "RollbackUseCase",

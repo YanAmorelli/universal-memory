@@ -1,8 +1,10 @@
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
@@ -14,7 +16,6 @@ from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEvent,
     AuditEventScope,
-    FactStatus,
     Host,
     HostName,
     InstructionClassification,
@@ -24,6 +25,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.ports import FactRepository
+from universal_memory.infrastructure.config.toml_loader import load_config
 
 UMEM_START = "<!-- UMEM: START -->"
 UMEM_END = "<!-- UMEM: END -->"
@@ -31,6 +33,41 @@ DEFAULT_MAX_MANAGED_LINES = 100
 DEFAULT_MAX_MANAGED_CHARS = 4000
 LONG_CONTENT_THRESHOLD = 800
 RAW_MEMORY_DUMP_HIT_THRESHOLD = 3
+
+
+def _resolve_limits(project_root: Path, command_lines: int, command_chars: int) -> tuple[int, int]:
+    max_lines = command_lines
+    max_chars = command_chars
+
+    try:
+        loaded = load_config(project_root)
+
+        # Check runtimes section
+        runtimes_config = loaded.merged.get("runtimes")
+        if isinstance(runtimes_config, dict):
+            if (
+                "max_managed_lines" in runtimes_config
+                and command_lines == DEFAULT_MAX_MANAGED_LINES
+            ):
+                max_lines = int(runtimes_config["max_managed_lines"])
+            if (
+                "max_managed_chars" in runtimes_config
+                and command_chars == DEFAULT_MAX_MANAGED_CHARS
+            ):
+                max_chars = int(runtimes_config["max_managed_chars"])
+
+        # Check hosts section as fallback
+        hosts_config = loaded.merged.get("hosts")
+        if isinstance(hosts_config, dict):
+            if "max_managed_lines" in hosts_config and command_lines == DEFAULT_MAX_MANAGED_LINES:
+                max_lines = int(hosts_config["max_managed_lines"])
+            if "max_managed_chars" in hosts_config and command_chars == DEFAULT_MAX_MANAGED_CHARS:
+                max_chars = int(hosts_config["max_managed_chars"])
+    except Exception:
+        return max_lines, max_chars
+
+    return max_lines, max_chars
+
 
 InstructionClassificationValue = Literal[
     "shared_policy", "provider_delta", "scoped_rule", "canonical_doc"
@@ -78,6 +115,7 @@ class ConfigureHostCommand:
     apply: bool = False
     check: bool = False
     instruction_blocks: list[InstructionBlock] = field(default_factory=list)
+    shared_manifest_available: bool | None = None
     max_managed_lines: int = DEFAULT_MAX_MANAGED_LINES
     max_managed_chars: int = DEFAULT_MAX_MANAGED_CHARS
     origin: str = "host_setup"
@@ -189,11 +227,23 @@ class ConfigureHostUseCase:
         self.fact_repository = fact_repository
 
     def execute(self, command: ConfigureHostCommand) -> ConfigureHostResult:
+        max_lines, max_chars = _resolve_limits(
+            self.project_root,
+            command.max_managed_lines,
+            command.max_managed_chars,
+        )
+        command = replace(command, max_managed_lines=max_lines, max_managed_chars=max_chars)
+
         host = self._host_for(command.host_id)
         target = self._primary_target_for(host)
 
         if command.check:
-            validation = self._validate_host_read(host, target)
+            validation = self._validate_host_read(
+                host,
+                target,
+                max_lines=command.max_managed_lines,
+                max_chars=command.max_managed_chars,
+            )
             audit_reference = self._record_host_validation(command, host, validation)
             return ConfigureHostResult(
                 host_id=host.name.value,
@@ -268,6 +318,8 @@ class ConfigureHostUseCase:
         self,
         host: Host,
         target: InstructionTarget,
+        max_lines: int = DEFAULT_MAX_MANAGED_LINES,
+        max_chars: int = DEFAULT_MAX_MANAGED_CHARS,
     ) -> HostReadValidationResult:
         method = host.read_validation_method
         checks = {
@@ -322,8 +374,8 @@ class ConfigureHostUseCase:
             self._validate_compact_manifest(
                 managed_block,
                 target_path=target.relative_path,
-                max_lines=DEFAULT_MAX_MANAGED_LINES,
-                max_chars=DEFAULT_MAX_MANAGED_CHARS,
+                max_lines=max_lines,
+                max_chars=max_chars,
             )
             self._validate_no_raw_memory_dump(content, target_path=target.relative_path)
         except ValidationFailedError as exc:
@@ -450,26 +502,7 @@ class ConfigureHostUseCase:
                 raise
 
     def _instruction_blocks_for(self, command: ConfigureHostCommand) -> list[InstructionBlock]:
-        if command.instruction_blocks or self.fact_repository is None:
-            return command.instruction_blocks
-
-        instruction_blocks: list[InstructionBlock] = []
-        for fact in self.fact_repository.list(status=FactStatus.active):
-            classification = InstructionClassification.shared_policy
-            tags = fact.tags or []
-            for candidate in InstructionClassification:
-                if candidate.value in tags or candidate.value.replace("_", "-") in tags:
-                    classification = candidate
-                    break
-            title = fact.metadata.get("title") if fact.metadata else None
-            instruction_blocks.append(
-                InstructionBlock(
-                    title=title or f"Fato {fact.id[:8]}",
-                    content=fact.content,
-                    classification=classification,
-                )
-            )
-        return instruction_blocks
+        return command.instruction_blocks
 
     def _prepare_target_content(
         self,
@@ -480,8 +513,13 @@ class ConfigureHostUseCase:
         command: ConfigureHostCommand,
     ) -> PreparedInstructionTarget:
         partition = partition_instruction_blocks(instruction_blocks)
+        shared_manifest_available = True
+        if target.name == InstructionTargetType.claude_md:
+            shared_manifest_available = self._shared_manifest_available(command)
 
         supported = set(getattr(c, "value", c) for c in target.supported_classifications)
+        if target.name == InstructionTargetType.claude_md and not shared_manifest_available:
+            supported.add(InstructionClassification.shared_policy.value)
         warnings = []
         for block in instruction_blocks:
             classification_val = getattr(block.classification, "value", block.classification)
@@ -497,7 +535,12 @@ class ConfigureHostUseCase:
             if partition.canonical_documents:
                 raise ValidationFailedError("Host Claude Code nao suporta documentos canonicos.")
             managed_content = self._render_claude_managed_block(
-                self._target_manifest_blocks(partition, target)
+                self._target_manifest_blocks(
+                    partition,
+                    target,
+                    include_shared_policy=not shared_manifest_available,
+                ),
+                shared_manifest_available=shared_manifest_available,
             )
         else:
             canonical_documents = partition.canonical_documents
@@ -522,6 +565,11 @@ class ConfigureHostUseCase:
             canonical_documents=canonical_documents,
             warnings=warnings,
         )
+
+    def _shared_manifest_available(self, command: ConfigureHostCommand) -> bool:
+        if command.shared_manifest_available is not None:
+            return command.shared_manifest_available
+        return bool(self._read_existing("AGENTS.md"))
 
     def _drift_content(
         self,
@@ -706,11 +754,52 @@ class ConfigureHostUseCase:
             UMEM_START,
             "# Universal Memory Active Policy",
             "> [!IMPORTANT]",
-            "> Antes de iniciar qualquer tarefa de codificação, consulte a Short Term Memory "
-            "deste repositório executando a CLI `umem context` ou usando as ferramentas MCP "
-            "correspondentes.",
+            "> UMEM bootstrap is a mandatory preflight at the start of a conversation, "
+            "session, or new task (before planning, editing, investigation, review, "
+            "skill workflow, slash command, or structured agent workflow).",
+            "> Run `umem status --format json`, `umem context --scope project "
+            "--format json`, and `umem skills list --format json` only at the beginning of the "
+            "conversation to load the context. During the conversation, do not repeat the full "
+            "bootstrap on every interaction; instead, query, add, or remove facts and skills "
+            "only when necessary.",
+            "> Use the equivalent MCP/FastMCP tools when they are available.",
+            "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a relevant "
+            "active skill exists, inspect it with "
+            "`umem skills detail <skill-id-or-name> --format json` before acting.",
+            "> If `umem` is unavailable or not initialized, report that explicitly before "
+            "continuing without external memory.",
+            "> CRITICAL: proactively capture new memory or clean up outdated ones only when a "
+            "durable preference is learned, an architectural decision is made, a bug is fixed, "
+            "or facts become obsolete. Do NOT run remember/sync commands on every simple interaction. "
+            'Use `umem remember "..."` to add, and `umem facts purge --id <id>` to remove outdated '
+            "facts, followed by `umem host sync --apply`.",
+            "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
+            'the end of your final response stating either `[UMEM: Remembered "..."]` or '
+            "`[UMEM: No new facts/skills to record]`. Do not forget this footer.",
             "",
-            "## Regras Operacionais Consolidadas",
+            "## Required Bootstrap",
+            "- Run `umem status --format json` to validate the integration.",
+            "- Run `umem context --scope project --format json` and treat the result as "
+            "active context.",
+            "- Run `umem skills list --format json`; for each relevant skill, run "
+            "`umem skills detail <skill-id-or-name> --format json`.",
+            "- If MCP/FastMCP is available, prefer the equivalent tools; otherwise, use the "
+            "CLI commands above.",
+            "- Perform this bootstrap only at the start of a conversation/session. Do not repeat "
+            "it on every interaction.",
+            "- Keep `AGENTS.md` and `CLAUDE.md` compact: they should point to `umem`, not "
+            "store memory dumps.",
+            "",
+            "## Proactive Memory Loop (Mandatory)",
+            "Before concluding your response to the user, assess if a durable preference, bug "
+            "fix, or decision was made. If so:",
+            '1. Record: Proactively run `umem remember "Short fact." --scope project/global --tag <tag>` '
+            "or `umem facts purge --id <id>` to remove outdated facts.",
+            "2. Propose Skills: Check `umem skills list` and run `umem skills propose` if recurring patterns exist.",
+            "3. Sync: If you ran any mutation (remember or purge), run `umem host sync --apply` to bake it.",
+            '4. Report: Append the UMEM status line `[UMEM: Remembered "..."]` or `[UMEM: No new facts/skills to record]` to your final output.',
+            "",
+            "## Consolidated Operational Rules",
         ]
         if partition.manifest_blocks:
             for block in partition.manifest_blocks:
@@ -720,25 +809,140 @@ class ConfigureHostUseCase:
                     for subline in lines_content[1:]:
                         lines.append(f"  {subline}")
         else:
-            lines.append("- Consulte `umem context` para recuperar regras ativas sob demanda.")
+            lines.append("- Use `umem context` to retrieve active rules on demand.")
 
-        lines.extend(["", "## Ponteiros Canônicos"])
+        lines.extend(["", "## Canonical Pointers"])
         if partition.pointer_lines:
             lines.extend(partition.pointer_lines)
         else:
-            lines.append("- Nenhum documento canônico adicional registrado.")
+            lines.append("- No additional canonical document registered.")
         lines.append(UMEM_END)
         return "\n".join(lines) + "\n"
 
-    def _render_claude_managed_block(self, blocks: list[ManifestInstruction]) -> str:
+    def _render_claude_managed_block(
+        self,
+        blocks: list[ManifestInstruction],
+        *,
+        shared_manifest_available: bool,
+    ) -> str:
+        if shared_manifest_available:
+            title = "# Claude Delta Instructions"
+            scope_line = (
+                "> Read `AGENTS.md` as the shared manifest. This file contains only "
+                "Claude Code-specific deltas, but `umem` usage remains required."
+            )
+            memory_line = (
+                "> UMEM bootstrap is a mandatory preflight at the start of a conversation, "
+                "session, or new task (before any skill workflow, slash command, or structured "
+                "agent workflow): first run `umem status --format json`, `umem context --scope project "
+                "--format json` and `umem skills list --format json`, or use the equivalent MCP/FastMCP tools. "
+                "Do not repeat this full bootstrap on every interaction."
+            )
+            policy_line = (
+                "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a "
+                "relevant active skill exists, inspect it with "
+                "`umem skills detail <skill-id-or-name> --format json` before acting."
+            )
+            unavailable_line = (
+                "> If `umem` is unavailable or not initialized, report that explicitly before "
+                "continuing without external memory."
+            )
+            recording_line = (
+                "> CRITICAL: proactively capture new memory or clean up outdated ones only when a "
+                "durable preference is learned, an architectural decision is made, a bug is fixed, "
+                "or facts become obsolete. Do NOT run remember/sync commands on every simple interaction. "
+                'Use `umem remember "..."` to add, and `umem facts purge --id <id>` to remove outdated '
+                "facts, followed by `umem host sync --apply`."
+            )
+            report_line = (
+                "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
+                'the end of your final response stating either `[UMEM: Remembered "..."]` or '
+                "`[UMEM: No new facts/skills to record]`. Do not forget this footer."
+            )
+            section_title = "## Provider Deltas"
+            empty_line = "- No Claude Code-specific delta registered."
+        else:
+            title = "# Claude Code Universal Memory Instructions"
+            scope_line = (
+                "> UMEM bootstrap is a mandatory preflight at the start of a conversation, "
+                "session, or new task (before planning, editing, investigation, review, "
+                "skill workflow, slash command, or structured agent workflow)."
+            )
+            memory_line = (
+                "> First run `umem status --format json`, `umem context --scope project "
+                "--format json`, and `umem skills list --format json` only at the beginning "
+                "of the conversation to load context; use equivalent MCP/FastMCP tools when available. "
+                "Do not repeat this full bootstrap on every interaction; query, add, or remove "
+                "facts and skills only when necessary."
+            )
+            policy_line = (
+                "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a "
+                "relevant active skill exists, inspect it with "
+                "`umem skills detail <skill-id-or-name> --format json` before acting."
+            )
+            unavailable_line = (
+                "> If `umem` is unavailable or not initialized, report that explicitly before "
+                "continuing without external memory."
+            )
+            recording_line = (
+                "> CRITICAL: proactively capture new memory or clean up outdated ones only when a "
+                "durable preference is learned, an architectural decision is made, a bug is fixed, "
+                "or facts become obsolete. Do NOT run remember/sync commands on every simple interaction. "
+                'Use `umem remember "..."` to add, and `umem facts purge --id <id>` to remove outdated '
+                "facts, followed by `umem host sync --apply`."
+            )
+            report_line = (
+                "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
+                'the end of your final response stating either `[UMEM: Remembered "..."]` or '
+                "`[UMEM: No new facts/skills to record]`. Do not forget this footer."
+            )
+            section_title = "## Operational Rules"
+            empty_line = (
+                "- No consolidated rule registered; use `umem context --scope project` to "
+                "retrieve context on demand."
+            )
         lines = [
             UMEM_START,
-            "# Claude Delta Instructions",
-            "> Leia `AGENTS.md` como manifesto compartilhado quando ele existir; este arquivo "
-            "contem apenas deltas especificos para Claude Code.",
+            title,
+            scope_line,
+            memory_line,
+            policy_line,
+            unavailable_line,
+            recording_line,
+            report_line,
             "",
-            "## Deltas do Provedor",
         ]
+
+        if not shared_manifest_available:
+            lines.extend(
+                [
+                    "## Standard Flow",
+                    "- Run `umem status --format json` to validate the integration.",
+                    "- Run `umem context --scope project --format json` and treat the result "
+                    "as active context.",
+                    "- Run `umem skills list --format json`; for each relevant skill, run "
+                    "`umem skills detail <skill-id-or-name> --format json`.",
+                    "- Perform this bootstrap only at the start of a conversation/session. Do not repeat "
+                    "it on every interaction.",
+                    "- When you find a durable user preference, record it as global memory; "
+                    "when you find a repository decision or detail, record it as project "
+                    "memory.",
+                    "- Preserve manual content outside the UMEM block and keep this block "
+                    "compact, pointing to external documents when guidance grows long.",
+                    "",
+                    "## Proactive Memory Loop (Mandatory)",
+                    "Before concluding your response to the user, assess if a durable preference, bug "
+                    "fix, or decision was made. If so:",
+                    '1. Record: Proactively run `umem remember "Short fact." --scope project/global --tag <tag>` '
+                    "or `umem facts purge --id <id>` to remove outdated facts.",
+                    "2. Propose Skills: Check `umem skills list` and run `umem skills propose` if recurring patterns exist.",
+                    "3. Sync: If you ran any mutation (remember or purge), run `umem host sync --apply` to bake it.",
+                    '4. Report: Append the UMEM status line `[UMEM: Remembered "..."]` or `[UMEM: No new facts/skills to record]` to your final output.',
+                    "",
+                ]
+            )
+
+        lines.append(section_title)
 
         if blocks:
             for block in blocks:
@@ -748,7 +952,7 @@ class ConfigureHostUseCase:
                     for subline in lines_content[1:]:
                         lines.append(f"  {subline}")
         else:
-            lines.append("- Nenhum delta especifico registrado para Claude Code.")
+            lines.append(empty_line)
         lines.append(UMEM_END)
         return "\n".join(lines) + "\n"
 
@@ -756,8 +960,12 @@ class ConfigureHostUseCase:
         self,
         partition: InstructionPartition,
         target: InstructionTarget,
+        *,
+        include_shared_policy: bool = False,
     ) -> list[ManifestInstruction]:
         supported = set(target.supported_classifications)
+        if include_shared_policy:
+            supported.add(InstructionClassification.shared_policy)
         return [block for block in partition.manifest_blocks if block.classification in supported]
 
     def _render_canonical_document(self, document: CanonicalDocument) -> str:

@@ -35,7 +35,7 @@ class ProposeSkillCommand:
 class ProposeSkillResult:
     latent_skill: LatentSkill
     proposal: dict[str, Any]
-    choices: list[str] = field(default_factory=lambda: ["Sim", "Sempre", "Não"])
+    choices: list[str] = field(default_factory=lambda: ["yes", "always", "no"])
     requires_decision: bool = False
     accepted: bool = False
     auto_approval_recorded: bool = False
@@ -62,8 +62,8 @@ class ProposeSkillUseCase:
         # State Transition Validation
         if skill.status != LatentSkillStatus.proposed and command.decision is not None:
             raise ValidationFailedError(
-                f"Nao e possivel propor ou decidir sobre a latent skill {skill.id} "
-                f"porque ela ja esta no status {skill.status.value}."
+                f"Cannot propose or decide latent skill {skill.id} "
+                f"because it is already in status {skill.status.value}."
             )
 
         proposal = self._proposal_for(skill)
@@ -99,7 +99,7 @@ class ProposeSkillUseCase:
                     audit_reference = (
                         f"{audit_reference}, {config_loaded.write_result.audit_reference}"
                     )
-                rollback_hint = "Use o snapshot registrado para reverter a preferencia."
+                rollback_hint = "Use the recorded snapshot to revert the preference."
             except Exception as exc:
                 # Rollback repository update to proposed on configuration failure
                 try:

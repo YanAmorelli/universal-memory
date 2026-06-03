@@ -14,6 +14,16 @@ from universal_memory.domain.entities.latent_skill import (
     LatentSkillStatus,
 )
 from universal_memory.domain.entities.rule import Rule, RuleScope, RuleStatus
+from universal_memory.domain.entities.runtime import (
+    NativeSkillTarget,
+    RuntimeAdapter,
+    RuntimeId,
+    RuntimeInstructionTarget,
+    RuntimeRegistry,
+    RuntimeSupportTier,
+    RuntimeTarget,
+    default_runtime_registry,
+)
 from universal_memory.domain.entities.safe_write_result import SafeWriteResult
 from universal_memory.domain.entities.snapshot import Snapshot, SnapshotScope, SnapshotStatus
 
@@ -34,11 +44,19 @@ __all__ = [
     "LatentSkill",
     "LatentSkillScope",
     "LatentSkillStatus",
+    "NativeSkillTarget",
     "Rule",
     "RuleScope",
     "RuleStatus",
+    "RuntimeAdapter",
+    "RuntimeId",
+    "RuntimeInstructionTarget",
+    "RuntimeRegistry",
+    "RuntimeSupportTier",
+    "RuntimeTarget",
     "SafeWriteResult",
     "Snapshot",
     "SnapshotScope",
     "SnapshotStatus",
+    "default_runtime_registry",
 ]

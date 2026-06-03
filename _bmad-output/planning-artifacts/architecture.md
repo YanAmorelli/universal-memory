@@ -7,12 +7,12 @@ project_name: 'universal-memory'
 user_name: 'Yan'
 date: '2026-05-22'
 lastStep: 8
-status: 'ready-with-minor-gaps'
-completedAt: '2026-05-22'
-revalidatedAt: '2026-05-22'
-patchedAt: '2026-05-22'
-lastCorrectionAt: '2026-05-22'
-readinessStatus: 'ready-with-minor-gaps'
+status: 'complete'
+completedAt: '2026-05-31'
+revalidatedAt: '2026-05-31'
+patchedAt: '2026-05-31'
+lastCorrectionAt: '2026-05-31'
+readinessStatus: 'ready-for-implementation'
 ---
 
 # Architecture Decision Document
@@ -200,7 +200,7 @@ CLI traduz para mensagens Rich coloridas; MCP traduz para JSON-RPC error codes.
 Rationale: expressivo, idiomático em Python, cada interface traduz independentemente.
 
 **Gestão de Configuração:** TOML.
-Global: `~/.config/universal-memory/config.toml`
+Global: `~/.config/umem/config.toml`
 Por projeto: `<projeto>/.umem/config.toml`
 Leitura nativa com `tomllib` (Python 3.12+); escrita com `tomli-w`.
 Rationale: padrão do ecossistema Python moderno, suporta comentários, legível.
@@ -651,7 +651,7 @@ uv add --dev pytest pytest-cov ruff pyright
 
 ### Persistent Data Layout
 
-**Global data root:** `~/.local/share/universal-memory/`
+**Global data root:** `~/.local/share/umem/`
 
 **Project data root:** `.umem/`
 
@@ -901,3 +901,125 @@ Inicializar o scaffold com `uv init --package universal-memory`, fixar Python 3.
 
 **Next Planning Step:**
 Prosseguir para criação ou atualização de épicos e histórias usando esta arquitetura corrigida como fonte de verdade.
+
+## Architecture Patch 2 - Sprint Change Proposal (2026-05-31)
+
+Este patch integra as decisões arquiteturais requeridas pela Sprint Change Proposal de 31/05/2026, garantindo a compatibilidade internacional do produto, onboarding multi-runtime interativo, sincronização robusta com runtimes e mitigação de drifts manuais.
+
+### 1. English-First & Localization Overlay (i18n) Architecture
+
+O sistema adota o inglês (`en`) como a linguagem canônica única e prioritária para todo o ecossistema.
+
+*   **English as the Canonical Base:** Cada prompt, mensagem de erro, tela de ajuda do CLI, scaffold de skill, template de instrução (`AGENTS.md`, `CLAUDE.md`, etc.), logs internos e auditorias são **escritos nativamente em inglês** no código-fonte. Não existem chaves abstratas ou strings em português espalhadas pelo core do sistema.
+*   **Translation as a Low-Cost Overlay:** A localização para português do BR (`pt_BR`) é puramente uma camada de sobreposição (`interfaces/cli/presenters/message_catalog.py`). Se um locale diferente de `en` estiver ativo na configuração, o tradutor interceptará as **frases em inglês** e as mapeará para suas traduções.
+    *   *Exemplo:* O código faz `print("Select the runtimes to install:")`. Se a configuração estiver em `pt_BR`, o catálogo de sobreposição busca a chave literal `"Select the runtimes to install:"` e retorna `"Selecione os runtimes para instalar:"`.
+    *   *Vantagem:* Custo de desenvolvimento virtualmente zero no fluxo diário. O desenvolvedor escreve tudo em inglês sem se preocupar em criar chaves de tradução. O catálogo de tradução só é atualizado de forma incremental.
+*   **Immutable Machine Fields:** JSON keys, metadados persistidos (como `id`, `created_at`, `scope`, `status`), saídas formatadas com `--format json` e todas as payloads de ferramentas do servidor MCP permanecem estritamente em inglês e **são imunes a qualquer tradução**. Isso assegura automação determinística por scripts ou agentes de IA.
+
+```mermaid
+graph TD
+    Domain[Use Case / CLI Action] -->|Natively Emits English String| CLIAdapter[CLI Presenter]
+    CLIAdapter -->|Check config.toml for locale| CatalogSelector{Locale == 'en'?}
+    CatalogSelector -->|Yes| CLIOutput[Render Canonical English Text]
+    CatalogSelector -->|No| TranslateOverlay[Translate English String using Overlay]
+    TranslateOverlay --> CLIOutput
+```
+
+### 2. Declarative Runtime Registry & Adapter Model
+
+Modelamos cada runtime/agente de IA suportado como uma entidade declarativa através do padrão **Runtime Adapter**, gerenciado por um **Runtime Registry** em `src/universal_memory/infrastructure/config/runtime_registry.py`.
+
+Cada Runtime Adapter deve implementar o seguinte protocolo/classe base:
+
+```python
+class RuntimeAdapter(ABC):
+    @property
+    @abstractmethod
+    def runtime_id(self) -> str: ...
+    
+    @property
+    @abstractmethod
+    def display_name(self) -> str: ...
+    
+    @property
+    @abstractmethod
+    def support_tier(self) -> int: ...  # Tier 1 (MVP completo), Tier 2 (basic)
+    
+    @abstractmethod
+    def get_default_paths(self) -> list[str]: ...  # Global e Project-specific
+    
+    @abstractmethod
+    def configure_runtime(self, project_path: Path, is_active: bool) -> list[str]: ... # Retorna ações tomadas
+    
+    @abstractmethod
+    def install_skill(self, skill_id: str, canonical_content: str) -> Path: ...
+    
+    @abstractmethod
+    def check_drift(self, skill_id: str, canonical_content: str) -> tuple[bool, str]: ... # (has_drift, current_hash)
+```
+
+#### Runtimes Suportados no MVP (Registry Declarativo):
+
+*   **Claude Code (Tier 1):** Caminho global: `~/.claude/`; projeto: `.claude/`, `CLAUDE.md`. Suporta injeção de instruções e instalação nativa de skills em `.claude/tasks/` ou diretórios mapeados.
+*   **OpenCode (Tier 1):** Caminho global: `~/.config/opencode/`; projeto: `.opencode/`, `AGENTS.md`.
+*   **Codex/OpenAI-class (Tier 1):** Alvo principal: `AGENTS.md` na raiz do projeto.
+*   **Cursor (Tier 2):** Caminho projeto: `.cursor/rules/`.
+*   **Antigravity (Tier 2):** Caminho global: `~/.gemini/antigravity/` ou específico do host.
+*   **Gemini (Tier 2):** Caminho global: `~/.gemini/`; projeto: `GEMINI.md`.
+
+### 3. Canonical Skills vs Native Skill Targets
+
+*   **Canonical Store:** `.umem/skills/` (ou diretório global configurado) armazena a estrutura canônica da skill no padrão `Agent Skills` (contendo `SKILL.md`, `scripts/` e `references/`).
+*   **Native Targets:** Os diretórios nativos de cada runtime são meros alvos de instalação. O `RuntimeAdapter` correspondente traduz a skill canônica para o layout suportado pelo runtime.
+    *   Exemplo: Uma skill canônica `deploy-helper` com `SKILL.md` e `scripts/run.py` instalada para o runtime **Cursor** será gerada como uma regra unificada em `.cursor/rules/deploy-helper.mdc` contendo a especificação em markdown. Para o **Claude Code**, pode ser instalada como um script executável em `.claude/tasks/`.
+
+### 4. Interactive Update & Synchronization Conflict Guardrails
+
+O fluxo de sincronização (`umem update --skills` or o onboarding interativo) protege alterações manuais feitas pelo usuário nos runtimes nativos através do seguinte algoritmo transacional:
+
+```mermaid
+sequenceDiagram
+    participant CLI as umem CLI
+    participant Registry as Runtime Registry
+    participant FS as Local File System
+    participant User as Yan (User)
+
+    CLI->>Registry: Trigger sync/update
+    Registry->>FS: Read native target (e.g. .cursor/rules/sdd-rules.md)
+    Registry->>FS: Compare hash with cached canonical version
+    alt Native Target Has Diverged (Manual Changes)
+        CLI->>User: Display Warning & Prompt: Keep or Overwrite?
+        User->>CLI: Choose [Keep] or [Overwrite]
+        alt User chooses [Keep]
+            CLI->>FS: Log skipped target, retain native file
+        else User chooses [Overwrite]
+            CLI->>FS: Execute Snapshot Manager (Backup)
+            CLI->>FS: Write canonical skill to native path
+            CLI->>FS: Log successful update & audit event
+        end
+    else No Drift Detected
+        CLI->>FS: Overwrite target automatically
+    end
+```
+
+O prompt de conflito interativo deve ser renderizado em inglês por padrão:
+`Warning: Native Cursor target sdd-rules.md has manual changes. Overwriting it might break your current agent workflow. Keep local Cursor version or Overwrite with canonical library version? [Keep/Overwrite]`
+
+### 5. Multi-Runtime Onboarding & Terminal Visual Identity
+
+*   **ASCII/ANSI Terminal Branding Splash:** A interface do CLI interativa (`umem init`) exibe uma marca estilizada minimalista simulando a conexão de um pendrive no terminal.
+    *   *Regra de Execução:* O splash art deve usar sequências de escape ANSI estritamente nativas (sem dependências externas) e **deve ser desabilitado automaticamente** se a saída for direcionada para arquivo, for um ambiente CI (detecção via `CI=true`), flag de saída `--format json` estiver ativa, ou a variável `NO_COLOR` estiver presente.
+*   **Onboarding CLI Flow (`umem init`):**
+    1.  Exibe o branding splash minimalista.
+    2.  Prompt de seleção múltipla em inglês: `Which runtime(s) would you like to install for?`
+    3.  O usuário pode passar múltiplos índices separados por vírgula (ex: `1, 2, 4`).
+    4.  Cria o snapshot de segurança do estado atual do repositório para os runtimes selecionados.
+    5.  Inicializa a base local `.umem/` e atualiza as configurações/manifests canônicos e nativos de cada runtime.
+    6.  Retorna o resultado de sucesso e um log das ações aplicadas.
+*   **Non-Interactive Automation:** O comando suporta flags explícitas de runtimes para execução em CI ou scripts de agentes (ex: `umem init --project . --runtime claude-code --runtime opencode --format json`). O `--format json` desabilita todo e qualquer estilo ANSI, banners ou splash, gerando um JSON puro compatível com parse automatizado.
+
+### 6. Updated Implementation Readiness Status
+
+*   **Readiness Status:** `READY FOR IMPLEMENTATION` (todas as decisões, incluindo o novo patch e a revalidação de 31/05/2026, mitigam todos os gaps técnicos detectados na Sprint Change Proposal).
+*   **Confidence Level:** `HIGH`.
+*   **Key Strengths:** O acoplamento com múltiplos runtimes de agentes de mercado é mitigado por um Registry declarativo, impedindo que o código de domínio seja poluído com regras de parsing específicas de cada agente de IA. A segurança contra perda de dados do usuário é robusta graças à integração do pipeline de mutação local e alertas interativos de drift. A internacionalização em inglês nativo garante menor consumo de tokens de contexto operacional.
