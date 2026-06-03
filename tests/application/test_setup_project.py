@@ -50,7 +50,7 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "umem skills list --format json" in skill_content
     assert "umem skills detail <skill-id-or-name> --format json" in skill_content
     assert "Codex, Claude Code, and other agents" in skill_content
-    assert "Required Startup Procedure" in skill_content
+    assert "Required Startup / Session Procedure" in skill_content
     assert "Command Reference" in skill_content
     assert "--scope global" in skill_content
     assert "--scope project" in skill_content
@@ -62,9 +62,9 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "Record only stable facts" in skill_content
     assert "Do not skip steps 1-3" in skill_content
     assert "mandatory preflight" in skill_content
-    assert "Before any skill workflow, slash command, or structured agent workflow." in skill_content
+    assert "at the start of a work session or conversation" in skill_content
     assert "If `umem` is unavailable or not initialized" in skill_content
-    assert "Do not let the workflow replace this preflight" in skill_content
+    assert "Do not repeat the full bootstrap on every interaction" in skill_content
     latent_skill_line = (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").read_text(
         encoding="utf-8"
     )

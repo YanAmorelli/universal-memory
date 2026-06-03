@@ -20,8 +20,8 @@ DEFAULT_UMEM_SKILL_MARKDOWN = """---
 name: "use-universal-memory"
 description: "Operational guide for using umem memory, skills, and durable learnings."
 triggers:
-  - "at the start of a work session"
-  - "before implementing, investigating, or reviewing code"
+  - "at the start of a work session or conversation"
+  - "before implementing, investigating, or reviewing code in a new session"
   - "when project memory, facts, or skills are needed"
   - "when instructions mention AGENTS.md, CLAUDE.md, memory, context, or learned preferences"
   - "before changing project conventions, architecture, workflows, or documentation"
@@ -35,21 +35,21 @@ same context without duplicating or rewriting `AGENTS.md` and `CLAUDE.md`.
 
 ## When To Use
 
-- At the start of a relevant work session.
-- Before any skill workflow, slash command, or structured agent workflow.
+- At the start of a relevant work session or conversation.
 - Before implementing, investigating, reviewing code, or answering questions about project
-  decisions.
+  decisions in a new session.
 - When the user asks to inspect memory, context, facts, rules, or skills.
 - After discovering a durable decision that should be remembered for future work.
 - Before editing instructions, specs, docs, tests, or source files when the repository has
   `.umem/`.
 
-## Required Startup Procedure
+## Required Startup / Session Procedure
 
-This procedure is a mandatory preflight. Run it before planning, editing, investigating,
-reviewing, using a skill, running a slash command, or following any structured agent
-workflow. If `umem` is unavailable or not initialized, report that explicitly before
-continuing without external memory.
+This procedure is a mandatory preflight at the start of a conversation, session, or new task.
+Run it before planning, editing, investigating, reviewing, using a skill, running a slash command,
+or following any structured agent workflow in a new session. If `umem` is unavailable or not initialized,
+report that explicitly before continuing without external memory.
+Do not repeat the full bootstrap on every interaction.
 
 1. Run `umem status --format json` to confirm the project is initialized and to inspect
    memory health.
@@ -77,6 +77,7 @@ umem facts list --scope project --format json
 umem facts list --scope global --format json
 umem remember "Short verified fact." --scope project --tag workflow --format json
 umem remember "Durable user preference." --scope global --tag preference --format json
+umem facts purge --id <fact-id> --format json
 ```
 
 ## Global Memory Vs Project Memory
@@ -88,7 +89,7 @@ umem remember "Durable user preference." --scope global --tag preference --forma
 - `umem context --scope project` loads project memory together with relevant global
   preferences.
 
-## Recording Procedure
+## Recording & Cleanup Procedure
 
 1. Record only stable facts that will help a future session.
 2. Prefer one short sentence per fact.
@@ -97,6 +98,9 @@ umem remember "Durable user preference." --scope global --tag preference --forma
    workflows, and documentation conventions.
 5. Add a tag such as `preference`, `architecture`, `workflow`, `bug`, `testing`, or `docs`.
 6. If the fact is uncertain, ask or verify before recording.
+7. To permanently delete/remove an outdated or incorrect fact (memória defasada), use:
+   `umem facts purge --id <fact-id>`
+   After purging, run `umem host sync --apply` to update the host files (`AGENTS.md` / `CLAUDE.md`).
 
 ## Criteria For Recording Memory
 
@@ -111,11 +115,12 @@ umem remember "Durable user preference." --scope global --tag preference --forma
 ```bash
 umem remember "Prefer concise responses in English." --scope global --tag preference
 umem remember "Project uses Firebase Admin/ADC backend-only." --scope project --tag architecture
+umem facts purge --id 9a5baa11-60a5-4532-b56a-5e9773c9116b
 ```
 
 ## Guardrails
 
-- Do not run `purge`, `rollback`, or `hygiene` without explicit user confirmation.
+- Do not run bulk `purge` (without `--id`), `rollback`, or `hygiene` without explicit user confirmation.
 - Do not paste full memory dumps into host instruction files.
 - Do not persist tokens, keys, env dumps, sensitive data, or facts you have not verified.
 - If `umem status` reports an initialization problem, report it before continuing.

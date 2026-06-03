@@ -199,10 +199,10 @@ def test_setup_preserves_manual_content_outside_managed_block(
     assert "proactively capture new memory" in managed_block
     assert "MANDATORY OUTPUT FORMAT" in managed_block
     assert "Required Bootstrap" in managed_block
-    assert "mandatory preflight before any planning" in managed_block
+    assert "mandatory preflight at the start of a conversation" in managed_block
     assert "skill workflow, slash command, or structured agent workflow" in managed_block
     assert "If `umem` is unavailable or not initialized" in managed_block
-    assert "bootstrap precedes skills, slash commands" in managed_block
+    assert "Perform this bootstrap only at the start of a conversation" in managed_block
 
 
 def test_check_rejects_massive_agents_md_dump(
@@ -331,12 +331,12 @@ def test_claude_code_setup_without_agents_md_includes_shared_policy_in_claude_md
     assert "When editing Claude instructions, preserve manual content." in claude_content
     assert "Use relative paths in specs, code and docs." in claude_content
     assert "Claude Code Universal Memory Instructions" in claude_content
-    assert "mandatory preflight before any planning" in claude_content
+    assert "mandatory preflight at the start of a conversation" in claude_content
     assert "umem status --format json" in claude_content
     assert "umem skills list --format json" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
     assert "If `umem` is unavailable or not initialized" in claude_content
-    assert "bootstrap precedes skills, slash commands" in claude_content
+    assert "Perform this bootstrap only at the start of a conversation" in claude_content
     assert "proactively capture new memory" in claude_content
     assert "## Operational Rules" in claude_content
 
@@ -379,7 +379,7 @@ def test_claude_code_setup_with_agents_md_writes_only_delta_blocks_to_claude_md(
     assert "contains only Claude Code-specific deltas" in claude_content
     assert "umem status --format json" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
-    assert "mandatory preflight before any skill workflow" in claude_content
+    assert "mandatory preflight at the start of a conversation" in claude_content
     assert "If `umem` is unavailable or not initialized" in claude_content
 
 
