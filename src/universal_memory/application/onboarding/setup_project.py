@@ -36,6 +36,7 @@ same context without duplicating or rewriting `AGENTS.md` and `CLAUDE.md`.
 ## When To Use
 
 - At the start of a relevant work session.
+- Before any skill workflow, slash command, or structured agent workflow.
 - Before implementing, investigating, reviewing code, or answering questions about project
   decisions.
 - When the user asks to inspect memory, context, facts, rules, or skills.
@@ -45,6 +46,11 @@ same context without duplicating or rewriting `AGENTS.md` and `CLAUDE.md`.
 
 ## Required Startup Procedure
 
+This procedure is a mandatory preflight. Run it before planning, editing, investigating,
+reviewing, using a skill, running a slash command, or following any structured agent
+workflow. If `umem` is unavailable or not initialized, report that explicitly before
+continuing without external memory.
+
 1. Run `umem status --format json` to confirm the project is initialized and to inspect
    memory health.
 2. Run `umem context --scope project --format json` before planning or editing. Treat the
@@ -52,7 +58,9 @@ same context without duplicating or rewriting `AGENTS.md` and `CLAUDE.md`.
 3. Run `umem skills list --format json` to inspect active and candidate skills.
 4. For every relevant active skill, run `umem skills detail <skill-id-or-name> --format json`
    and follow that skill before acting.
-5. If no skill applies, continue with the loaded context. Do not skip steps 1-3 just because
+5. If a skill, slash command, or workflow has its own activation steps, run steps 1-4 before
+   that activation. Do not let the workflow replace this preflight.
+6. If no skill applies, continue with the loaded context. Do not skip steps 1-3 just because
    the task looks small.
 
 Use the MCP/FastMCP tools with equivalent names when they are available. If the MCP tools

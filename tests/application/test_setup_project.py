@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from universal_memory.application.onboarding.setup_project import setup_project
-from universal_memory.domain import StorageError
 from universal_memory.infrastructure.config import (
     LocalConfigValidationPort,
     LocalProjectLayoutPort,
@@ -62,6 +61,10 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "sensitive personal data" in skill_content
     assert "Record only stable facts" in skill_content
     assert "Do not skip steps 1-3" in skill_content
+    assert "mandatory preflight" in skill_content
+    assert "Before any skill workflow, slash command, or structured agent workflow." in skill_content
+    assert "If `umem` is unavailable or not initialized" in skill_content
+    assert "Do not let the workflow replace this preflight" in skill_content
     latent_skill_line = (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").read_text(
         encoding="utf-8"
     )
@@ -192,13 +195,26 @@ def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path)
     ]
 
 
-def test_setup_project_fails_for_partial_layout_state(tmp_path: Path) -> None:
+def test_setup_project_repairs_partial_layout_state(tmp_path: Path) -> None:
     (tmp_path / ".umem").mkdir()
     (tmp_path / ".umem" / "memory").mkdir()
 
-    with pytest.raises(StorageError, match="partial or corrupted"):
-        setup_project(
-            tmp_path,
-            layout_port=LocalProjectLayoutPort(),
-            config_validation_port=LocalConfigValidationPort(),
-        )
+    result = setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+
+    assert result.created is True
+    assert result.already_initialized is False
+    assert result.created_paths == [
+        ".umem/config.toml",
+        ".umem/audit/events.jsonl",
+        ".umem/snapshots",
+        ".umem/skills",
+        ".umem/benchmarks",
+        ".umem/benchmarks/retrieval-results.json",
+        ".umem/skills/use-universal-memory/SKILL.md",
+        ".umem/memory/latent_skills.jsonl",
+    ]
+    assert result.existing_paths == [".umem/memory"]

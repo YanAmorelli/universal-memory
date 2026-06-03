@@ -628,7 +628,7 @@ def test_init_does_not_attempt_network_access(
     assert json.loads(captured.out)["data"]["project_path"] == "."
 
 
-def test_init_expected_errors_use_cli_error_envelope(
+def test_init_repairs_partial_layout_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -639,12 +639,14 @@ def test_init_expected_errors_use_cli_error_envelope(
 
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
-    assert exit_code != 0
+    assert exit_code == 0
     assert captured.err == ""
-    assert payload["ok"] is False
-    assert payload["error"]["code"] == "storage_error"
-    assert "partial or corrupted" in payload["error"]["detail"]
-    assert payload["error"]["audit_reference"] is None
+    assert payload["ok"] is True
+    assert ".umem/config.toml" in payload["data"]["created"]
+    assert (tmp_path / ".umem" / "config.toml").is_file()
+    assert (tmp_path / ".umem" / "audit" / "events.jsonl").is_file()
+    assert (tmp_path / ".umem" / "snapshots").is_dir()
+    assert (tmp_path / ".umem" / "skills").is_dir()
 
 
 CLICK_USAGE_ERROR_EXIT_CODE = 2

@@ -1756,10 +1756,9 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
     skills: bool,
     yes: bool,
 ) -> int:
-    if not any([check, migrate, benchmarks, skills]):
-        check = True
+    apply_default_update = not any([check, migrate, benchmarks, skills])
     selected_count = sum([check, migrate, benchmarks, skills])
-    if selected_count != 1:
+    if not apply_default_update and selected_count != 1:
         _print_expected_error(
             ValidationFailedError("Provide only one update option per execution."),
             output_format=output_format,
@@ -1767,6 +1766,41 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
         return 1
 
     try:
+        if apply_default_update:
+            if check_command is None:
+                raise RuntimeError("CLI update_check_command dependency was not configured.")
+            check_result = check_command(UpdateCheckCommand(project_root=Path.cwd()))
+            migrate_result: UpdateMigrateResult | None = None
+            if check_result.migration_required:
+                if migrate_command is None:
+                    raise RuntimeError("CLI update_migrate_command dependency was not configured.")
+                if output_format == "json" and not yes:
+                    raise ValidationFailedError(
+                        "The --yes / -y flag is required to run update with JSON output when "
+                        "migration is required."
+                    )
+                if output_format != "json":
+                    _stdout_console().print(_format_human_update_check(check_result))
+                    _stdout_console().print()
+                    _stdout_console().print(_format_human_update_mutation_plan("update.migrate"))
+                    if not yes:
+                        if not _confirm("Apply pending update migration? [y/N]: ", default=False):
+                            _stdout_console().print("Update cancelled.")
+                            return 1
+                migrate_result = migrate_command(
+                    UpdateMigrateCommand(project_root=Path.cwd(), origin="cli")
+                )
+            if output_format == "json":
+                print(
+                    json.dumps(
+                        _update_apply_success_envelope(check_result, migrate_result),
+                        sort_keys=True,
+                    )
+                )
+            else:
+                _stdout_console().print(_format_human_update_apply(check_result, migrate_result))
+            return 0
+
         if check:
             if check_command is None:
                 raise RuntimeError("CLI update_check_command dependency was not configured.")
@@ -2608,6 +2642,30 @@ def _update_benchmarks_success_envelope(result: UpdateBenchmarksResult) -> dict[
     }
 
 
+def _update_apply_success_envelope(
+    check_result: UpdateCheckResult,
+    migrate_result: UpdateMigrateResult | None,
+) -> dict[str, Any]:
+    warnings = [*check_result.warnings]
+    if migrate_result is not None:
+        warnings.extend(migrate_result.warnings)
+    return {
+        "ok": True,
+        "operation": "update",
+        "scope": "project",
+        "data": {
+            "check": check_result.to_payload(),
+            "migration_applied": migrate_result is not None,
+            "migrated_files": migrate_result.migrated_files if migrate_result is not None else [],
+            "audit_reference": migrate_result.audit_reference if migrate_result is not None else "",
+            "snapshot_references": (
+                migrate_result.snapshot_references if migrate_result is not None else []
+            ),
+        },
+        "warnings": warnings,
+    }
+
+
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
     project_root = result.project_path
     return {
@@ -2796,7 +2854,48 @@ def _format_human_update_check(result: UpdateCheckResult) -> str:
     if result.warnings:
         lines.append("Warnings:")
         lines.extend(f"- {warning}" for warning in result.warnings)
-    lines.append("Next action: umem update --migrate --yes, if migration is required.")
+    if result.migration_required:
+        lines.append("Next action: umem update --yes")
+    else:
+        lines.append("Next action: no local update action required.")
+    return "\n".join(lines)
+
+
+def _format_human_update_apply(
+    check_result: UpdateCheckResult,
+    migrate_result: UpdateMigrateResult | None,
+) -> str:
+    lines = [
+        "Update completed.",
+        "Scope: project",
+        f"Installed version: {check_result.installed_version}",
+        f"Target schema: {check_result.target_schema_version}",
+        f"Updates available: {check_result.updates_available}",
+        f"Migration required: {str(check_result.migration_required).lower()}",
+        f"Migration applied: {str(migrate_result is not None).lower()}",
+    ]
+    if migrate_result is not None:
+        lines.append("Migrated files:")
+        lines.extend(f"- {path}" for path in migrate_result.migrated_files)
+        snapshots = (
+            ", ".join(migrate_result.snapshot_references)
+            if migrate_result.snapshot_references
+            else "(none)"
+        )
+        lines.extend(
+            [
+                f"Snapshots: {snapshots}",
+                f"Audit: {migrate_result.audit_reference or '(no changes)'}",
+            ]
+        )
+    else:
+        lines.append("No local update actions were required.")
+    warnings = [*check_result.warnings]
+    if migrate_result is not None:
+        warnings.extend(migrate_result.warnings)
+    if warnings:
+        lines.append("Warnings:")
+        lines.extend(f"- {warning}" for warning in warnings)
     return "\n".join(lines)
 
 

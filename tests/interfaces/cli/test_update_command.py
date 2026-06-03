@@ -108,15 +108,43 @@ def test_update_benchmarks_cli_json_has_required_metrics(
     assert payload["data"]["audit_reference"]
 
 
-def test_update_defaults_to_check(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_update_default_applies_required_migration(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / ".umem").mkdir()
+    (tmp_path / ".umem" / "memory").mkdir(parents=True)
+    (tmp_path / ".umem" / "config.toml").write_text(
+        '[hosts]\nenabled = ["codex"]\n',
+        encoding="utf-8",
+    )
+
+    exit_code = main(["update", "--format", "json", "--yes"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["operation"] == "update"
+    assert payload["data"]["migration_applied"] is True
+    assert ".umem/config.toml" in payload["data"]["migrated_files"]
+    config = (tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8")
+    assert "schema_version = 1" in config
+
+
+def test_update_default_reports_no_action_when_current(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["init", "--yes", "--format", "json"]) == 0
+    capsys.readouterr()
+    assert main(["update", "--format", "json", "--yes"]) == 0
+    capsys.readouterr()
 
     exit_code = main(["update", "--format", "json"])
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert payload["operation"] == "update.check"
+    assert payload["operation"] == "update"
+    assert payload["data"]["migration_applied"] is False
+    assert payload["data"]["migrated_files"] == []
 
 
 def _active_skill() -> LatentSkill:

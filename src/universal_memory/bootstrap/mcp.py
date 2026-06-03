@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
-from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase
+from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase, SyncInstructionsCommand
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     GetMemoryStatusUseCase,
@@ -122,6 +122,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         project_root=root,
         safe_write_use_case=safe_write_use_case,
         rule_repository=rule_repository,
+        fact_repository=fact_repository,
     )
     propose_skill_use_case = ProposeSkillUseCase(
         project_root=root,

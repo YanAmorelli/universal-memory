@@ -1,8 +1,9 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
-from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase
+from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase, SyncInstructionsCommand
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     ContextHygieneUseCase,
@@ -176,6 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         project_root=project_root,
         safe_write_use_case=safe_write_use_case,
         rule_repository=rule_repository,
+        fact_repository=fact_repository,
     )
     propose_skill_use_case = ProposeSkillUseCase(
         project_root=project_root,

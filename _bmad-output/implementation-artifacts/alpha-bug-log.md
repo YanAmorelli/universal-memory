@@ -608,3 +608,59 @@ Uso combinado sugerido:
 ### Verificacao
 
 - pendente
+
+## BUG-012 - Bootstrap UMEM pode ser ignorado quando workflow de skill assume prioridade
+
+- Status: verified
+- Severidade: medium
+- Superficie: Host Setup | Skills | Runtime Behavior
+- Encontrado em: 2026-06-02
+- Contexto: durante teste real com Claude Code em outro projeto, o bloco UMEM em `CLAUDE.md` estava presente e validado, mas o agente so executou `umem status/context/skills` quando o usuario pediu explicitamente. Em sessao com workflow BMad, a ativacao estruturada da skill competiu com as instrucoes do manifesto e assumiu prioridade operacional.
+
+### Reproducao
+
+1. inicializar um projeto com `umem init` para `claude_code`
+2. confirmar `umem status --format json` com `host_validation.claude_code.status: success`
+3. iniciar uma tarefa por uma skill/workflow com ativacao forte, como code review
+4. observar se o agente executa `umem status --format json`, `umem context --scope project --format json` e `umem skills list --format json` antes do workflow
+
+### Esperado
+
+- o agente deve carregar o contexto UMEM antes de planejar, revisar, investigar, implementar ou executar workflows de skill
+- se `umem` estiver indisponivel ou nao inicializado, o agente deve reportar isso explicitamente antes de continuar sem memoria externa
+- o contrato operacional deve deixar claro que o bootstrap UMEM precede skills, slash commands e workflows estruturados
+
+### Obtido
+
+- o bloco UMEM em `CLAUDE.md` pode ser lido como instrucao declarativa, mas nao como preflight inevitavel
+- workflows de skill com passos de ativacao detalhados podem capturar a atencao do agente antes de ele executar o bootstrap UMEM
+- o usuario precisa pedir explicitamente para o agente usar `umem` para garantir o carregamento
+
+### Evidencias
+
+- `CLAUDE.md` gerado contem comandos `umem status --format json`, `umem context --scope project --format json`, `umem skills list --format json` e referencia a `.umem/skills/use-universal-memory/SKILL.md`
+- `src/universal_memory/application/host/setup_host_use_case.py` renderiza os blocos gerenciados de `AGENTS.md` e `CLAUDE.md`
+- `tests/application/test_setup_host.py` valida a presenca dos comandos e a leitura do host, mas nao valida prioridade de execucao frente a workflows de skill
+- `.umem/skills/use-universal-memory/SKILL.md` descreve o procedimento operacional, mas a ativacao nativa ainda depende do agente respeitar o manifesto
+
+### Hipotese / Causa Raiz
+
+- o produto valida presenca textual do bootstrap, mas nao tem uma garantia operacional de ordem de execucao
+- agentes priorizam instrucoes mais procedurais e recentes quando uma skill entra em modo de ativacao
+- a instrucao atual nao explicita com forca suficiente que o bootstrap UMEM deve rodar antes de qualquer skill, slash command ou workflow estruturado
+
+### Correcao
+
+- O texto gerado para `AGENTS.md` agora declara o bootstrap UMEM como preflight obrigatorio antes de planejamento, edicao, investigacao, review, skill workflow, slash command ou workflow estruturado.
+- O texto gerado para `CLAUDE.md`, tanto no modo manifesto completo quanto no modo delta com `AGENTS.md` existente, agora reforca que o bootstrap UMEM precede workflows de skill e exige reporte explicito quando `umem` estiver indisponivel ou nao inicializado.
+- A skill padrao `.umem/skills/use-universal-memory/SKILL.md` gerada por `umem init` agora instrui que skills, slash commands e workflows estruturados nao substituem o preflight UMEM.
+- Testes de regressao foram atualizados para validar a prioridade operacional do preflight nos blocos de host e na skill padrao.
+
+### Verificacao
+
+- `uv run pytest tests/application/test_setup_host.py tests/application/test_setup_project.py tests/application/host/test_sync_instructions.py` -> 30 passed
+- `uv run pytest` -> 457 passed
+- Sandbox temporario em `/private/tmp/umem-bug012.STlwSX`: `uv run umem init --hosts claude_code --yes --format json` -> `validation_status: success`
+- Sandbox temporario em `/private/tmp/umem-bug012.STlwSX`: `uv run umem host check claude_code --format json` -> `validation_status: success`
+- Sandbox temporario em `/private/tmp/umem-bug012.STlwSX`: `rg -n 'mandatory preflight|skill workflow|slash command|not initialized|Do not let the workflow replace this preflight' CLAUDE.md .umem/skills/use-universal-memory/SKILL.md` confirmou o contrato reforcado em `CLAUDE.md` e na skill padrao.
+- Validacao operacional nesta sessao: mesmo iniciada por `$bmad-dev-story`, a execucao rodou `umem status --format json`, `umem context --scope project --format json` e `umem skills list --format json` antes da ativacao da skill; os comandos reportaram erro de storage, que foi explicitado antes de continuar.

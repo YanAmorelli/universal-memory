@@ -43,15 +43,24 @@ def test_ensure_project_layout_is_idempotent_and_reports_existing_paths(tmp_path
     assert is_project_initialized(tmp_path) is True
 
 
-def test_ensure_project_layout_rejects_partial_existing_tree(tmp_path: Path) -> None:
+def test_ensure_project_layout_repairs_partial_existing_tree(tmp_path: Path) -> None:
     umem_root = tmp_path / ".umem"
     umem_root.mkdir()
     (umem_root / "memory").mkdir()
 
-    with pytest.raises(StorageError, match="partial or corrupted"):
-        ensure_project_layout(tmp_path)
+    result = ensure_project_layout(tmp_path)
 
-    assert is_project_initialized(tmp_path) is False
+    assert result.created is True
+    assert result.existing_paths == [".umem/memory"]
+    assert result.created_paths == [
+        ".umem/config.toml",
+        ".umem/audit/events.jsonl",
+        ".umem/snapshots",
+        ".umem/skills",
+        ".umem/benchmarks",
+        ".umem/benchmarks/retrieval-results.json",
+    ]
+    assert is_project_initialized(tmp_path) is True
 
 
 def test_ensure_project_layout_rejects_file_directory_collisions(tmp_path: Path) -> None:

@@ -722,16 +722,24 @@ class ConfigureHostUseCase:
             UMEM_START,
             "# Universal Memory Active Policy",
             "> [!IMPORTANT]",
-            "> `umem` is this project's operational memory. Before planning, editing, "
-            "investigating, or reviewing, load memory with `umem status --format json`, "
-            "`umem context --scope project --format json`, and "
-            "`umem skills list --format json`, or use the equivalent MCP/FastMCP tools.",
+            "> UMEM bootstrap is a mandatory preflight before any planning, editing, "
+            "investigation, review, skill workflow, slash command, or structured agent "
+            "workflow.",
+            "> First run `umem status --format json`, `umem context --scope project "
+            "--format json`, and `umem skills list --format json`.",
+            "> Use the equivalent MCP/FastMCP tools when they are available.",
             "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a relevant "
             "active skill exists, inspect it with "
             "`umem skills detail <skill-id-or-name> --format json` before acting.",
-            "> When recording learnings, use `--scope global` for durable user preferences "
-            "across projects and `--scope project` for decisions, commands, and context for "
-            "this repository. Never record secrets, large dumps, or uncertain facts.",
+            "> If `umem` is unavailable or not initialized, report that explicitly before "
+            "continuing without external memory.",
+            "> CRITICAL: You must proactively capture new memory. At the end of every request, "
+            "assess if you learned any preference, resolved a bug, or made an architectural "
+            "choice. Save them using `umem remember \"...\" --scope project/global` and "
+            "run `umem host sync --apply`.",
+            "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
+            "the end of your final response stating either `[UMEM: Remembered \"...\"]` or "
+            "`[UMEM: No new facts/skills to record]`. Do not forget this footer.",
             "",
             "## Required Bootstrap",
             "- Run `umem status --format json` to validate the integration.",
@@ -741,8 +749,17 @@ class ConfigureHostUseCase:
             "`umem skills detail <skill-id-or-name> --format json`.",
             "- If MCP/FastMCP is available, prefer the equivalent tools; otherwise, use the "
             "CLI commands above.",
+            "- This bootstrap precedes skills, slash commands, and all structured workflows.",
             "- Keep `AGENTS.md` and `CLAUDE.md` compact: they should point to `umem`, not "
             "store memory dumps.",
+            "",
+            "## Proactive Memory Loop (Mandatory)",
+            "Before concluding your response to the user:",
+            "1. Assess: Did you learn a new preference, fix a bug, or make a convention/decision?",
+            "2. Record: Proactively run `umem remember \"Short fact.\" --scope project/global --tag <tag>`.",
+            "3. Propose Skills: Check `umem skills list` and run `umem skills propose` if recurring patterns exist.",
+            "4. Sync: If you ran any mutation, run `umem host sync --apply` to bake it into instruction files.",
+            "5. Report: Append the UMEM status line `[UMEM: Remembered \"...\"]` or `[UMEM: No new facts/skills to record]` to your final output.",
             "",
             "## Consolidated Operational Rules",
         ]
@@ -777,35 +794,64 @@ class ConfigureHostUseCase:
                 "Claude Code-specific deltas, but `umem` usage remains required."
             )
             memory_line = (
-                "> Before planning, editing, investigating, or reviewing, load `umem` with "
-                "`umem status --format json`, `umem context --scope project --format json` "
-                "and `umem skills list --format json`, or use the equivalent MCP/FastMCP "
-                "tools."
+                "> UMEM bootstrap is a mandatory preflight before any skill workflow, slash "
+                "command, or structured agent workflow: first run `umem status --format "
+                "json`, `umem context --scope project --format json` and `umem skills list "
+                "--format json`, or use the equivalent MCP/FastMCP tools."
             )
             policy_line = (
                 "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a "
                 "relevant active skill exists, inspect it with "
                 "`umem skills detail <skill-id-or-name> --format json` before acting."
+            )
+            unavailable_line = (
+                "> If `umem` is unavailable or not initialized, report that explicitly before "
+                "continuing without external memory."
+            )
+            recording_line = (
+                "> CRITICAL: You must proactively capture new memory. At the end of every request, "
+                "assess if you learned any preference, resolved a bug, or made an architectural "
+                "choice. Save them using `umem remember \"...\" --scope project/global` and "
+                "run `umem host sync --apply`."
+            )
+            report_line = (
+                "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
+                "the end of your final response stating either `[UMEM: Remembered \"...\"]` or "
+                "`[UMEM: No new facts/skills to record]`. Do not forget this footer."
             )
             section_title = "## Provider Deltas"
             empty_line = "- No Claude Code-specific delta registered."
         else:
             title = "# Claude Code Universal Memory Instructions"
             scope_line = (
-                "> Use this file as Claude Code's operational reference for this project. "
-                "It consolidates how to retrieve context, apply active rules, and record "
-                "learnings when `AGENTS.md` does not exist yet."
+                "> UMEM bootstrap is a mandatory preflight before any planning, editing, "
+                "investigation, review, skill workflow, slash command, or structured agent "
+                "workflow."
             )
             memory_line = (
-                "> Before planning, editing, investigating, or reviewing, load `umem` with "
-                "`umem status --format json`, `umem context --scope project --format json` "
-                "and `umem skills list --format json`, or use the equivalent MCP/FastMCP "
-                "tools."
+                "> First run `umem status --format json`, `umem context --scope project "
+                "--format json`, and `umem skills list --format json`; use equivalent "
+                "MCP/FastMCP tools when they are available."
             )
             policy_line = (
                 "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a "
                 "relevant active skill exists, inspect it with "
                 "`umem skills detail <skill-id-or-name> --format json` before acting."
+            )
+            unavailable_line = (
+                "> If `umem` is unavailable or not initialized, report that explicitly before "
+                "continuing without external memory."
+            )
+            recording_line = (
+                "> CRITICAL: You must proactively capture new memory. At the end of every request, "
+                "assess if you learned any preference, resolved a bug, or made an architectural "
+                "choice. Save them using `umem remember \"...\" --scope project/global` and "
+                "run `umem host sync --apply`."
+            )
+            report_line = (
+                "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
+                "the end of your final response stating either `[UMEM: Remembered \"...\"]` or "
+                "`[UMEM: No new facts/skills to record]`. Do not forget this footer."
             )
             section_title = "## Operational Rules"
             empty_line = (
@@ -818,6 +864,9 @@ class ConfigureHostUseCase:
             scope_line,
             memory_line,
             policy_line,
+            unavailable_line,
+            recording_line,
+            report_line,
             "",
         ]
 
@@ -830,11 +879,21 @@ class ConfigureHostUseCase:
                     "as active context.",
                     "- Run `umem skills list --format json`; for each relevant skill, run "
                     "`umem skills detail <skill-id-or-name> --format json`.",
+                    "- This bootstrap precedes skills, slash commands, and all structured "
+                    "workflows.",
                     "- When you find a durable user preference, record it as global memory; "
                     "when you find a repository decision or detail, record it as project "
                     "memory.",
                     "- Preserve manual content outside the UMEM block and keep this block "
                     "compact, pointing to external documents when guidance grows long.",
+                    "",
+                    "## Proactive Memory Loop (Mandatory)",
+                    "Before concluding your response to the user:",
+                    "1. Assess: Did you learn a new preference, fix a bug, or make a convention/decision?",
+                    "2. Record: Proactively run `umem remember \"Short fact.\" --scope project/global --tag <tag>`.",
+                    "3. Propose Skills: Check `umem skills list` and run `umem skills propose` if recurring patterns exist.",
+                    "4. Sync: If you ran any mutation, run `umem host sync --apply` to bake it into instruction files.",
+                    "5. Report: Append the UMEM status line `[UMEM: Remembered \"...\"]` or `[UMEM: No new facts/skills to record]` to your final output.",
                     "",
                 ]
             )

@@ -5,6 +5,8 @@ _bmad/
 .opencode/
 .agent/
 .antigravitycli/
+AGENTS.md
+CLAUDE.md
 *.diff
 _bmad-output/**/review-prompt-*.md
 

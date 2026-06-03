@@ -20,9 +20,10 @@ from universal_memory.domain.entities import (
     InstructionClassification,
     Rule,
     RuleStatus,
+    FactStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
-from universal_memory.domain.ports import RuleRepository
+from universal_memory.domain.ports import RuleRepository, FactRepository
 from universal_memory.infrastructure.config.toml_loader import load_config, update_project_config
 
 DEFAULT_SYNC_HOSTS = ("codex", "claude_code")
@@ -73,12 +74,15 @@ class SyncInstructionsUseCase:
         project_root: Path,
         safe_write_use_case: SafeWriteUseCase,
         rule_repository: RuleRepository,
+        fact_repository: FactRepository | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.rule_repository = rule_repository
+        self.fact_repository = fact_repository
         self.configure_host_use_case = ConfigureHostUseCase(
             project_root=project_root,
             safe_write_use_case=safe_write_use_case,
+            fact_repository=fact_repository,
         )
 
     def execute(self, command: SyncInstructionsCommand) -> SyncInstructionsResult:
@@ -298,8 +302,28 @@ class SyncInstructionsUseCase:
         return plans
 
     def _active_rule_blocks(self) -> list[InstructionBlock]:
+        blocks = []
         rules = self.rule_repository.list(status=RuleStatus.active)
-        return [self._rule_to_block(rule) for rule in rules]
+        for rule in rules:
+            blocks.append(self._rule_to_block(rule))
+
+        if self.fact_repository is not None:
+            for fact in self.fact_repository.list(status=FactStatus.active):
+                classification = InstructionClassification.shared_policy
+                tags = fact.tags or []
+                for candidate in InstructionClassification:
+                    if candidate.value in tags or candidate.value.replace("_", "-") in tags:
+                        classification = candidate
+                        break
+                title = fact.metadata.get("title") if fact.metadata else None
+                blocks.append(
+                    InstructionBlock(
+                        title=title or f"Fato {fact.id[:8]}",
+                        content=fact.content,
+                        classification=classification,
+                    )
+                )
+        return blocks
 
     def _rule_to_block(self, rule: Rule) -> InstructionBlock:
         classification = self._classification_for(rule)
