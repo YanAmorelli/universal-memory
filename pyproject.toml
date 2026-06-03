@@ -1,6 +1,6 @@
 [project]
 name = "universal-memory"
-version = "0.1.0"
+version = "0.1.1"
 description = "Vendor-agnostic cognitive persistence layer for AI agents."
 readme = "README.md"
 license = { text = "MIT" }
@@ -8,6 +8,14 @@ authors = [
     { name = "Yan L. Amorelli", email = "dev@amorelliaoyan.com" }
 ]
 requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "fastmcp>=0.1.0",
     "pydantic>=2.0",

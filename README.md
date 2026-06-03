@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/YanAmorelli/universal-memory/main/assets/umem-logo.png" alt="Universal Memory logo" width="720">
+</p>
+
 # Universal Memory (umem)
 
 [![PyPI version](https://img.shields.io/pypi/v/universal-memory.svg)](https://pypi.org/project/universal-memory/)
@@ -55,11 +59,17 @@ Encapsulates complex, repetitive procedural instructions into formal Agent Skill
 
 Ensure you have Python 3.12+ installed. You can run or install `umem` using your preferred package manager.
 
-### Run instantly with `uv` (Recommended)
-You don't even need to install it permanently:
+### Try instantly with `uvx`
+You can run `umem` without installing it permanently:
 ```bash
-uvx umem --help
+uvx --from universal-memory umem --help
 ```
+
+> [!WARNING]
+> `uvx` is best for quick trials. For ongoing use, install Universal Memory as a persistent tool so `umem` is always available and can fully manage long-lived global memories and synced agent skills:
+> ```bash
+> uv tool install universal-memory
+> ```
 
 ### Install via PyPI
 ```bash
