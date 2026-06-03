@@ -252,6 +252,20 @@ def main(  # noqa: PLR0913
     except click.exceptions.Exit as exit_error:
         code = exit_error.exit_code
         return int(code) if code is not None else 0
+    except click.exceptions.Abort:
+        fmt = _determine_output_format(argv)
+        if fmt == "json":
+            print(json.dumps({
+                "ok": False,
+                "error": {
+                    "code": "aborted",
+                    "detail": "Command execution was aborted by user or system signal."
+                },
+                "warnings": []
+            }, sort_keys=True))
+        else:
+            sys.stderr.write("Aborted.\n")
+        return 1
     except RuntimeError:
         raise
     except Exception as e:

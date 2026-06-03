@@ -3,6 +3,7 @@ import socket
 import subprocess
 import sys
 import tomllib
+import click
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -663,3 +664,40 @@ def test_click_exception_json_format_uses_error_envelope(
     assert captured.err == ""
     assert payload["ok"] is False
     assert payload["error"]["code"] == "validation_failed"
+
+
+def test_click_abort_json_format_uses_aborted_envelope(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def raise_abort(*args, **kwargs):
+        raise click.exceptions.Abort()
+
+    exit_code = cli_main(
+        ["init", "--format", "json"],
+        setup_project_command=raise_abort,
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 1
+    assert captured.err == ""
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "aborted"
+    assert "aborted" in payload["error"]["detail"]
+
+
+def test_click_abort_human_format_prints_aborted_to_stderr(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def raise_abort(*args, **kwargs):
+        raise click.exceptions.Abort()
+
+    exit_code = cli_main(
+        ["init", "--format", "human"],
+        setup_project_command=raise_abort,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err == "Aborted.\n"
