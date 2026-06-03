@@ -1,3 +1,20 @@
+# AI
+_bmad/
+.agents/
+.gemini/
+.opencode/
+.agent/
+.antigravitycli/
+AGENTS.md
+CLAUDE.md
+*.diff
+_bmad-output/**/review-prompt-*.md
+
+# Universal Memory Local Database & Benchmarks
+.umem/*
+!.umem/benchmarks/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
