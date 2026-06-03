@@ -693,6 +693,12 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             list[str] | None,
             typer.Option("--host", help="Host to synchronize. May be used multiple times."),
         ] = None,
+        max_lines: Annotated[
+            int, typer.Option("--max-lines", help="Maximum line count.")
+        ] = 100,
+        max_chars: Annotated[
+            int, typer.Option("--max-chars", help="Maximum character count.")
+        ] = 4000,
         output_format: OutputFormatOption = None,
     ) -> None:
         if host_sync_command is None:
@@ -705,6 +711,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 host_ids=host_id or ["codex", "claude_code"],
                 apply=apply,
                 yes=yes,
+                max_lines=max_lines,
+                max_chars=max_chars,
             )
         )
 
@@ -1692,6 +1700,8 @@ def _run_host_sync(
     host_ids: list[str],
     apply: bool,
     yes: bool,
+    max_lines: int = 100,
+    max_chars: int = 4000,
 ) -> int:
     try:
         if apply and output_format == "json" and not yes:
@@ -1703,6 +1713,8 @@ def _run_host_sync(
                 SyncInstructionsCommand(
                     host_ids=host_ids,
                     apply=False,
+                    max_managed_lines=max_lines,
+                    max_managed_chars=max_chars,
                     origin="cli",
                 )
             )
@@ -1716,6 +1728,8 @@ def _run_host_sync(
             SyncInstructionsCommand(
                 host_ids=host_ids,
                 apply=apply,
+                max_managed_lines=max_lines,
+                max_managed_chars=max_chars,
                 origin="cli",
             )
         )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
@@ -31,6 +31,35 @@ DEFAULT_MAX_MANAGED_LINES = 100
 DEFAULT_MAX_MANAGED_CHARS = 4000
 LONG_CONTENT_THRESHOLD = 800
 RAW_MEMORY_DUMP_HIT_THRESHOLD = 3
+
+
+def _resolve_limits(project_root: Path, command_lines: int, command_chars: int) -> tuple[int, int]:
+    max_lines = command_lines
+    max_chars = command_chars
+
+    try:
+        from universal_memory.infrastructure.config.toml_loader import load_config
+        loaded = load_config(project_root)
+        
+        # Check runtimes section
+        runtimes_config = loaded.merged.get("runtimes")
+        if isinstance(runtimes_config, dict):
+            if "max_managed_lines" in runtimes_config and command_lines == DEFAULT_MAX_MANAGED_LINES:
+                max_lines = int(runtimes_config["max_managed_lines"])
+            if "max_managed_chars" in runtimes_config and command_chars == DEFAULT_MAX_MANAGED_CHARS:
+                max_chars = int(runtimes_config["max_managed_chars"])
+                
+        # Check hosts section as fallback
+        hosts_config = loaded.merged.get("hosts")
+        if isinstance(hosts_config, dict):
+            if "max_managed_lines" in hosts_config and command_lines == DEFAULT_MAX_MANAGED_LINES:
+                max_lines = int(hosts_config["max_managed_lines"])
+            if "max_managed_chars" in hosts_config and command_chars == DEFAULT_MAX_MANAGED_CHARS:
+                max_chars = int(hosts_config["max_managed_chars"])
+    except Exception:
+        pass
+
+    return max_lines, max_chars
 
 InstructionClassificationValue = Literal[
     "shared_policy", "provider_delta", "scoped_rule", "canonical_doc"
@@ -190,11 +219,23 @@ class ConfigureHostUseCase:
         self.fact_repository = fact_repository
 
     def execute(self, command: ConfigureHostCommand) -> ConfigureHostResult:
+        max_lines, max_chars = _resolve_limits(
+            self.project_root,
+            command.max_managed_lines,
+            command.max_managed_chars,
+        )
+        command = replace(command, max_managed_lines=max_lines, max_managed_chars=max_chars)
+
         host = self._host_for(command.host_id)
         target = self._primary_target_for(host)
 
         if command.check:
-            validation = self._validate_host_read(host, target)
+            validation = self._validate_host_read(
+                host,
+                target,
+                max_lines=command.max_managed_lines,
+                max_chars=command.max_managed_chars,
+            )
             audit_reference = self._record_host_validation(command, host, validation)
             return ConfigureHostResult(
                 host_id=host.name.value,
@@ -269,6 +310,8 @@ class ConfigureHostUseCase:
         self,
         host: Host,
         target: InstructionTarget,
+        max_lines: int = DEFAULT_MAX_MANAGED_LINES,
+        max_chars: int = DEFAULT_MAX_MANAGED_CHARS,
     ) -> HostReadValidationResult:
         method = host.read_validation_method
         checks = {
@@ -323,8 +366,8 @@ class ConfigureHostUseCase:
             self._validate_compact_manifest(
                 managed_block,
                 target_path=target.relative_path,
-                max_lines=DEFAULT_MAX_MANAGED_LINES,
-                max_chars=DEFAULT_MAX_MANAGED_CHARS,
+                max_lines=max_lines,
+                max_chars=max_chars,
             )
             self._validate_no_raw_memory_dump(content, target_path=target.relative_path)
         except ValidationFailedError as exc:
@@ -451,26 +494,7 @@ class ConfigureHostUseCase:
                 raise
 
     def _instruction_blocks_for(self, command: ConfigureHostCommand) -> list[InstructionBlock]:
-        if command.instruction_blocks or self.fact_repository is None:
-            return command.instruction_blocks
-
-        instruction_blocks: list[InstructionBlock] = []
-        for fact in self.fact_repository.list(status=FactStatus.active):
-            classification = InstructionClassification.shared_policy
-            tags = fact.tags or []
-            for candidate in InstructionClassification:
-                if candidate.value in tags or candidate.value.replace("_", "-") in tags:
-                    classification = candidate
-                    break
-            title = fact.metadata.get("title") if fact.metadata else None
-            instruction_blocks.append(
-                InstructionBlock(
-                    title=title or f"Fato {fact.id[:8]}",
-                    content=fact.content,
-                    classification=classification,
-                )
-            )
-        return instruction_blocks
+        return command.instruction_blocks
 
     def _prepare_target_content(
         self,

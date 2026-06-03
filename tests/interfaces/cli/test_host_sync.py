@@ -158,3 +158,38 @@ def test_host_sync_human_apply_interactive_confirmation_no(
     assert "Instruction synchronization cancelled." in captured.out
     assert len(calls) == 1
     assert calls[0].apply is False
+
+
+def test_host_sync_cli_passes_max_lines_and_max_chars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = []
+
+    def host_sync(command: SyncInstructionsCommand) -> SyncInstructionsResult:
+        calls.append(command)
+        return SyncInstructionsResult(
+            host_ids=["codex"],
+            instruction_targets=["AGENTS.md"],
+            planned_changes=[
+                {"target": "agents_md", "action": "create", "path": "AGENTS.md"},
+            ],
+            manual_steps=[],
+            validation_status="planned",
+            audit_reference="not-applied",
+            snapshot_reference="planned",
+            timestamp="2026-05-29T12:00:00Z",
+        )
+
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = cli_main(
+        ["host", "sync", "--host", "codex", "--max-lines", "250", "--max-chars", "8000"],
+        setup_project_command=lambda _project_root: None,  # type: ignore[arg-type,return-value]
+        host_sync_command=host_sync,
+    )
+
+    assert exit_code == 0
+    assert len(calls) == 1
+    assert calls[0].max_managed_lines == 250
+    assert calls[0].max_managed_chars == 8000
+

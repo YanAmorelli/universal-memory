@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -12,6 +12,9 @@ from universal_memory.application.host.setup_host_use_case import (
     ConfigureHostUseCase,
     InstructionBlock,
     _safe_relative_path,
+    DEFAULT_MAX_MANAGED_LINES,
+    DEFAULT_MAX_MANAGED_CHARS,
+    _resolve_limits,
 )
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
 from universal_memory.domain import InvalidConfigError, StorageError, ValidationFailedError
@@ -37,8 +40,8 @@ CLAUDE_SUPPORTED_CLASSIFICATIONS = {
 class SyncInstructionsCommand:
     host_ids: list[str] = field(default_factory=lambda: list(DEFAULT_SYNC_HOSTS))
     apply: bool = False
-    max_managed_lines: int = 100
-    max_managed_chars: int = 4000
+    max_managed_lines: int = DEFAULT_MAX_MANAGED_LINES
+    max_managed_chars: int = DEFAULT_MAX_MANAGED_CHARS
     origin: str = "host_sync"
 
 
@@ -86,6 +89,13 @@ class SyncInstructionsUseCase:
         )
 
     def execute(self, command: SyncInstructionsCommand) -> SyncInstructionsResult:
+        max_lines, max_chars = _resolve_limits(
+            self.project_root,
+            command.max_managed_lines,
+            command.max_managed_chars,
+        )
+        command = replace(command, max_managed_lines=max_lines, max_managed_chars=max_chars)
+
         host_ids, config_warnings = self._host_ids_for_command(command.host_ids)
         all_blocks = self._active_rule_blocks()
         plans = self._plan_commands(host_ids, all_blocks, command)
@@ -306,23 +316,6 @@ class SyncInstructionsUseCase:
         rules = self.rule_repository.list(status=RuleStatus.active)
         for rule in rules:
             blocks.append(self._rule_to_block(rule))
-
-        if self.fact_repository is not None:
-            for fact in self.fact_repository.list(status=FactStatus.active):
-                classification = InstructionClassification.shared_policy
-                tags = fact.tags or []
-                for candidate in InstructionClassification:
-                    if candidate.value in tags or candidate.value.replace("_", "-") in tags:
-                        classification = candidate
-                        break
-                title = fact.metadata.get("title") if fact.metadata else None
-                blocks.append(
-                    InstructionBlock(
-                        title=title or f"Fato {fact.id[:8]}",
-                        content=fact.content,
-                        classification=classification,
-                    )
-                )
         return blocks
 
     def _rule_to_block(self, rule: Rule) -> InstructionBlock:

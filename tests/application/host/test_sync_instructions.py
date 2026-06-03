@@ -12,7 +12,7 @@ from universal_memory.application.host.sync_instructions_use_case import (
     SyncInstructionsUseCase,
 )
 from universal_memory.application.security import SafeWriteUseCase
-from universal_memory.domain import SecretDetectedError, StorageError
+from universal_memory.domain import SecretDetectedError, StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEvent,
     AuditEventScope,
@@ -337,3 +337,38 @@ def test_sync_explicit_disabled_host_is_allowed_with_warning(
     assert result.warnings == [
         "Host 'claude_code' nao esta habilitado em .umem/config.toml; ativando automaticamente."
     ]
+
+
+def test_sync_respects_limits_from_project_config(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        '[runtimes]\nenabled = ["codex"]\nmax_managed_lines = 150\nmax_managed_chars = 6000\n',
+        encoding="utf-8",
+    )
+    # Default max_managed_chars is 4000. Template boilerplate is ~3000.
+    # ~3000 + 1500 = 4500, which exceeds 4000 but fits in 6000 config limit.
+    use_case = _use_case(
+        tmp_path,
+        [
+            _rule("Shared Policy", "A" * 1500, "shared_policy"),
+        ],
+        repositories,
+    )
+
+    result = use_case.execute(SyncInstructionsCommand(apply=True))
+    assert result.validation_status == "success"
+
+    # Rule is too large (exceeding even the override of 6000: ~3000 + 4000 = 7000 chars)
+    use_case_too_large = _use_case(
+        tmp_path,
+        [
+            _rule("Shared Policy", "A" * 4000, "shared_policy"),
+        ],
+        repositories,
+    )
+    with pytest.raises(ValidationFailedError):
+        use_case_too_large.execute(SyncInstructionsCommand(apply=True))

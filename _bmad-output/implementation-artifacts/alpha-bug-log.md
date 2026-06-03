@@ -664,3 +664,48 @@ Uso combinado sugerido:
 - Sandbox temporario em `/private/tmp/umem-bug012.STlwSX`: `uv run umem host check claude_code --format json` -> `validation_status: success`
 - Sandbox temporario em `/private/tmp/umem-bug012.STlwSX`: `rg -n 'mandatory preflight|skill workflow|slash command|not initialized|Do not let the workflow replace this preflight' CLAUDE.md .umem/skills/use-universal-memory/SKILL.md` confirmou o contrato reforcado em `CLAUDE.md` e na skill padrao.
 - Validacao operacional nesta sessao: mesmo iniciada por `$bmad-dev-story`, a execucao rodou `umem status --format json`, `umem context --scope project --format json` e `umem skills list --format json` antes da ativacao da skill; os comandos reportaram erro de storage, que foi explicitado antes de continuar.
+
+## BUG-013 - Sincronização de host falha (excede tamanho máximo) devido ao dump de fatos / memórias em AGENTS.md e CLAUDE.md
+
+- Status: verified
+- Severidade: high
+- Superficie: Host Setup
+- Encontrado em: 2026-06-02
+- Contexto: Quando o usuário ou agente registra múltiplos fatos na memória via `umem remember`, o comando `umem host sync` tenta sincronizar todos os fatos ativamente na seção de políticas consolidadas dos arquivos de host (`AGENTS.md` e `CLAUDE.md`). Isso incha rapidamente esses arquivos e causa a falha da validação de limite de linhas/caracteres (100 linhas / 4000 caracteres), impossibilitando o sincronismo de regras legítimas.
+
+### Reproducao
+
+1. criar múltiplos fatos via `umem remember "Fato X" --scope project`
+2. executar `umem host sync --apply`
+3. observar erro de validação: `ValidationFailedError: Manifesto AGENTS.md deve permanecer compacto; mova conteudo longo para docs/.`
+
+### Esperado
+
+- O agente deve ser capaz de carregar e sincronizar regras legítimas sem que fatos e memórias explodam o tamanho físico dos arquivos de instruções estáticas do host.
+- Fatos/memórias de contexto dinâmico devem ser consumidos sob demanda através do comando `umem context` e não duplicados/injetados textualmente nos manifestos estáticos.
+
+### Obtido
+
+- Sincronização falhava ao ultrapassar 100 linhas ou 4000 caracteres em `AGENTS.md` devido ao acúmulo de memórias dinâmicas.
+- Inexistência de chaves de configuração globais para limites no `.umem/config.toml` ou flags CLI `--max-lines`/`--max-chars` no `host sync` dificultavam o controle fino dos limites.
+
+### Evidencias
+
+- `src/universal_memory/application/host/setup_host_use_case.py`
+- `src/universal_memory/application/host/sync_instructions_use_case.py`
+- `tests/application/host/test_sync_instructions.py`
+
+### Hipotese / Causa Raiz
+
+- O design do UMEM prevê que fatos e memórias de contexto dinâmico sejam consumidos pelo agente dinamicamente através do comando `umem context`. Portanto, despejar todo o histórico de fatos dentro dos arquivos de texto estáticos de host (`AGENTS.md`/`CLAUDE.md`) causa redundância e estouro de limites físicos de tamanho desnecessariamente.
+
+### Correcao
+
+- Desvinculamos a persistência de fatos de dentro de `ConfigureHostUseCase` e `SyncInstructionsUseCase`. Agora, apenas regras de fato (`Rule`) são compiladas nos manifestos de host.
+- Adicionamos suporte persistente a limites de tamanho (`max_managed_lines` e `max_managed_chars`) no arquivo `.umem/config.toml` (tabelas `[runtimes]` ou `[hosts]`) e flags CLI `--max-lines` / `--max-chars` no comando `host sync` para dar flexibilidade total ao usuário.
+- Os manifestos de host permanecem estáticos, estáveis e compactos, remetendo o agente ao uso de `umem context` para leitura dinâmica de fatos.
+
+### Verificacao
+
+- Testes adicionados no `test_sync_instructions.py` e `test_host_sync.py` validam o suporte a limites de tamanho via `config.toml` e CLI.
+- Toda a suíte de 459 testes passando (`uv run pytest`).
