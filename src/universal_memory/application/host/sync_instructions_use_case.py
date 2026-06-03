@@ -7,14 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from universal_memory.application.host.setup_host_use_case import (
+    DEFAULT_MAX_MANAGED_CHARS,
+    DEFAULT_MAX_MANAGED_LINES,
     ConfigureHostCommand,
     ConfigureHostResult,
     ConfigureHostUseCase,
     InstructionBlock,
-    _safe_relative_path,
-    DEFAULT_MAX_MANAGED_LINES,
-    DEFAULT_MAX_MANAGED_CHARS,
     _resolve_limits,
+    _safe_relative_path,
 )
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
 from universal_memory.domain import InvalidConfigError, StorageError, ValidationFailedError
@@ -23,10 +23,9 @@ from universal_memory.domain.entities import (
     InstructionClassification,
     Rule,
     RuleStatus,
-    FactStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
-from universal_memory.domain.ports import RuleRepository, FactRepository
+from universal_memory.domain.ports import FactRepository, RuleRepository
 from universal_memory.infrastructure.config.toml_loader import load_config, update_project_config
 
 DEFAULT_SYNC_HOSTS = ("codex", "claude_code")

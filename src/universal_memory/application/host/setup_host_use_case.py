@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import json
@@ -14,7 +16,6 @@ from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEvent,
     AuditEventScope,
-    FactStatus,
     Host,
     HostName,
     InstructionClassification,
@@ -24,6 +25,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.ports import FactRepository
+from universal_memory.infrastructure.config.toml_loader import load_config
 
 UMEM_START = "<!-- UMEM: START -->"
 UMEM_END = "<!-- UMEM: END -->"
@@ -38,17 +40,22 @@ def _resolve_limits(project_root: Path, command_lines: int, command_chars: int) 
     max_chars = command_chars
 
     try:
-        from universal_memory.infrastructure.config.toml_loader import load_config
         loaded = load_config(project_root)
-        
+
         # Check runtimes section
         runtimes_config = loaded.merged.get("runtimes")
         if isinstance(runtimes_config, dict):
-            if "max_managed_lines" in runtimes_config and command_lines == DEFAULT_MAX_MANAGED_LINES:
+            if (
+                "max_managed_lines" in runtimes_config
+                and command_lines == DEFAULT_MAX_MANAGED_LINES
+            ):
                 max_lines = int(runtimes_config["max_managed_lines"])
-            if "max_managed_chars" in runtimes_config and command_chars == DEFAULT_MAX_MANAGED_CHARS:
+            if (
+                "max_managed_chars" in runtimes_config
+                and command_chars == DEFAULT_MAX_MANAGED_CHARS
+            ):
                 max_chars = int(runtimes_config["max_managed_chars"])
-                
+
         # Check hosts section as fallback
         hosts_config = loaded.merged.get("hosts")
         if isinstance(hosts_config, dict):
@@ -57,9 +64,10 @@ def _resolve_limits(project_root: Path, command_lines: int, command_chars: int) 
             if "max_managed_chars" in hosts_config and command_chars == DEFAULT_MAX_MANAGED_CHARS:
                 max_chars = int(hosts_config["max_managed_chars"])
     except Exception:
-        pass
+        return max_lines, max_chars
 
     return max_lines, max_chars
+
 
 InstructionClassificationValue = Literal[
     "shared_policy", "provider_delta", "scoped_rule", "canonical_doc"
@@ -763,10 +771,10 @@ class ConfigureHostUseCase:
             "> CRITICAL: proactively capture new memory or clean up outdated ones only when a "
             "durable preference is learned, an architectural decision is made, a bug is fixed, "
             "or facts become obsolete. Do NOT run remember/sync commands on every simple interaction. "
-            "Use `umem remember \"...\"` to add, and `umem facts purge --id <id>` to remove outdated "
+            'Use `umem remember "..."` to add, and `umem facts purge --id <id>` to remove outdated '
             "facts, followed by `umem host sync --apply`.",
             "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
-            "the end of your final response stating either `[UMEM: Remembered \"...\"]` or "
+            'the end of your final response stating either `[UMEM: Remembered "..."]` or '
             "`[UMEM: No new facts/skills to record]`. Do not forget this footer.",
             "",
             "## Required Bootstrap",
@@ -785,11 +793,11 @@ class ConfigureHostUseCase:
             "## Proactive Memory Loop (Mandatory)",
             "Before concluding your response to the user, assess if a durable preference, bug "
             "fix, or decision was made. If so:",
-            "1. Record: Proactively run `umem remember \"Short fact.\" --scope project/global --tag <tag>` "
+            '1. Record: Proactively run `umem remember "Short fact." --scope project/global --tag <tag>` '
             "or `umem facts purge --id <id>` to remove outdated facts.",
             "2. Propose Skills: Check `umem skills list` and run `umem skills propose` if recurring patterns exist.",
             "3. Sync: If you ran any mutation (remember or purge), run `umem host sync --apply` to bake it.",
-            "4. Report: Append the UMEM status line `[UMEM: Remembered \"...\"]` or `[UMEM: No new facts/skills to record]` to your final output.",
+            '4. Report: Append the UMEM status line `[UMEM: Remembered "..."]` or `[UMEM: No new facts/skills to record]` to your final output.',
             "",
             "## Consolidated Operational Rules",
         ]
@@ -843,12 +851,12 @@ class ConfigureHostUseCase:
                 "> CRITICAL: proactively capture new memory or clean up outdated ones only when a "
                 "durable preference is learned, an architectural decision is made, a bug is fixed, "
                 "or facts become obsolete. Do NOT run remember/sync commands on every simple interaction. "
-                "Use `umem remember \"...\"` to add, and `umem facts purge --id <id>` to remove outdated "
+                'Use `umem remember "..."` to add, and `umem facts purge --id <id>` to remove outdated '
                 "facts, followed by `umem host sync --apply`."
             )
             report_line = (
                 "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
-                "the end of your final response stating either `[UMEM: Remembered \"...\"]` or "
+                'the end of your final response stating either `[UMEM: Remembered "..."]` or '
                 "`[UMEM: No new facts/skills to record]`. Do not forget this footer."
             )
             section_title = "## Provider Deltas"
@@ -880,12 +888,12 @@ class ConfigureHostUseCase:
                 "> CRITICAL: proactively capture new memory or clean up outdated ones only when a "
                 "durable preference is learned, an architectural decision is made, a bug is fixed, "
                 "or facts become obsolete. Do NOT run remember/sync commands on every simple interaction. "
-                "Use `umem remember \"...\"` to add, and `umem facts purge --id <id>` to remove outdated "
+                'Use `umem remember "..."` to add, and `umem facts purge --id <id>` to remove outdated '
                 "facts, followed by `umem host sync --apply`."
             )
             report_line = (
                 "> MANDATORY OUTPUT FORMAT: Before completing your turn, you MUST append a line at "
-                "the end of your final response stating either `[UMEM: Remembered \"...\"]` or "
+                'the end of your final response stating either `[UMEM: Remembered "..."]` or '
                 "`[UMEM: No new facts/skills to record]`. Do not forget this footer."
             )
             section_title = "## Operational Rules"
@@ -925,11 +933,11 @@ class ConfigureHostUseCase:
                     "## Proactive Memory Loop (Mandatory)",
                     "Before concluding your response to the user, assess if a durable preference, bug "
                     "fix, or decision was made. If so:",
-                    "1. Record: Proactively run `umem remember \"Short fact.\" --scope project/global --tag <tag>` "
+                    '1. Record: Proactively run `umem remember "Short fact." --scope project/global --tag <tag>` '
                     "or `umem facts purge --id <id>` to remove outdated facts.",
                     "2. Propose Skills: Check `umem skills list` and run `umem skills propose` if recurring patterns exist.",
                     "3. Sync: If you ran any mutation (remember or purge), run `umem host sync --apply` to bake it.",
-                    "4. Report: Append the UMEM status line `[UMEM: Remembered \"...\"]` or `[UMEM: No new facts/skills to record]` to your final output.",
+                    '4. Report: Append the UMEM status line `[UMEM: Remembered "..."]` or `[UMEM: No new facts/skills to record]` to your final output.',
                     "",
                 ]
             )

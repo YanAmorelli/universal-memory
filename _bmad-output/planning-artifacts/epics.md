@@ -34,7 +34,7 @@ FR6: O sistema deve executar rotinas de Context Hygiene para arquivar ou remover
 
 FR7: During initial setup, the system must allow the user to select one or more supported runtimes/agents from a registry, including at least Claude Code, OpenCode and Codex/OpenAI-class AGENTS.md hosts, with Cursor and Antigravity represented according to their support tier.
 
-FR8: The system must configure the selected runtimes by writing or updating their supported instruction targets and native skill targets, such as `AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/`, `.cursor/`, `.opencode/` or equivalent runtime-specific paths, with snapshot and audit protection before every mutation, supporting custom maximum overrides (`max_managed_lines` and `max_managed_chars`) to control context buffer sizes.
+FR8: The system must configure the selected runtimes by writing or updating their supported instruction targets and native skill targets, such as `AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/`, `.cursor/`, `.opencode/` or equivalent runtime-specific paths, with snapshot and audit protection before every mutation.
 
 FR9: O usuário deve poder inicializar o `universal-memory` em um novo projeto ou diretório via comando CLI, como `umem init`.
 
@@ -48,7 +48,7 @@ FR13: O sistema deve permitir que agentes externos, como Claude Desktop, leiam o
 
 FR14: O sistema deve permitir que agentes externos gravem novos fatos e proponham regras na memória via comandos MCP.
 
-FR15: O sistema deve atualizar dinamicamente as instruções contidas nos arquivos dos agentes, como `AGENTS.md` e `CLAUDE.md`, conforme novas regras e fatos são consolidados na memória, garantindo a preservação de blocos e diretrizes inseridas manualmente pelo usuário fora dos delimitadores de início/fim do UMEM.
+FR15: O sistema deve atualizar dinamicamente as instruções contidas nos arquivos dos agentes, como `AGENTS.md` e `CLAUDE.md`, conforme novas regras e fatos são consolidados na memória.
 
 FR16: O sistema deve disponibilizar o resumo da Memória de Curto Prazo no contexto inicial dos agentes e expor, via status ou auditoria, evidência de última leitura, origem do resumo e falhas de injeção quando ocorrerem.
 
@@ -82,7 +82,7 @@ FR30: The CLI onboarding experience should include a compact terminal brand elem
 
 FR31: The system must allow the user to trigger updates and synchronize local canonical skills from `.umem/skills/` or local package templates to all active native runtime target paths.
 
-FR32: During synchronization, if a native target file has been modified manually and diverges from the canonical source, the system must interactively prompt the user with choices (Keep Local Target / Overwrite with Canonical) and display a warning that overwriting could break the custom agent workflow. Additionally, the system must detect duplications and logical contradiction conflicts (e.g., 'always' vs 'never') between agent instruction files.
+FR32: During synchronization, if a native target file has been modified manually and diverges from the canonical source, the system must interactively prompt the user with choices (Keep Local Target / Overwrite with Canonical) and display a warning that overwriting could break the custom agent workflow.
 
 FR33: The CLI must support checking for new library versions, migrating local configuration schema safely, and updating local benchmark datasets without losing user history or custom rules.
 

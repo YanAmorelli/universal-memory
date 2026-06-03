@@ -88,9 +88,7 @@ class NativeSkillSync:
                 if has_drift and drift_decision != "overwrite":
                     warnings.append(DRIFT_WARNING)
                     previous_installation = cast(dict[str, Any], previous)
-                    installations.append(
-                        {**previous_installation, "drift_detected": True}
-                    )
+                    installations.append({**previous_installation, "drift_detected": True})
                     continue
 
                 write_results = []

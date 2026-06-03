@@ -975,7 +975,7 @@ class RuntimeAdapter(ABC):
 
 ### 4. Interactive Update & Synchronization Conflict Guardrails
 
-O fluxo de sincronização (`umem update --skills` ou o onboarding interativo) protege alterações manuais feitas pelo usuário nos runtimes nativos através do seguinte algoritmo transacional:
+O fluxo de sincronização (`umem update --skills` or o onboarding interativo) protege alterações manuais feitas pelo usuário nos runtimes nativos através do seguinte algoritmo transacional:
 
 ```mermaid
 sequenceDiagram
@@ -1005,22 +1005,6 @@ sequenceDiagram
 O prompt de conflito interativo deve ser renderizado em inglês por padrão:
 `Warning: Native Cursor target sdd-rules.md has manual changes. Overwriting it might break your current agent workflow. Keep local Cursor version or Overwrite with canonical library version? [Keep/Overwrite]`
 
-#### 4.1. Instruction Drift & Contradiction Detector (`InstructionDriftDetector`)
-
-Para mitigar o risco de conflitos cognitivos entre os agentes, o sistema implementa um detector de drift passivo (`InstructionDriftDetector`) que compara o manifesto compartilhado (`AGENTS.md`) com as instruções locais do agente (`CLAUDE.md`).
-
-O detector analisa:
-1.  **Duplicações Simples:** Identifica linhas normalizadas idênticas em ambos os arquivos, gerando avisos de redundância (ex: `"Instrucao duplicada em AGENTS.md e CLAUDE.md: X"`).
-2.  **Contradições de Polaridade:** Analisa regras que começam com termos direcionais (`always`/`never` em inglês, `sempre`/`nunca` em português) e compara o corpo da regra. Se uma mesma regra possuir polaridades opostas (ex: `always use tomllib` no AGENTS.md e `never use tomllib` no CLAUDE.md), um alerta de contradição explícita é emitido para impedir loops de comportamento.
-
-#### 4.2. Preservação de Seções Manuais (`_merge_managed_block`)
-
-Para permitir a coexistência de instruções inseridas automaticamente pela memória universal com anotações e diretrizes inseridas manualmente pelo desenvolvedor, o sistema adota uma estratégia de mesclagem não-destrutiva:
-
-1.  **Delimitadores Estáveis:** O bloco de regras gerenciado pelo `umem` é envelopado pelas tags HTML `<!-- UMEM: START -->` e `<!-- UMEM: END -->`.
-2.  **Algoritmo de Merge:** Ao reescrever ou atualizar o arquivo de instruções de um host (como `AGENTS.md` ou `CLAUDE.md`), o use case de configuração lê o conteúdo existente, extrai o texto manual que precede o delimitador inicial e o que sucede o delimitador final, e reconstrói o arquivo final mesclando as seções manuais com o novo bloco atualizado da memória. Dessa forma, as seções personalizadas do usuário permanecem intocadas.
-
-
 ### 5. Multi-Runtime Onboarding & Terminal Visual Identity
 
 *   **ASCII/ANSI Terminal Branding Splash:** A interface do CLI interativa (`umem init`) exibe uma marca estilizada minimalista simulando a conexão de um pendrive no terminal.
@@ -1034,21 +1018,7 @@ Para permitir a coexistência de instruções inseridas automaticamente pela mem
     6.  Retorna o resultado de sucesso e um log das ações aplicadas.
 *   **Non-Interactive Automation:** O comando suporta flags explícitas de runtimes para execução em CI ou scripts de agentes (ex: `umem init --project . --runtime claude-code --runtime opencode --format json`). O `--format json` desabilita todo e qualquer estilo ANSI, banners ou splash, gerando um JSON puro compatível com parse automatizado.
 
-#### 5.1. Custom Instruction Limits & Token Overrides (BUG-013)
-
-Para evitar o estouro de limite de contexto do modelo (context buffer bloat) e garantir a conformidade com as restrições de tokens, o sistema introduz limites configuráveis sobre o tamanho do bloco gerenciado injetado em arquivos de instruções (`AGENTS.md` e `CLAUDE.md`).
-
-*   **Configuração:** O arquivo de configuração local `.umem/config.toml` suporta chaves específicas de limites dentro da tabela `runtimes` (ou da tabela `hosts` como fallback):
-    ```toml
-    [runtimes]
-    max_managed_lines = 100
-    max_managed_chars = 4000
-    ```
-*   **Parâmetros de CLI:** Comandos de sincronização e configuração (`umem host setup`, `umem host check` e `umem host sync`) aceitam argumentos explícitos `--max-lines` e `--max-chars` para forçar limites ad-hoc no terminal.
-*   **Algoritmo de Resolução:** Durante a escrita, o use case de configuração resolve o limite final comparando o valor passado no CLI com o definido no `config.toml` (o CLI possui precedência). Se o bloco exceder as restrições, o sistema aciona rotinas de sumarização ou interrompe a injeção lançando exceções apropriadas para proteção do buffer.
-
 ### 6. Updated Implementation Readiness Status
-
 
 *   **Readiness Status:** `READY FOR IMPLEMENTATION` (todas as decisões, incluindo o novo patch e a revalidação de 31/05/2026, mitigam todos os gaps técnicos detectados na Sprint Change Proposal).
 *   **Confidence Level:** `HIGH`.

@@ -50,6 +50,8 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    TrackLatentSkillCommand,
+    TrackLatentSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
@@ -59,6 +61,7 @@ from universal_memory.domain.entities import (
     ContextSummaryScope,
     FactScope,
     FactStatus,
+    LatentSkillScope,
     SnapshotScope,
     SnapshotStatus,
 )
@@ -93,6 +96,7 @@ RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
+TrackLatentSkillCommandHandler = Callable[[TrackLatentSkillCommand], TrackLatentSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
 GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
@@ -122,6 +126,7 @@ class MCPUseCases:
     host_check: ConfigureHostCommandHandler = _missing_use_case
     sync_instructions: SyncInstructionsCommandHandler = _missing_use_case
     propose_skill: ProposeSkillCommandHandler = _missing_use_case
+    track_latent_skill: TrackLatentSkillCommandHandler = _missing_use_case
     generate_skill: GenerateSkillCommandHandler = _missing_use_case
     list_skills: ListSkillsCommandHandler = _missing_use_case
     get_skill_detail: GetSkillDetailCommandHandler = _missing_use_case
@@ -442,8 +447,7 @@ def configure_server(  # noqa: PLR0915
     @server.tool(name="propose_skill")
     def propose_skill(
         latent_skill_id: str,
-        decision: Literal["yes", "y", "always", "no", "n"]
-        | None = None,
+        decision: Literal["yes", "y", "always", "no", "n"] | None = None,
     ) -> ToolResponse:
         """Review or decide a latent skill proposal.
 
@@ -466,6 +470,53 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="skills.propose", scope="project")
+
+    @server.tool(name="track_latent_skill")
+    def track_latent_skill(
+        name: str,
+        description: str,
+        scope: Literal["project", "global"] = "project",
+        evidence_summary: str = "Manual user invocation via MCP.",
+        tags: list[str] | None = None,
+    ) -> ToolResponse:
+        """Explicitly track or increment recurrence for a latent skill opportunity."""
+        try:
+            latent_scope = _latent_skill_scope(scope)
+            if latent_scope is LatentSkillScope.project:
+                require_project_initialized()
+            result = use_cases.track_latent_skill(
+                TrackLatentSkillCommand(
+                    name=name,
+                    description=description,
+                    scope=latent_scope,
+                    origin="mcp",
+                    evidence_summary=evidence_summary,
+                    tags=tags or [],
+                )
+            )
+            skill = result.latent_skill
+            return _success_envelope(
+                operation="skills.track",
+                scope=skill.scope.value,
+                data={
+                    "latent_skill": {
+                        "id": skill.id,
+                        "name": skill.name,
+                        "description": skill.description,
+                        "scope": skill.scope.value,
+                        "status": skill.status.value,
+                        "recurrence_count": skill.recurrence_count,
+                        "metadata": skill.metadata,
+                        "created_at": format_utc_iso(skill.created_at),
+                        "updated_at": format_utc_iso(skill.updated_at),
+                    },
+                    "matched_existing": result.matched_existing,
+                    "audit_reference": result.audit_reference,
+                    "snapshot_reference": result.snapshot_reference,
+                },
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.track", scope=_raw_scope(scope))
 
     @server.tool(name="generate_skill")
     def generate_skill(
@@ -787,6 +838,15 @@ def _fact_scope(value: Literal["project", "global"]) -> FactScope:
         return FactScope.global_
     if normalized == "project":
         return FactScope.project
+    raise ValidationFailedError("scope must be 'project' or 'global'.")
+
+
+def _latent_skill_scope(value: Literal["project", "global"]) -> LatentSkillScope:
+    normalized = str(value).lower()
+    if normalized == "global":
+        return LatentSkillScope.global_
+    if normalized == "project":
+        return LatentSkillScope.project
     raise ValidationFailedError("scope must be 'project' or 'global'.")
 
 

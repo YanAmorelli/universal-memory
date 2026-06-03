@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime

@@ -436,6 +436,5 @@ def test_update_benchmarks_runs_offline_and_uses_safe_write(tmp_path: Path) -> N
     assert result.p95_latency_ms >= 0
     assert result.audit_reference
     assert (
-        json.loads(existing.read_text(encoding="utf-8"))["fact_count"]
-        >= MIN_BENCHMARK_FACT_COUNT
+        json.loads(existing.read_text(encoding="utf-8"))["fact_count"] >= MIN_BENCHMARK_FACT_COUNT
     )

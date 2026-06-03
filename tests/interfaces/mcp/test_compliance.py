@@ -36,6 +36,8 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillResult,
     SkillListItem,
+    TrackLatentSkillCommand,
+    TrackLatentSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
@@ -84,6 +86,10 @@ PUBLIC_MCP_TOOLS = {
         "name": "TDD recorrente",
         "description": "Usuario pede ciclo red green refactor",
         "triggers": ["red green refactor"],
+    },
+    "track_latent_skill": {
+        "name": "TDD recorrente",
+        "description": "Usuario pede ciclo red green refactor",
     },
 }
 CONTRACT_KEYS_BY_TOOL = {
@@ -202,6 +208,12 @@ CONTRACT_KEYS_BY_TOOL = {
     "update_skill": {
         "latent_skill",
         "skill_file",
+        "audit_reference",
+        "snapshot_reference",
+    },
+    "track_latent_skill": {
+        "latent_skill",
+        "matched_existing",
         "audit_reference",
         "snapshot_reference",
     },
@@ -333,6 +345,12 @@ CONTRACT_TYPES_BY_TOOL = {
     "update_skill": {
         "latent_skill": dict,
         "skill_file": str,
+        "audit_reference": str,
+        "snapshot_reference": str,
+    },
+    "track_latent_skill": {
+        "latent_skill": dict,
+        "matched_existing": bool,
         "audit_reference": str,
         "snapshot_reference": str,
     },
@@ -487,6 +505,7 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         activate_skill=activate_skill_result,
         deactivate_skill=deactivate_skill_result,
         update_skill=update_skill_result,
+        track_latent_skill=track_latent_skill_result,
     )
 
 
@@ -534,6 +553,30 @@ def update_skill_result(command: UpdateSkillCommand) -> UpdateSkillResult:
     return UpdateSkillResult(
         latent_skill=mutation_skill(command),
         skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def track_latent_skill_result(command: TrackLatentSkillCommand) -> TrackLatentSkillResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id=FACT_ID,
+        created_at=now,
+        updated_at=now,
+        name=command.name,
+        description=command.description,
+        scope=command.scope,
+        status=LatentSkillStatus.proposed,
+        recurrence_count=1,
+        metadata={
+            "tags": command.tags,
+            "evidence": [{"origin": "mcp", "summary": command.evidence_summary}],
+        },
+    )
+    return TrackLatentSkillResult(
+        latent_skill=skill,
+        matched_existing=False,
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
     )

@@ -1,9 +1,11 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
-from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase, SyncInstructionsCommand
+from universal_memory.application.host import (
+    ConfigureHostUseCase,
+    SyncInstructionsUseCase,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     ContextHygieneUseCase,
@@ -25,6 +27,7 @@ from universal_memory.application.skills import (
     GetSkillDetailUseCase,
     ListSkillsUseCase,
     ProposeSkillUseCase,
+    TrackLatentSkillUseCase,
     UpdateSkillUseCase,
 )
 from universal_memory.application.update import (
@@ -184,6 +187,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         repository=latent_skill_repository,
         safe_write_use_case=safe_write_use_case,
     )
+    track_latent_skill_use_case = TrackLatentSkillUseCase(
+        repository=latent_skill_repository,
+    )
     generate_skill_use_case = GenerateSkillUseCase(
         project_root=project_root,
         repository=latent_skill_repository,
@@ -265,6 +271,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         host_check_command=host_use_case.execute,
         host_sync_command=host_sync_use_case.execute,
         propose_skill_command=propose_skill_use_case.execute,
+        track_latent_skill_command=track_latent_skill_use_case.execute,
         generate_skill_command=generate_skill_use_case.execute,
         list_skills_command=list_skills_use_case.execute,
         get_skill_detail_command=get_skill_detail_use_case.execute,

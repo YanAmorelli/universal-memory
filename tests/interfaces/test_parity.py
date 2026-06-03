@@ -33,6 +33,8 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    TrackLatentSkillCommand,
+    TrackLatentSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
@@ -81,6 +83,7 @@ PARITY_MATRIX = {
     "rollback": "rollback_scope",
     "host.setup_check": "check_host",
     "skills.propose": "propose_skill",
+    "skills.track": "track_latent_skill",
     "skills.list": "list_skills",
     "skills.activate": "activate_skill",
     "skills.deactivate": "deactivate_skill",
@@ -276,6 +279,29 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
                 "triggers": ["red green refactor"],
             },
         ),
+        (
+            [
+                "skills",
+                "track",
+                "--name",
+                "TDD recorrente",
+                "--description",
+                "Usuario pede ciclo red green refactor",
+                "--scope",
+                "project",
+                "--tag",
+                "red green refactor",
+                "--format",
+                "json",
+            ],
+            "track_latent_skill",
+            {
+                "name": "TDD recorrente",
+                "description": "Usuario pede ciclo red green refactor",
+                "scope": "project",
+                "tags": ["red green refactor"],
+            },
+        ),
     ],
 )
 async def test_cli_and_mcp_json_data_keys_match_for_public_capabilities(  # noqa: PLR0913
@@ -341,6 +367,7 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
         ),
         "rollback_preview_command": lambda _scope: object(),
         "propose_skill_command": propose_skill_result,
+        "track_latent_skill_command": track_latent_skill_result,
         "activate_skill_command": activate_skill_result,
         "deactivate_skill_command": deactivate_skill_result,
         "update_skill_command": update_skill_result,
@@ -369,9 +396,31 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
             audit_reference="audit-1",
         ),
         propose_skill=propose_skill_result,
+        track_latent_skill=track_latent_skill_result,
         activate_skill=activate_skill_result,
         deactivate_skill=deactivate_skill_result,
         update_skill=update_skill_result,
+    )
+
+
+def track_latent_skill_result(command: TrackLatentSkillCommand) -> TrackLatentSkillResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    skill = LatentSkill(
+        id="11111111-1111-4111-8111-111111111111",
+        created_at=now,
+        updated_at=now,
+        name=command.name,
+        description=command.description,
+        scope=command.scope,
+        status=LatentSkillStatus.proposed,
+        recurrence_count=1,
+        metadata={"tags": command.tags},
+    )
+    return TrackLatentSkillResult(
+        latent_skill=skill,
+        matched_existing=False,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
     )
 
 

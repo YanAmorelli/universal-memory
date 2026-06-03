@@ -3,10 +3,10 @@ import socket
 import subprocess
 import sys
 import tomllib
-import click
 from datetime import UTC, datetime
 from pathlib import Path
 
+import click
 import pytest
 
 from universal_memory.__main__ import main

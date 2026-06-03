@@ -692,9 +692,7 @@ async def test_update_skill_tool_defaults_to_keep_and_preserves_warnings(
     ]
     assert result.structured_content is not None
     assert result.structured_content["operation"] == "skills.update"
-    assert result.structured_content["warnings"] == [
-        "Warning: Native target has manual changes."
-    ]
+    assert result.structured_content["warnings"] == ["Warning: Native target has manual changes."]
 
 
 @pytest.mark.anyio

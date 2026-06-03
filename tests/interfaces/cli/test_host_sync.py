@@ -6,6 +6,9 @@ import pytest
 from universal_memory.application.host import SyncInstructionsCommand, SyncInstructionsResult
 from universal_memory.interfaces.cli import main as cli_main
 
+EXPECTED_MAX_MANAGED_LINES = 250
+EXPECTED_MAX_MANAGED_CHARS = 8000
+
 
 def test_host_sync_json_outputs_preview_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -114,9 +117,7 @@ def test_host_sync_human_dry_run_displays_plan_and_dry_run_concluido(
     assert "Instruction synchronization plan" in captured.out
     assert "Scope" in captured.out
     assert "project" in captured.out
-    assert (
-        "Dry-run completed. No changes were applied to the filesystem." in captured.out
-    )
+    assert "Dry-run completed. No changes were applied to the filesystem." in captured.out
 
 
 def test_host_sync_human_apply_interactive_confirmation_no(
@@ -183,13 +184,21 @@ def test_host_sync_cli_passes_max_lines_and_max_chars(
     monkeypatch.chdir(tmp_path)
 
     exit_code = cli_main(
-        ["host", "sync", "--host", "codex", "--max-lines", "250", "--max-chars", "8000"],
+        [
+            "host",
+            "sync",
+            "--host",
+            "codex",
+            "--max-lines",
+            str(EXPECTED_MAX_MANAGED_LINES),
+            "--max-chars",
+            str(EXPECTED_MAX_MANAGED_CHARS),
+        ],
         setup_project_command=lambda _project_root: None,  # type: ignore[arg-type,return-value]
         host_sync_command=host_sync,
     )
 
     assert exit_code == 0
     assert len(calls) == 1
-    assert calls[0].max_managed_lines == 250
-    assert calls[0].max_managed_chars == 8000
-
+    assert calls[0].max_managed_lines == EXPECTED_MAX_MANAGED_LINES
+    assert calls[0].max_managed_chars == EXPECTED_MAX_MANAGED_CHARS

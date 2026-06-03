@@ -4,7 +4,10 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
-from universal_memory.application.host import ConfigureHostUseCase, SyncInstructionsUseCase, SyncInstructionsCommand
+from universal_memory.application.host import (
+    ConfigureHostUseCase,
+    SyncInstructionsUseCase,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     GetMemoryStatusUseCase,
@@ -26,6 +29,7 @@ from universal_memory.application.skills import (
     GetSkillDetailUseCase,
     ListSkillsUseCase,
     ProposeSkillUseCase,
+    TrackLatentSkillUseCase,
     UpdateSkillUseCase,
 )
 from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
@@ -129,6 +133,9 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         repository=latent_skill_repository,
         safe_write_use_case=safe_write_use_case,
     )
+    track_latent_skill_use_case = TrackLatentSkillUseCase(
+        repository=latent_skill_repository,
+    )
     generate_skill_use_case = GenerateSkillUseCase(
         project_root=root,
         repository=latent_skill_repository,
@@ -186,6 +193,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             host_check=host_use_case.execute,
             sync_instructions=host_sync_use_case.execute,
             propose_skill=propose_skill_use_case.execute,
+            track_latent_skill=track_latent_skill_use_case.execute,
             generate_skill=generate_skill_use_case.execute,
             list_skills=list_skills_use_case.execute,
             get_skill_detail=get_skill_detail_use_case.execute,

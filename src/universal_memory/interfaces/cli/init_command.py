@@ -63,6 +63,8 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    TrackLatentSkillCommand,
+    TrackLatentSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
@@ -152,6 +154,7 @@ ContextHygieneCommandHandler = Callable[[ContextHygieneCommand], ContextHygieneR
 ConfigureHostCommandHandler = Callable[[ConfigureHostCommand], ConfigureHostResult]
 SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstructionsResult]
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
+TrackLatentSkillCommandHandler = Callable[[TrackLatentSkillCommand], TrackLatentSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
 GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
@@ -205,6 +208,7 @@ def main(  # noqa: PLR0913
     host_check_command: ConfigureHostCommandHandler | None = None,
     host_sync_command: SyncInstructionsCommandHandler | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
@@ -232,6 +236,7 @@ def main(  # noqa: PLR0913
         host_check_command=host_check_command,
         host_sync_command=host_sync_command,
         propose_skill_command=propose_skill_command,
+        track_latent_skill_command=track_latent_skill_command,
         generate_skill_command=generate_skill_command,
         list_skills_command=list_skills_command,
         get_skill_detail_command=get_skill_detail_command,
@@ -255,14 +260,19 @@ def main(  # noqa: PLR0913
     except click.exceptions.Abort:
         fmt = _determine_output_format(argv)
         if fmt == "json":
-            print(json.dumps({
-                "ok": False,
-                "error": {
-                    "code": "aborted",
-                    "detail": "Command execution was aborted by user or system signal."
-                },
-                "warnings": []
-            }, sort_keys=True))
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "aborted",
+                            "detail": "Command execution was aborted by user or system signal.",
+                        },
+                        "warnings": [],
+                    },
+                    sort_keys=True,
+                )
+            )
         else:
             sys.stderr.write("Aborted.\n")
         return 1
@@ -294,6 +304,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     host_check_command: ConfigureHostCommandHandler | None = None,
     host_sync_command: SyncInstructionsCommandHandler | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
@@ -645,9 +656,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         ctx: typer.Context,
         host_id: Annotated[str, typer.Argument(help="Host to configure.")],
         yes: YesOption = False,
-        max_lines: Annotated[
-            int, typer.Option("--max-lines", help="Maximum line count.")
-        ] = 100,
+        max_lines: Annotated[int, typer.Option("--max-lines", help="Maximum line count.")] = 100,
         max_chars: Annotated[
             int, typer.Option("--max-chars", help="Maximum character count.")
         ] = 4000,
@@ -671,9 +680,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     def host_check(
         ctx: typer.Context,
         host_id: Annotated[str, typer.Argument(help="Host to validate.")],
-        max_lines: Annotated[
-            int, typer.Option("--max-lines", help="Maximum line count.")
-        ] = 100,
+        max_lines: Annotated[int, typer.Option("--max-lines", help="Maximum line count.")] = 100,
         max_chars: Annotated[
             int, typer.Option("--max-chars", help="Maximum character count.")
         ] = 4000,
@@ -693,7 +700,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         )
 
     @host_app.command("sync")
-    def host_sync(
+    def host_sync(  # noqa: PLR0913
         ctx: typer.Context,
         apply: Annotated[
             bool,
@@ -707,9 +714,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             list[str] | None,
             typer.Option("--host", help="Host to synchronize. May be used multiple times."),
         ] = None,
-        max_lines: Annotated[
-            int, typer.Option("--max-lines", help="Maximum line count.")
-        ] = 100,
+        max_lines: Annotated[int, typer.Option("--max-lines", help="Maximum line count.")] = 100,
         max_chars: Annotated[
             int, typer.Option("--max-chars", help="Maximum character count.")
         ] = 4000,
@@ -793,6 +798,47 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 get_skill_detail_command,
                 output_format=_effective_format(ctx, output_format),
                 name_or_id=name_or_id,
+            )
+        )
+
+    @skills_app.command("track")
+    def skills_track(  # noqa: PLR0913
+        ctx: typer.Context,
+        name: Annotated[str, typer.Option("--name", help="Skill name.")],
+        description: Annotated[str, typer.Option("--description", help="Skill description.")],
+        scope: Annotated[
+            LatentSkillScope,
+            typer.Option("--scope", help="Skill scope (project or global)."),
+        ] = LatentSkillScope.project,
+        evidence_summary: Annotated[
+            str,
+            typer.Option(
+                "--evidence-summary",
+                "--evidence",
+                help="Summary of the evidence that triggered this skill tracking.",
+            ),
+        ] = "Manual user invocation via CLI.",
+        tag: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--tag",
+                help="Tag/trigger for the skill. May be used multiple times.",
+            ),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if track_latent_skill_command is None:
+            msg = "CLI track_latent_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_track(
+                track_latent_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                name=name,
+                description=description,
+                scope=scope,
+                evidence_summary=evidence_summary,
+                tags=tag or [],
             )
         )
 
@@ -913,6 +959,7 @@ def build_main(  # noqa: PLR0913
     host_check_command: ConfigureHostCommandHandler,
     host_sync_command: SyncInstructionsCommandHandler,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
+    track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
@@ -947,6 +994,7 @@ def build_main(  # noqa: PLR0913
             host_check_command=host_check_command,
             host_sync_command=host_sync_command,
             propose_skill_command=propose_skill_command,
+            track_latent_skill_command=track_latent_skill_command,
             generate_skill_command=generate_skill_command,
             list_skills_command=list_skills_command,
             get_skill_detail_command=get_skill_detail_command,
@@ -1037,9 +1085,7 @@ def _should_render_init_splash(output_format: str) -> bool:
 def _render_init_splash() -> None:
     if _terminal_color_enabled():
         banner = (
-            f"\x1b[36m{INIT_SPLASH_LINES[0]}\x1b[0m\n"
-            f"{INIT_SPLASH_ANSI}\n"
-            f"{INIT_SPLASH_LINES[2]}\n"
+            f"\x1b[36m{INIT_SPLASH_LINES[0]}\x1b[0m\n{INIT_SPLASH_ANSI}\n{INIT_SPLASH_LINES[2]}\n"
         )
     else:
         banner = "\n".join(INIT_SPLASH_LINES) + "\n"
@@ -1097,9 +1143,7 @@ def _run_init(  # noqa: PLR0913
             host_check_command=host_check_command,
         )
     except (KeyboardInterrupt, EOFError):
-        _stdout_console().print(
-            "\n" + human_message("Operation cancelled by user.", locale=locale)
-        )
+        _stdout_console().print("\n" + human_message("Operation cancelled by user.", locale=locale))
         return 1
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format, locale=locale)
@@ -1169,9 +1213,7 @@ def _selected_init_runtimes(
         human_message("Which runtime(s) would you like to install for?", locale=locale)
     )
     for index, runtime in enumerate(registry.runtimes, start=1):
-        _stdout_console().print(
-            f"{index}. {runtime.display_name} ({runtime.support_tier.value})"
-        )
+        _stdout_console().print(f"{index}. {runtime.display_name} ({runtime.support_tier.value})")
     answer = _prompt(
         human_message(
             "Which runtime(s) would you like to install for? [1 2 3 4 5]: ",
@@ -1190,9 +1232,7 @@ def _normalize_supported_runtimes(runtimes: list[str]) -> list[str]:
     supported = {runtime_id.value for runtime_id in default_runtime_registry().runtime_ids}
     unsupported = [runtime_id for runtime_id in normalized if runtime_id not in supported]
     if unsupported:
-        raise ValidationFailedError(
-            f"Unsupported runtimes: {', '.join(unsupported)}"
-        )
+        raise ValidationFailedError(f"Unsupported runtimes: {', '.join(unsupported)}")
     return normalized
 
 
@@ -1203,10 +1243,7 @@ def _parse_runtime_index_selection(
     if not raw_selection.strip():
         return [runtime.runtime_id.value for runtime in runtimes]
     tokens = [
-        token
-        for comma_part in raw_selection.split(",")
-        for token in comma_part.split()
-        if token
+        token for comma_part in raw_selection.split(",") for token in comma_part.split() if token
     ]
     selected: list[str] = []
     invalid: list[str] = []
@@ -1707,7 +1744,7 @@ def _run_host_check(
     return 0
 
 
-def _run_host_sync(
+def _run_host_sync(  # noqa: PLR0913
     command: SyncInstructionsCommandHandler,
     *,
     output_format: str,
@@ -2068,6 +2105,87 @@ def _prompt_generate_collision(
     return choice == "u", 0
 
 
+def _run_skills_track(  # noqa: PLR0913
+    command: TrackLatentSkillCommandHandler,
+    *,
+    output_format: str,
+    name: str,
+    description: str,
+    scope: LatentSkillScope,
+    evidence_summary: str,
+    tags: list[str],
+) -> int:
+    try:
+        result = command(
+            TrackLatentSkillCommand(
+                name=name,
+                description=description,
+                scope=scope,
+                origin="cli",
+                evidence_summary=evidence_summary,
+                tags=tags,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, name), output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_track_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_track(result))
+    return 0
+
+
+def _skill_track_success_envelope(result: TrackLatentSkillResult) -> dict[str, Any]:
+    skill = result.latent_skill
+    return {
+        "ok": True,
+        "operation": "skills.track",
+        "scope": skill.scope.value,
+        "data": {
+            "latent_skill": {
+                "id": skill.id,
+                "name": skill.name,
+                "description": skill.description,
+                "scope": skill.scope.value,
+                "status": skill.status.value,
+                "recurrence_count": skill.recurrence_count,
+                "metadata": skill.metadata,
+                "created_at": format_utc_iso(skill.created_at),
+                "updated_at": format_utc_iso(skill.updated_at),
+            },
+            "matched_existing": result.matched_existing,
+            "audit_reference": result.audit_reference,
+            "snapshot_reference": result.snapshot_reference,
+        },
+        "warnings": [],
+    }
+
+
+def _format_human_skill_track(result: TrackLatentSkillResult) -> str:
+    skill = result.latent_skill
+    affected_paths = [_latent_skill_store_path(skill.scope)]
+    lines = [
+        "Operation: skills.track",
+        f"Scope: {skill.scope.value}",
+        f"Latent skill: {skill.id}",
+        f"Name: {skill.name}",
+        f"Status: {skill.status.value}",
+        f"Recurrence count: {skill.recurrence_count}",
+        f"Matched existing: {'Yes' if result.matched_existing else 'No'}",
+        "Affected relative paths:",
+    ]
+    lines.extend(f"  - {path}" for path in affected_paths)
+    lines.extend(
+        [
+            f"Snapshot: {result.snapshot_reference}",
+            f"Audit: {result.audit_reference}",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _run_skills_generate(
     command: GenerateSkillCommandHandler,
     *,
@@ -2143,8 +2261,7 @@ def _run_skills_generate(
 
 def _has_native_drift_warning(result: GenerateSkillResult | UpdateSkillResult) -> bool:
     return any(
-        "Warning: Native target has manual changes." in warning
-        for warning in result.warnings
+        "Warning: Native target has manual changes." in warning for warning in result.warnings
     )
 
 
@@ -2857,8 +2974,7 @@ def _format_human_context_output(result: AssembleContextSummaryResult) -> str:
         f"Project summary: {summary.project_summary or '(empty)'}",
         f"Universal preferences: {summary.universal_preferences or '(empty)'}",
         f"Active rules: {summary.active_rules or '(empty)'}",
-        "Sources: "
-        f"{', '.join(result.included_fact_ids) if result.included_fact_ids else '(none)'}",
+        f"Sources: {', '.join(result.included_fact_ids) if result.included_fact_ids else '(none)'}",
     ]
     return "\n".join(lines)
 

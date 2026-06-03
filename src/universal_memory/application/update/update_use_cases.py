@@ -497,10 +497,14 @@ class UpdateMigrateUseCase:
                 migrated_records.append(migrated)
             if changed:
                 force_list = filename.endswith(".json") and self._json_memory_file_is_list(path)
-                planned.append((
-                    f".umem/memory/{filename}",
-                    self._render_memory_records(filename, migrated_records, force_list=force_list),
-                ))
+                planned.append(
+                    (
+                        f".umem/memory/{filename}",
+                        self._render_memory_records(
+                            filename, migrated_records, force_list=force_list
+                        ),
+                    )
+                )
         return planned
 
     def _json_memory_file_is_list(self, path: Path) -> bool:
