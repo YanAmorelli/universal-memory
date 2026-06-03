@@ -1,14 +1,14 @@
 # Universal Memory (umem)
 
 [![PyPI version](https://img.shields.io/pypi/v/universal-memory.svg)](https://pypi.org/project/universal-memory/)
-[![Python Version](https://img.shields.io/pypi/pyversions/universal-memory.svg)](https://img.shields.io/project/universal-memory/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/pypi/pyversions/universal-memory.svg)](https://pypi.org/project/universal-memory/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/YanAmorelli/universal-memory/blob/dev/LICENSE)
 
 A vendor-agnostic cognitive persistence layer for AI agents. Eliminate the "repetition tax" by transporting your context, preferences, guidelines, and history seamlessly across sessions, IDEs, and LLM models.
 
 To see the core idea visually, check out the [Excalidraw design](https://excalidraw.com/#json=j3XjQIWMYEnkIzHpypuBb,rNJaVOECDGZ3WSuEYcCDjQ) or the proposal structure:
 
-![Universal Memory MVP Proposal](docs/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
+![Universal Memory MVP Proposal](https://raw.githubusercontent.com/YanAmorelli/universal-memory/main/docs/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
 
 ### Diagram Breakdown (English Translation)
 
