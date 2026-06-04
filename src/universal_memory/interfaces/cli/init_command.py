@@ -17,6 +17,10 @@ from rich.table import Table
 from rich.text import Text
 
 from universal_memory import __version__
+from universal_memory.application.diagnostics import (
+    DoctorCommand,
+    DoctorResult,
+)
 from universal_memory.application.host import (
     ConfigureHostCommand,
     ConfigureHostResult,
@@ -147,6 +151,7 @@ ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResu
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 RollbackPreviewHandler = Callable[[SnapshotScope], Snapshot]
 StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
+DoctorCommandHandler = Callable[[DoctorCommand], DoctorResult]
 ContextCommandHandler = Callable[[AssembleContextSummaryCommand], AssembleContextSummaryResult]
 RememberFactCommandHandler = Callable[[RememberFactCommand], RememberFactResult]
 ListFactsCommandHandler = Callable[[ListFactsCommand], ListFactsResult]
@@ -200,6 +205,7 @@ def main(  # noqa: PLR0913
     rollback_command: RollbackCommandHandler | None = None,
     rollback_preview_command: RollbackPreviewHandler | None = None,
     status_command: StatusCommandHandler | None = None,
+    doctor_command: DoctorCommandHandler | None = None,
     context_command: ContextCommandHandler | None = None,
     remember_command: RememberFactCommandHandler | None = None,
     facts_list_command: ListFactsCommandHandler | None = None,
@@ -228,6 +234,7 @@ def main(  # noqa: PLR0913
         rollback_command=rollback_command,
         rollback_preview_command=rollback_preview_command,
         status_command=status_command,
+        doctor_command=doctor_command,
         context_command=context_command,
         remember_command=remember_command,
         facts_list_command=facts_list_command,
@@ -302,6 +309,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     rollback_command: RollbackCommandHandler | None = None,
     rollback_preview_command: RollbackPreviewHandler | None = None,
     status_command: StatusCommandHandler | None = None,
+    doctor_command: DoctorCommandHandler | None = None,
     context_command: ContextCommandHandler | None = None,
     remember_command: RememberFactCommandHandler | None = None,
     facts_list_command: ListFactsCommandHandler | None = None,
@@ -399,6 +407,15 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             raise RuntimeError(msg)
         raise typer.Exit(
             code=_run_status(status_command, output_format=_effective_format(ctx, output_format))
+        )
+
+    @app.command("doctor")
+    def doctor(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
+        if doctor_command is None:
+            msg = "CLI doctor_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_doctor(doctor_command, output_format=_effective_format(ctx, output_format))
         )
 
     @app.command("update")
@@ -967,6 +984,7 @@ def build_main(  # noqa: PLR0913
     rollback_command: RollbackCommandHandler,
     rollback_preview_command: RollbackPreviewHandler,
     status_command: StatusCommandHandler,
+    doctor_command: DoctorCommandHandler,
     context_command: ContextCommandHandler,
     remember_command: RememberFactCommandHandler,
     facts_list_command: ListFactsCommandHandler,
@@ -1002,6 +1020,7 @@ def build_main(  # noqa: PLR0913
             rollback_command=rollback_command,
             rollback_preview_command=rollback_preview_command,
             status_command=status_command,
+            doctor_command=doctor_command,
             context_command=context_command,
             remember_command=remember_command,
             facts_list_command=facts_list_command,
@@ -1386,6 +1405,30 @@ def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
         _stdout_console().print(_format_human_status_output(result))
 
     return 0
+
+
+def _run_doctor(command: DoctorCommandHandler, *, output_format: str) -> int:
+    try:
+        result = command(DoctorCommand(project_root=Path.cwd()))
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+    except ValidationError as error:
+        _print_expected_error(ValidationFailedError(str(error)), output_format=output_format)
+        return 1
+    except Exception as error:
+        _print_unexpected_error(error, output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_doctor_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_doctor_output(result))
+
+    return 0 if result.ok else 1
 
 
 def _run_context(
@@ -2646,6 +2689,16 @@ def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
     }
 
 
+def _doctor_success_envelope(result: DoctorResult) -> dict[str, Any]:
+    return {
+        "ok": result.ok,
+        "operation": "doctor",
+        "scope": "environment",
+        "data": result.to_payload(),
+        "warnings": [],
+    }
+
+
 def _skill_proposal_payload(result: ProposeSkillResult) -> dict[str, Any]:
     return {
         "skill_id": result.latent_skill.id,
@@ -2985,6 +3038,36 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
     for scope, counts in result.fact_counts.items():
         rendered_counts = ", ".join(f"{status}: {count}" for status, count in counts.items())
         lines.append(f"- {scope} {rendered_counts}")
+    return "\n".join(lines)
+
+
+def _format_human_doctor_output(result: DoctorResult) -> str:
+    lines = [
+        "universal-memory Doctor - Health Report",
+        "========================================",
+        "",
+    ]
+    for check in result.checks:
+        marker = "[OK]" if check.status == "success" else "[FAIL]"
+        label = " ".join(check.name.split("_")).title()
+        detail = f" - {check.detail}" if check.detail else ""
+        lines.append(f"{marker} {label}{detail}")
+        if check.error:
+            lines.append(f"    Error: {check.error}")
+        if check.recovery_hint:
+            lines.append(f"    Recovery: {check.recovery_hint}")
+
+    summary = result.summary
+    lines.extend(
+        [
+            "",
+            (
+                "Final status: all checks passed."
+                if result.ok
+                else f"Final status: {summary.failed} failure(s) found."
+            ),
+        ]
+    )
     return "\n".join(lines)
 
 

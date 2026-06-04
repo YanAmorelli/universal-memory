@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
+from universal_memory.application.diagnostics import DoctorUseCase
 from universal_memory.application.host import (
     ConfigureHostUseCase,
     SyncInstructionsUseCase,
@@ -122,6 +123,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         safe_write_use_case=safe_write_use_case,
         fact_repository=fact_repository,
     )
+    doctor_use_case = DoctorUseCase(host_check_command=host_use_case.execute)
     host_sync_use_case = SyncInstructionsUseCase(
         project_root=root,
         safe_write_use_case=safe_write_use_case,
@@ -182,6 +184,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         MCPUseCases(
             initialize_project=initialize_project,
             status=status_use_case.execute,
+            doctor=doctor_use_case.execute,
             context=context_use_case.execute,
             remember=remember_use_case.execute,
             list_facts=facts_list_use_case.execute,

@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from universal_memory.application.diagnostics import DoctorCheck, DoctorResult
 from universal_memory.application.memory import (
     AssembleContextSummaryResult,
     GetMemoryStatusResult,
@@ -73,6 +74,7 @@ PARITY_EXCLUSIONS = {
 PARITY_MATRIX = {
     "init": "initialize_project",
     "status": "status",
+    "doctor": "doctor",
     "context": "context",
     "remember": "remember_fact",
     "facts.list": "list_facts",
@@ -136,6 +138,18 @@ def status_result() -> GetMemoryStatusResult:
     )
 
 
+def doctor_result() -> DoctorResult:
+    return DoctorResult(
+        checks=[
+            DoctorCheck(
+                name="python_version",
+                status="success",
+                detail="Python 3.12.13",
+            )
+        ]
+    )
+
+
 def context_result() -> AssembleContextSummaryResult:
     now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
     summary = ContextSummary(
@@ -160,6 +174,7 @@ def cli_app_command_names() -> set[str]:
     app = create_typer_app(
         setup_project_command=setup_result,
         status_command=lambda _command: status_result(),
+        doctor_command=lambda _command: doctor_result(),
         context_command=lambda _command: context_result(),
         remember_command=lambda _command: RememberFactResult(
             fact=fact_fixture(),
@@ -208,6 +223,7 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
     [
         (["init", "--format", "json"], "initialize_project", {}),
         (["status", "--format", "json"], "status", {}),
+        (["doctor", "--format", "json"], "doctor", {}),
         (["context", "--format", "json"], "context", {}),
         (
             ["remember", "Use respostas concisas.", "--format", "json"],
@@ -347,6 +363,7 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
     return {
         "setup_project_command": lambda _root: setup_result(project_root),
         "status_command": lambda _command: status_result(),
+        "doctor_command": lambda _command: doctor_result(),
         "context_command": lambda _command: context_result(),
         "remember_command": lambda _command: RememberFactResult(
             fact=fact_fixture(),
@@ -379,6 +396,7 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
     return MCPUseCases(
         initialize_project=lambda _project_root: setup_result(root),
         status=lambda _command: status_result(),
+        doctor=lambda _command: doctor_result(),
         context=lambda _command: context_result(),
         remember=lambda _command: RememberFactResult(
             fact=fact_fixture(),

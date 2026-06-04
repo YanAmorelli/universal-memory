@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 
 from universal_memory import __version__
 from universal_memory.__main__ import main
+from universal_memory.application.diagnostics import DoctorCheck, DoctorCommand, DoctorResult
 from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
 from universal_memory.application.host.sync_instructions_use_case import (
     SyncInstructionsCommand,
@@ -81,6 +82,18 @@ def initialized_status() -> GetMemoryStatusResult:
             },
         },
         recommended_action=None,
+    )
+
+
+def doctor_result() -> DoctorResult:
+    return DoctorResult(
+        checks=[
+            DoctorCheck(
+                name="python_version",
+                status="success",
+                detail="Python 3.12.13",
+            )
+        ]
     )
 
 
@@ -372,6 +385,49 @@ async def test_status_tool_uses_injected_use_case_and_matches_cli_json_contract(
                     "audit_reference": "audit-codex",
                 },
             },
+        },
+    }
+
+
+@pytest.mark.anyio
+async def test_doctor_tool_uses_injected_use_case_and_matches_cli_json_contract(
+    tmp_path: Path,
+) -> None:
+    received: list[DoctorCommand] = []
+
+    def doctor_use_case(command: DoctorCommand) -> DoctorResult:
+        received.append(command)
+        return doctor_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: initialized_status(),
+            context=lambda _command: context_result(),
+            doctor=doctor_use_case,
+        ),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool("doctor", {})
+
+    assert "doctor" in tool_names
+    assert received == [DoctorCommand(project_root=tmp_path)]
+    assert result.structured_content == {
+        "ok": True,
+        "operation": "doctor",
+        "scope": "environment",
+        "warnings": [],
+        "data": {
+            "checks": [
+                {
+                    "name": "python_version",
+                    "status": "success",
+                    "detail": "Python 3.12.13",
+                }
+            ],
+            "summary": {"total_checks": 1, "passed": 1, "failed": 0},
         },
     }
 
