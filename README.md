@@ -1,8 +1,12 @@
+<p align="center">
+  <img src="assets/umem-logo.png" alt="Universal Memory logo" width="720">
+</p>
+
 # Universal Memory (umem)
 
 [![PyPI version](https://img.shields.io/pypi/v/universal-memory.svg)](https://pypi.org/project/universal-memory/)
-[![Python Version](https://img.shields.io/pypi/pyversions/universal-memory.svg)](https://img.shields.io/project/universal-memory/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/pypi/pyversions/universal-memory.svg)](https://pypi.org/project/universal-memory/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/YanAmorelli/universal-memory/blob/dev/LICENSE)
 
 A vendor-agnostic cognitive persistence layer for AI agents. Eliminate the "repetition tax" by transporting your context, preferences, guidelines, and history seamlessly across sessions, IDEs, and LLM models.
 
@@ -10,7 +14,7 @@ To see the core idea visually, check out the [Excalidraw design](https://excalid
 
 ![Universal Memory MVP Proposal](docs/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
 
-### Diagram Breakdown (English Translation)
+### Diagram Breakdown
 
 *   **Short-Term Memory (Ephemeral):** Project-specific (folder-level) memories. A simple summary of recent changes, pending tasks, and project or task-level constraints.
 *   **Agents Behaviours:** Comports the user's expected agent behaviors. Instead of requesting the same settings in every session, the agent understands the user by their traits, thoughts, and any context key to enhancing the overall experience. This encompasses:
@@ -55,11 +59,17 @@ Encapsulates complex, repetitive procedural instructions into formal Agent Skill
 
 Ensure you have Python 3.12+ installed. You can run or install `umem` using your preferred package manager.
 
-### Run instantly with `uv` (Recommended)
-You don't even need to install it permanently:
+### Try instantly with `uvx`
+You can run `umem` without installing it permanently:
 ```bash
-uvx umem --help
+uvx --from universal-memory umem --help
 ```
+
+> [!WARNING]
+> `uvx` is best for quick trials. For ongoing use, install Universal Memory as a persistent tool so `umem` is always available and can fully manage long-lived global memories and synced agent skills:
+> ```bash
+> uv tool install universal-memory
+> ```
 
 ### Install via PyPI
 ```bash
