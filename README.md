@@ -76,6 +76,34 @@ uvx --from universal-memory umem --help
 pip install universal-memory
 ```
 
+### Upgrade Universal Memory
+`umem update` does not upgrade the Python package from PyPI. It performs local, offline
+maintenance for the current `.umem` workspace, such as schema migrations, benchmark refreshes,
+and skill synchronization.
+
+To upgrade the installed `umem` executable, use the package manager that installed it:
+
+```bash
+# If installed with uv tool
+uv tool upgrade universal-memory
+
+# If installed with pipx
+pipx upgrade universal-memory
+
+# If installed with pip
+python -m pip install --upgrade universal-memory
+
+# If running temporarily with uvx
+uvx --refresh --from universal-memory umem --version
+```
+
+Confirm the executable you are running:
+
+```bash
+umem --version
+which umem
+```
+
 ---
 
 ## Quick Start Guide
