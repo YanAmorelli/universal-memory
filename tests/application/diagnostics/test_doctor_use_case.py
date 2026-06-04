@@ -82,7 +82,7 @@ def test_doctor_reports_host_integration_failure(
     ensure_project_layout(tmp_path)
     xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
     (tmp_path / ".umem" / "config.toml").write_text(
-        "[runtimes]\nenabled = [\"codex\"]\n",
+        '[runtimes]\nenabled = ["codex"]\n',
         encoding="utf-8",
     )
     received: list[ConfigureHostCommand] = []
@@ -187,9 +187,7 @@ def test_doctor_validates_global_config_path_kind(
     )
 
     result = use_case.execute(DoctorCommand(project_root=tmp_path))
-    permission_check = {check.name: check for check in result.checks}[
-        "filesystem_permissions"
-    ]
+    permission_check = {check.name: check for check in result.checks}["filesystem_permissions"]
 
     assert result.ok is False
     assert permission_check.status == "failed"
