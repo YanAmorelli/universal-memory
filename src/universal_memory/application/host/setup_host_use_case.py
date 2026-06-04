@@ -114,6 +114,7 @@ class ConfigureHostCommand:
     host_id: str
     apply: bool = False
     check: bool = False
+    record_audit: bool = True
     instruction_blocks: list[InstructionBlock] = field(default_factory=list)
     shared_manifest_available: bool | None = None
     max_managed_lines: int = DEFAULT_MAX_MANAGED_LINES
@@ -244,7 +245,11 @@ class ConfigureHostUseCase:
                 max_lines=command.max_managed_lines,
                 max_chars=command.max_managed_chars,
             )
-            audit_reference = self._record_host_validation(command, host, validation)
+            audit_reference = (
+                self._record_host_validation(command, host, validation)
+                if command.record_audit
+                else "not-recorded"
+            )
             return ConfigureHostResult(
                 host_id=host.name.value,
                 instruction_targets=[target.name.value],

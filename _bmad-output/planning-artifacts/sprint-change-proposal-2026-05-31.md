@@ -1,35 +1,35 @@
 # Sprint Change Proposal - universal-memory
 
-**Data:** 2026-05-31
-**Usuário:** Yan
-**Modo de revisão:** Batch
-**Escopo:** Moderate
+**Date:** 2026-05-31
+**User:** Yan
+**Review Mode:** Batch
+**Scope:** Moderate
 
 ## 1. Issue Summary
 
 ### Trigger
 
-O planejamento atual do `universal-memory` cobre um MVP com memória local, CLI, MCP, `AGENTS.md`, `CLAUDE.md`, criação de Agent Skills e dois hosts MVP (`codex` e `claude_code`). Durante a revisão de direção do produto, surgiram quatro mudanças de produto e arquitetura:
+The current planning for `universal-memory` covers an MVP with local memory, CLI, MCP, `AGENTS.md`, `CLAUDE.md`, Agent Skills creation, and two MVP hosts (`codex` and `claude_code`). During the product direction review, four product and architectural changes emerged:
 
-1. Adicionar identidade visual de terminal para o `umem`, usando a metáfora de USB/pendrive conectado ao terminal.
-2. Adicionar suporte a inglês e tornar inglês o idioma default do produto.
-3. Expandir o onboarding para múltiplos runtimes/agentes, incluindo OpenCode, Antigravity e Cursor, com seleção múltipla semelhante ao fluxo do GSD.
-4. Instalar skills nas pastas nativas de cada agente quando o agente consumir skills nativamente, por exemplo `.agents/`, `.claude/`, `.cursor/`, `.opencode/` e equivalentes.
+1. Add terminal visual identity for `umem`, using the metaphor of a USB flash drive connected to the terminal.
+2. Add English support and make English the default product language.
+3. Expand onboarding to multiple runtimes/agents, including OpenCode, Antigravity, and Cursor, with multi-selection similar to the GSD workflow.
+4. Install skills into the native folders of each agent when the agent natively consumes skills, for example, `.agents/`, `.claude/`, `.cursor/`, `.opencode/`, and equivalents.
 
 ### Problem Statement
 
-O plano atual trata suporte a hosts principalmente como configuração de arquivos de instrução (`AGENTS.md`, `CLAUDE.md`) e validação de leitura de contexto. Esse modelo é insuficiente para agentes modernos que possuem diretórios nativos de skills, regras ou configuração. Além disso, o produto precisa ser internacionalizado desde o MVP, com inglês como idioma default, para reduzir retrabalho em CLI, docs e artefatos gerados. A experiência de onboarding também precisa evoluir de seleção simples de hosts para seleção múltipla de runtimes com paths explícitos e feedback visual reconhecível.
+The current plan treats host support mainly as instruction file configuration (`AGENTS.md`, `CLAUDE.md`) and context reading validation. This model is insufficient for modern agents that have native directories for skills, rules, or configuration. In addition, the product needs to be internationalized from the MVP stage, with English as the default language, to reduce rework in the CLI, docs, and generated artifacts. The onboarding experience also needs to evolve from single host selection to multi-runtime selection with explicit paths and recognizable visual feedback.
 
 ### Evidence
 
-- Exemplo de UX desejada: prompt de terminal com seleção múltipla de runtimes, como `Which runtime(s) would you like to install for?`, listando Claude Code, Antigravity, Cursor, OpenCode e outros.
-- Requisito explícito do usuário: skills devem ficar nas pastas nativas do agente para consumo nativo, não apenas em `.umem/skills/`.
-- PRD atual FR7-FR8 fala genericamente em Claude, Gemini e ChatGPT, mas não modela paths nativos nem runtime registry.
-- Arquitetura atual limita o MVP a `codex` e `claude_code` e trata `.cursor`, `.github/copilot-instructions.md`, `.windsurf`, `.continue` e outros como post-MVP.
+- Example of desired UX: terminal prompt with multi-selection of runtimes, such as `Which runtime(s) would you like to install for?`, listing Claude Code, Antigravity, Cursor, OpenCode, and others.
+- Explicit user requirement: skills must reside in native agent folders for native consumption, not just in `.umem/skills/`.
+- Current PRD FR7-FR8 refers generically to Claude, Gemini, and ChatGPT, but does not model native paths or the runtime registry.
+- Current architecture limits the MVP to `codex` and `claude_code` and treats `.cursor`, `.github/copilot-instructions.md`, `.windsurf`, `.continue`, and others as post-MVP.
 
-### Terminologia de Identidade Visual
+### Visual Identity Terminology
 
-O nome técnico mais provável para o desenho de USB no terminal é **ASCII art** quando usa apenas caracteres ASCII, **ANSI art** quando inclui cor/estilo via escape codes, e **FIGlet/TOIlet banner** quando o texto/logo é renderizado por fontes de terminal. Para o `umem`, a proposta é usar um **ANSI/ASCII splash banner** pequeno, não dependente de ferramenta externa, com fallback sem cor.
+The most likely technical name for the USB drawing in the terminal is **ASCII art** when using only ASCII characters, **ANSI art** when including color/style via escape codes, and **FIGlet/TOIlet banner** when the text/logo is rendered by terminal fonts. For `umem`, the proposal is to use a small **ANSI/ASCII splash banner**, independent of external tools, with a no-color fallback.
 
 ## 2. Impact Analysis
 
@@ -37,50 +37,50 @@ O nome técnico mais provável para o desenho de USB no terminal é **ASCII art*
 
 | Item | Status | Finding |
 | --- | --- | --- |
-| 1.1 Triggering story | [N/A] | Não há story de implementação em execução que tenha revelado o problema. A mudança veio de revisão de produto antes da implementação. |
-| 1.2 Core problem | [x] | Novo requisito de produto e ajuste arquitetural de host/runtime/skills. |
-| 1.3 Evidence | [x] | Screenshot/referência GSD, requisito de pastas nativas e lacunas em PRD/arquitetura/épicos. |
-| 2.1 Current epic impact | [x] | Epic 5 e Epic 6 precisam ser ampliados; Epic 1 e Epic 4 recebem impacto secundário. |
-| 2.2 Epic-level changes | [x] | Modificar Epic 5, modificar Epic 6, adicionar suporte transversal de i18n/branding. |
-| 2.3 Remaining epics | [x] | Epic 1 precisa suportar config de locale/default language; Epic 4 precisa padronizar mensagens em inglês por default. |
-| 2.4 Future epics invalidated | [x] | Nenhum épico fica obsoleto; algumas capacidades antes post-MVP devem entrar no MVP ou em uma fase MVP+ explícita. |
-| 2.5 Priority/order | [x] | Runtime registry deve preceder setup de hosts e instalação nativa de skills. |
-| 3.1 PRD conflicts | [x] | FR7-FR8, escopo MVP, host matrix, CLI examples e NFRs precisam atualização. |
-| 3.2 Architecture conflicts | [x] | Host adapters atuais são estreitos; falta Runtime Registry, Native Skill Target e i18n/message catalog. |
-| 3.3 UX impact | [x] | Não há UX visual, mas DevEx CLI muda: splash, idioma default, seleção múltipla. |
-| 3.4 Other artifacts | [x] | README/docs, devex interaction spec, testes CLI/MCP e sprint status precisarão atualização após aprovação. |
-| 4.1 Direct adjustment | [x] Viable | Melhor caminho: ajustar artefatos e stories sem rollback. |
-| 4.2 Rollback | [N/A] | Não há implementação consolidada a reverter. |
-| 4.3 MVP review | [x] Viable | MVP continua alcançável, mas precisa classificar quais runtimes são Tier 1 vs Tier 2. |
+| 1.1 Triggering story | [N/A] | There is no active implementation story that revealed the problem. The change came from a product review prior to implementation. |
+| 1.2 Core problem | [x] | New product requirement and architectural adjustments for host/runtime/skills. |
+| 1.3 Evidence | [x] | GSD screenshot/reference, requirement for native folders, and gaps in PRD/architecture/epics. |
+| 2.1 Current epic impact | [x] | Epic 5 and Epic 6 need to be expanded; Epic 1 and Epic 4 receive secondary impact. |
+| 2.2 Epic-level changes | [x] | Modify Epic 5, modify Epic 6, and add cross-cutting i18n/branding support. |
+| 2.3 Remaining epics | [x] | Epic 1 needs to support locale/default language configuration; Epic 4 needs to standardize messages in English by default. |
+| 2.4 Future epics invalidated | [x] | No epics become obsolete; some features previously marked as post-MVP should be included in the MVP or in an explicit MVP+ phase. |
+| 2.5 Priority/order | [x] | Runtime registry must precede host setup and native skill installation. |
+| 3.1 PRD conflicts | [x] | FR7-FR8, MVP scope, host matrix, CLI examples, and NFRs need to be updated. |
+| 3.2 Architecture conflicts | [x] | Current host adapters are too narrow; missing Runtime Registry, Native Skill Target, and i18n/message catalog. |
+| 3.3 UX impact | [x] | No visual UX, but CLI DevEx changes: splash, default language, multi-selection. |
+| 3.4 Other artifacts | [x] | README/docs, devex interaction spec, CLI/MCP tests, and sprint status will need updates after approval. |
+| 4.1 Direct adjustment | [x] Viable | Best path: adjust artifacts and stories without rollback. |
+| 4.2 Rollback | [N/A] | There is no consolidated implementation to revert. |
+| 4.3 MVP review | [x] Viable | MVP remains achievable, but runtimes need to be classified as Tier 1 vs Tier 2. |
 | 4.4 Recommendation | [x] | Hybrid: Direct Adjustment + MVP scope clarification. |
 
 ### Epic Impact
 
-**Epic 1: Fundação Local, Modelos e Contratos**
+**Epic 1: Local Foundation, Models, and Contracts**
 
-Impacto secundário. Deve adicionar configuração de idioma default (`en`) e idioma de saída opcional. A estrutura `.umem/config.toml` deve persistir seleção de runtimes e locale.
+Secondary impact. Must add configuration for default language (`en`) and optional output language. The `.umem/config.toml` structure must persist runtime selection and locale.
 
-**Epic 4: Paridade CLI e MCP**
+**Epic 4: CLI and MCP Parity**
 
-Impacto secundário. Mensagens CLI humanas passam a ter inglês como default; JSON permanece independente de idioma nos nomes de campos. MCP deve receber erro/mensagem estável com códigos e `recovery_hint` em inglês por default.
+Secondary impact. Human-facing CLI messages will default to English; JSON field names remain language-independent. The MCP must receive stable errors/messages with codes and a `recovery_hint` in English by default.
 
-**Epic 5: Hosts e Sincronização de Instruções**
+**Epic 5: Hosts and Instruction Synchronization**
 
-Impacto primário. Deve deixar de ser apenas `codex` + `claude_code` e passar a modelar runtimes/agentes como adapters com paths nativos, capabilities e installation targets.
+Primary impact. Must stop being just `codex` + `claude_code` and start modeling runtimes/agents as adapters with native paths, capabilities, and installation targets.
 
-**Epic 6: Latent Skills e Gestão de Skills**
+**Epic 6: Latent Skills and Skill Management**
 
-Impacto primário. `.umem/skills/` permanece como registry/canonical store, mas a instalação/replicação para consumo nativo deve usar targets por runtime, por exemplo `.agents/skills/`, `.claude/skills/`, `.opencode/skills/`, `.cursor/rules/` quando aplicável.
+Primary impact. `.umem/skills/` remains the registry/canonical store, but installation/replication for native consumption must use targets per runtime, for example, `.agents/skills/`, `.claude/skills/`, `.opencode/skills/`, `.cursor/rules/` where applicable.
 
 ### Artifact Impact
 
-**PRD:** atualizar escopo MVP, FR7-FR8, FR20-FR21, host support matrix, CLI examples, language requirements e onboarding journey.
+**PRD:** update MVP scope, FR7-FR8, FR20-FR21, host support matrix, CLI examples, language requirements, and onboarding journey.
 
-**Architecture:** adicionar Runtime Registry, Runtime Adapter, Native Skill Installer, Message Catalog/i18n, Terminal Branding Presenter e estratégia de Tiered Runtime Support.
+**Architecture:** add Runtime Registry, Runtime Adapter, Native Skill Installer, Message Catalog/i18n, Terminal Branding Presenter, and Tiered Runtime Support strategy.
 
-**Epics:** reescrever Epic 5 e ajustar Epic 6; adicionar stories específicas para idioma default, banner CLI e runtime selection.
+**Epics:** rewrite Epic 5 and adjust Epic 6; add specific stories for default language, CLI banner, and runtime selection.
 
-**UX/DevEx:** atualizar `_bmad-output/planning-artifacts/devex-interaction-spec.md` se existir ou criar/editar uma seção equivalente nos artefatos para cobrir seleção múltipla, fallback não-interativo e saída JSON.
+**UX/DevEx:** update `_bmad-output/planning-artifacts/devex-interaction-spec.md` if it exists, or create/edit an equivalent section in the artifacts to cover multi-selection, non-interactive fallback, and JSON output.
 
 ## 3. Recommended Approach
 
@@ -88,40 +88,40 @@ Impacto primário. `.umem/skills/` permanece como registry/canonical store, mas 
 
 **Hybrid: Direct Adjustment + MVP Scope Clarification.**
 
-Não há necessidade de rollback. A mudança deve ser incorporada por atualização de PRD, patch arquitetural e reestruturação dos épicos/stories. O ponto crítico é evitar que “suportar muitos agentes” vire promessa de integração profunda para todos no MVP.
+No rollback is needed. The change should be incorporated by updating the PRD, applying an architectural patch, and restructuring epics/stories. The critical point is to avoid letting "supporting many agents" turn into a promise of deep integration for all of them in the MVP.
 
 ### Tiered Runtime Support
 
-Para controlar escopo, recomenda-se classificar runtimes em tiers:
+To control scope, it is recommended to classify runtimes into tiers:
 
-| Tier | Significado | Critério de aceite |
+| Tier | Meaning | Acceptance Criteria |
 | --- | --- | --- |
-| Tier 1 | Suporte MVP completo | Setup, paths nativos, instruções, skill install quando aplicável, validação local e testes. |
-| Tier 2 | Suporte MVP básico | Detecta path, instala instruções/skills quando formato é conhecido, validação pode ser manual/documentada. |
-| Tier 3 | Catálogo/documentado | Aparece como planejado ou experimental, sem bloquear MVP. |
+| Tier 1 | Full MVP Support | Setup, native paths, instructions, skill install where applicable, local validation, and tests. |
+| Tier 2 | Basic MVP Support | Detects path, installs instructions/skills when the format is known, validation can be manual/documented. |
+| Tier 3 | Catalog/Documented | Appears as planned or experimental, without blocking the MVP. |
 
-Proposta inicial:
+Initial proposal:
 
-| Runtime | Tier recomendado | Path alvo inicial |
+| Runtime | Recommended Tier | Initial Target Path |
 | --- | --- | --- |
-| Claude Code | Tier 1 | `~/.claude/`, `.claude/`, `CLAUDE.md` conforme escopo |
-| OpenCode | Tier 1 | `~/.config/opencode/`, `.opencode/`, `AGENTS.md` conforme suporte |
+| Claude Code | Tier 1 | `~/.claude/`, `.claude/`, `CLAUDE.md` according to scope |
+| OpenCode | Tier 1 | `~/.config/opencode/`, `.opencode/`, `AGENTS.md` according to support |
 | Cursor | Tier 2 | `~/.cursor/`, `.cursor/rules/` |
-| Antigravity | Tier 2 | `~/.gemini/antigravity/` ou path confirmado por runtime adapter |
-| Codex | Tier 1 ou renomear para OpenAI/Codex | `AGENTS.md`, path de config aplicável |
-| Gemini | Tier 2 | `~/.gemini/`, `GEMINI.md` quando aplicável |
+| Antigravity | Tier 2 | `~/.gemini/antigravity/` or path confirmed by runtime adapter |
+| Codex | Tier 1 or rename to OpenAI/Codex | `AGENTS.md`, applicable config path |
+| Gemini | Tier 2 | `~/.gemini/`, `GEMINI.md` when applicable |
 
 ### Effort Estimate
 
-**Medium.** A maior parte é modelagem e CLI/onboarding; integração profunda por runtime deve ser incremental.
+**Medium.** Most of the work is modeling and CLI/onboarding; deep integration per runtime should be incremental.
 
 ### Risk Level
 
-**Medium.** Risco principal é prometer compatibilidade nativa sem contratos estáveis de cada agente. Mitigação: registry declarativo, tiers e testes por adapter.
+**Medium.** The main risk is promising native compatibility without stable contracts from each agent. Mitigation: declarative registry, tiers, and per-adapter testing.
 
 ### Timeline Impact
 
-Adiciona trabalho antes de concluir Epic 5 e Epic 6. Não bloqueia Epic 1-3, exceto locale básico e estrutura de config.
+Adds work before completing Epic 5 and Epic 6. It does not block Epics 1-3, except for basic locale and config structure.
 
 ## 4. Detailed Change Proposals
 
@@ -132,27 +132,27 @@ Adiciona trabalho antes de concluir Epic 5 e Epic 6. Não bloqueia Epic 1-3, exc
 OLD:
 
 ```md
-* **Auto-Adaptation Motor:** Um agente/rotina dedicado que analisa a memória e atualiza o arquivo `AGENTS.md` (instruções globais) para refletir o comportamento do usuário.
-* **On-Demand Skill Creation:** Capacidade de gerar novas skills (ferramentas/scripts) baseadas na necessidade detectada durante o fluxo de trabalho.
+* **Auto-Adaptation Motor:** A dedicated agent/routine that analyzes memory and updates the AGENTS.md file (global instructions) to reflect user behavior.
+* **On-Demand Skill Creation:** Ability to generate new skills (tools/scripts) based on the needs detected during the workflow.
 ```
 
 NEW:
 
 ```md
-* **Auto-Adaptation Motor:** Um agente/rotina dedicado que analisa a memória e atualiza manifests compartilhados e arquivos nativos de runtimes suportados para refletir o comportamento do usuário sem drift.
-* **On-Demand Skill Creation and Native Skill Installation:** Capacidade de gerar Agent Skills canônicas e instalá-las em diretórios nativos de agentes suportados quando o runtime consumir skills nativamente.
-* **Multi-Runtime Onboarding:** Fluxo CLI para seleção múltipla de runtimes/agentes, com inglês como idioma default e feedback visual de terminal.
+* **Auto-Adaptation Motor:** A dedicated agent/routine that analyzes memory and updates shared manifests and native files of supported runtimes to reflect user behavior without drift.
+* **On-Demand Skill Creation and Native Skill Installation:** Ability to generate canonical Agent Skills and install them in native directories of supported agents when the runtime natively consumes skills.
+* **Multi-Runtime Onboarding:** CLI flow for multi-selection of runtimes/agents, with English as the default language and terminal visual feedback.
 ```
 
-Rationale: amplia o MVP para refletir que a unidade de integração é runtime/adapter, não apenas arquivo de instrução.
+Rationale: expands the MVP to reflect that the integration unit is a runtime/adapter, not just an instruction file.
 
 #### FR7-FR8
 
 OLD:
 
 ```md
-- **FR7:** Durante a configuração inicial, o sistema deve permitir que o usuário selecione os provedores de agentes suportados (ex: Claude, Gemini, ChatGPT).
-- **FR8:** O sistema deve configurar automaticamente os arquivos de instrução dos agentes selecionados (ex: `CLAUDE.md`, `AGENTS.md`) para inicializar o uso da memória universal imediatamente após a instalação.
+- **FR7:** During initial configuration, the system must allow the user to select supported agent providers (e.g., Claude, Gemini, ChatGPT).
+- **FR8:** The system must automatically configure the instruction files of the selected agents (e.g., `CLAUDE.md`, `AGENTS.md`) to initialize the use of universal memory immediately after installation.
 ```
 
 NEW:
@@ -162,7 +162,7 @@ NEW:
 - **FR8:** The system must configure the selected runtimes by writing or updating their supported instruction targets and native skill targets, such as `AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/`, `.cursor/`, `.opencode/` or equivalent runtime-specific paths, with snapshot and audit protection before every mutation.
 ```
 
-Rationale: torna o requisito testável e compatível com instalação nativa.
+Rationale: makes the requirement testable and compatible with native installation.
 
 #### New Language Requirement
 
@@ -172,7 +172,7 @@ NEW:
 - **FR29:** The product must use English as the default language for CLI prompts, help text, generated instructions, skill scaffolds and documentation templates, while allowing an explicit locale configuration for other supported languages such as Portuguese.
 ```
 
-Rationale: evita retrofit de i18n depois que CLI, docs e templates estiverem espalhados.
+Rationale: avoids i18n retrofitting after the CLI, docs, and templates are already scattered.
 
 #### New Branding Requirement
 
@@ -182,15 +182,15 @@ NEW:
 - **FR30:** The CLI onboarding experience should include a compact terminal brand element for `umem`, implemented as ANSI/ASCII splash art with a no-color fallback and disabled automatically for JSON/non-interactive output.
 ```
 
-Rationale: melhora reconhecimento do produto sem quebrar automação.
+Rationale: improves product recognition without breaking automation.
 
 #### FR20-FR21
 
 OLD:
 
 ```md
-- **FR20:** O sistema deve gerar a estrutura de pastas e o arquivo `SKILL.md` seguindo o padrão `agentskills.io`.
-- **FR21:** O usuário deve poder listar, ativar, editar e desativar Skills registradas através da CLI.
+- **FR20:** The system must generate the folder structure and the `SKILL.md` file following the `agentskills.io` standard.
+- **FR21:** The user must be able to list, activate, edit, and deactivate registered Skills via the CLI.
 ```
 
 NEW:
@@ -200,7 +200,7 @@ NEW:
 - **FR21:** The user must be able to list, activate, edit, disable and inspect both canonical skills and per-runtime installed skill targets through CLI and MCP-equivalent capabilities.
 ```
 
-Rationale: separa skill canônica de instalações específicas por runtime.
+Rationale: separates canonical skills from runtime-specific installations.
 
 ### Architecture Changes
 
@@ -229,7 +229,7 @@ Each adapter declares:
 Runtime selection is stored in global or project TOML config and drives onboarding, instruction sync and native skill installation.
 ```
 
-Rationale: evita lógica hardcoded e permite adicionar agentes sem redesenhar o fluxo.
+Rationale: avoids hardcoded logic and allows adding agents without redesigning the workflow.
 
 #### Add Native Skill Installation Strategy
 
@@ -245,7 +245,7 @@ Runtime-specific directories are installation targets, not the canonical source.
 Every native skill installation must pass through the mutation pipeline: validate, secret scan, snapshot, atomic write, audit.
 ```
 
-Rationale: evita drift e mantém rollback/auditoria centralizados.
+Rationale: avoids drift and keeps rollback/auditing centralized.
 
 #### Add i18n / Message Catalog
 
@@ -261,7 +261,7 @@ Human-facing strings should be routed through a minimal message catalog or prese
 `--format json`, MCP responses and non-interactive output must never include localized labels in machine-readable field names.
 ```
 
-Rationale: mantém automação estável e permite português sem quebrar contratos.
+Rationale: keeps automation stable and allows Portuguese without breaking contracts.
 
 #### Add Terminal Branding Presenter
 
@@ -279,7 +279,7 @@ Rules:
 - avoid external runtime dependencies for the MVP
 ```
 
-Rationale: identidade visual sem risco para scripts/agentes.
+Rationale: visual identity without risk to scripts/agents.
 
 ### Epic Changes
 
@@ -318,13 +318,13 @@ Acceptance Criteria:
 OLD:
 
 ```md
-O usuário consegue configurar hosts suportados, validar leitura de contexto e manter `AGENTS.md` e `CLAUDE.md` sincronizados sem duplicação, drift ou ownership ambíguo.
+The user can configure supported hosts, validate context reading, and keep `AGENTS.md` and `CLAUDE.md` synchronized without duplication, drift, or ambiguous ownership.
 ```
 
 NEW:
 
 ```md
-O usuário consegue selecionar múltiplos runtimes/agentes suportados, configurar seus instruction targets e native skill targets, validar leitura de contexto e manter manifests compartilhados e arquivos nativos sincronizados sem duplicação, drift ou ownership ambíguo.
+The user can select multiple supported runtimes/agents, configure their instruction targets and native skill targets, validate context reading, and keep shared manifests and native files synchronized without duplication, drift, or ambiguous ownership.
 ```
 
 #### Epic 5 Story Changes

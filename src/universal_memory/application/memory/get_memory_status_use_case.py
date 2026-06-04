@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from universal_memory import __version__
 from universal_memory.domain.entities import (
     AuditEventScope,
     FactScope,
@@ -40,6 +41,7 @@ class GetMemoryStatusResult:
     last_health_check: str | None
     host_validation: dict[str, dict[str, str | None]]
     recommended_action: str | None = None
+    installed_version: str = __version__
 
 
 class GetMemoryStatusUseCase:

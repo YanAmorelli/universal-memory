@@ -43,56 +43,56 @@ story_location: /Users/amorelliaoyan/projects/personal/lab/universal-memory/_bma
 
 development_status:
   epic-1: in-progress
-  1-1-inicializar-scaffold-python-do-produto: done
-  1-2-definir-modelos-de-dom-nio-para-mem-ria: done
-  1-3-definir-exce-es-e-ports-de-dom-nio: done
-  1-4-criar-layout-local-umem-e-configura-o-toml: done
-  1-5-implementar-inicializa-o-cli-m-nima: done
-  1-6-configurar-idioma-padr-o-e-locale: done
+  1-1-initialize-product-python-scaffold: done
+  1-2-define-domain-models-for-memory: done
+  1-3-define-domain-exceptions-and-ports: done
+  1-4-create-local-umem-layout-and-toml-configuration: done
+  1-5-implement-minimal-cli-initialization: done
+  1-6-configure-default-language-and-locale: done
   epic-1-retrospective: optional
 
   epic-2: in-progress
-  2-1-implementar-scanner-de-segredos: done
-  2-2-criar-snapshot-antes-de-muta-o: done
-  2-3-implementar-escrita-at-mica-com-auditoria: done
-  2-4-listar-auditoria-e-snapshots: done
-  2-5-reverter-ltima-muta-o-por-escopo: done
+  2-1-implement-secrets-scanner: done
+  2-2-create-snapshot-before-mutation: done
+  2-3-implement-atomic-write-with-audit: done
+  2-4-list-audit-and-snapshots: done
+  2-5-rollback-last-mutation-by-scope: done
   epic-2-retrospective: optional
 
   epic-3: in-progress
-  3-1-gravar-e-listar-fatos-de-mem-ria: done
-  3-2-consultar-contexto-local-com-busca-textual: done
-  3-3-implementar-benchmark-de-recupera-o: done
-  3-4-montar-resumo-de-contexto-com-limites-de-tokens: done
-  3-5-exibir-status-da-mem-ria: done
-  3-6-purgar-fatos-e-executar-context-hygiene: done
+  3-1-record-and-list-memory-facts: done
+  3-2-query-local-context-with-text-search: done
+  3-3-implement-retrieval-benchmark: done
+  3-4-assemble-context-summary-with-token-limits: done
+  3-5-display-memory-status: done
+  3-6-purge-facts-and-execute-context-hygiene: done
   epic-3-retrospective: optional
 
   epic-4: in-progress
-  4-1-estruturar-adapter-cli-com-typer-e-rich: done
-  4-2-implementar-servidor-mcp-base-com-fastmcp: done
-  4-3-implementar-matriz-de-paridade-cli-mcp: done
-  4-4-mapear-erros-de-dom-nio-para-cli-e-json-rpc: done
-  4-5-validar-conformidade-mcp-e-contratos-de-interface: done
-  4-6-exibir-identidade-visual-de-terminal-de-forma-segura: done
+  4-1-structure-cli-adapter-with-typer-and-rich: done
+  4-2-implement-base-mcp-server-with-fastmcp: done
+  4-3-implement-cli-mcp-parity-matrix: done
+  4-4-map-domain-errors-to-cli-and-json-rpc: done
+  4-5-validate-mcp-compliance-and-interface-contracts: done
+  4-6-safely-display-terminal-visual-identity: done
   epic-4-retrospective: optional
 
   epic-5: in-progress
-  5-1-modelar-registro-de-runtimes-e-alvos: done
-  5-2-configurar-host-codex-com-agents-md: done
-  5-3-configurar-host-claude-code-com-claude-md: done
-  5-4-validar-leitura-de-contexto-por-host: done
-  5-5-sincronizar-regras-consolidadas-para-instru-es: done
-  5-6-onboarding-cli-de-sele-o-multi-runtime: done
-  5-7-atualiza-es-de-biblioteca-migra-o-de-schema-e-benchmarks: done
+  5-1-model-runtime-and-target-registry: done
+  5-2-configure-codex-host-with-agents-md: done
+  5-3-configure-claude-code-host-with-claude-md: done
+  5-4-validate-context-reading-by-host: done
+  5-5-synchronize-consolidated-rules-to-instructions: done
+  5-6-cli-multi-runtime-selection-onboarding: done
+  5-7-library-updates-schema-migration-and-benchmarks: done
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-1-registrar-latent-skills-por-recorr-ncia: done
-  6-2-propor-cria-o-de-skill-com-aprova-o-expl-cita: done
-  6-3-gerar-skill-can-nica-e-instalar-em-targets-nativos: done
-  6-4-registrar-e-listar-skills: done
-  6-5-ativar-desativar-e-editar-skills-com-seguran-a: done
-  6-6-expor-gest-o-de-skills-por-cli-e-mcp: done
+  6-1-register-latent-skills-by-recurrence: done
+  6-2-propose-skill-creation-with-explicit-approval: done
+  6-3-generate-canonical-skill-and-install-in-native-targets: done
+  6-4-register-and-list-skills: done
+  6-5-safely-activate-deactivate-and-edit-skills: done
+  6-6-expose-skills-management-via-cli-and-mcp: done
   spec-publish-to-pypi: done
   epic-6-retrospective: optional

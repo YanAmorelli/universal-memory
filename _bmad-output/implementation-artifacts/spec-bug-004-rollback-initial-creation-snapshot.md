@@ -1,5 +1,5 @@
 ---
-title: 'BUG-004 - Rollback de snapshot de criacao inicial'
+title: 'BUG-004 - Initial creation snapshot rollback'
 type: 'bugfix'
 created: '2026-05-30'
 status: 'done'
@@ -12,50 +12,50 @@ context:
 
 ## Intent
 
-**Problem:** `umem rollback` falha quando o snapshot mais recente representa o estado anterior de um arquivo que ainda nao existia, porque o manifesto registra o snapshot mas nao ha backup fisico em `.umem/snapshots/files/<id>`. Isso bloqueia rollback logo apos a primeira mutacao de memoria em um sandbox limpo e deixa o fato ativo.
+**Problem:** `umem rollback` fails when the most recent snapshot represents the prior state of a file that did not exist yet, because the manifest registers the snapshot but there is no physical backup in `.umem/snapshots/files/<id>`. This blocks rollback immediately after the first memory mutation in a clean sandbox and leaves the fact active.
 
-**Approach:** Tornar o rollback capaz de restaurar corretamente snapshots de criacao inicial, removendo o arquivo alvo quando o snapshot indicar que o estado anterior era ausencia do arquivo. Preservar o caminho normal para snapshots com backup fisico e manter auditoria de sucesso/falha.
+**Approach:** Enable rollback to correctly restore initial creation snapshots by removing the target file when the snapshot indicates that the prior state was the absence of the file. Preserve the normal path for snapshots with a physical backup and maintain success/failure auditing.
 
 ## Boundaries & Constraints
 
-**Always:** Preservar verificacao de integridade por SHA-256 para snapshots com backup fisico; manter paths resolvidos dentro de `project_root`; manter rollback atomico e auditado; manter compatibilidade com manifestos existentes quando for seguro distinguir criacao inicial.
+**Always:** Preserve SHA-256 integrity verification for snapshots with a physical backup; keep resolved paths within `project_root`; keep rollback atomic and audited; maintain compatibility with existing manifests when it is safe to distinguish initial creation.
 
-**Ask First:** Qualquer migracao de schema do manifesto de snapshots, mudanca no contrato publico CLI/MCP, ou decisao de apagar diretorios vazios alem do arquivo alvo.
+**Ask First:** Any schema migration of the snapshots manifest, change in the CLI/MCP public contract, or decision to delete empty directories other than the target file.
 
-**Never:** Ignorar erro de backup fisico ausente para snapshots que deveriam ter copia; relaxar protecao contra path traversal; remover auditoria de falha; corrigir BUG-005 ou BUG-006 neste escopo.
+**Never:** Ignore missing physical backup errors for snapshots that should have a copy; relax path traversal protection; remove failure auditing; fix BUG-005 or BUG-006 within this scope.
 
 ## I/O & Edge-Case Matrix
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
-| Criacao inicial | Arquivo alvo nao existia, safe write criou `.umem/memory/facts.jsonl`, snapshot tem hash de bytes vazios e nao tem backup fisico | Rollback remove o arquivo alvo ou o devolve ao estado ausente, retorna sucesso e registra auditoria `success` | Se o alvo virou diretorio ou escapou do root, falha com erro de dominio e auditoria `failure` |
-| Snapshot normal | Arquivo alvo existia antes da mutacao e backup fisico existe | Rollback le backup, valida hash e restaura bytes anteriores | Hash mismatch ou backup ausente continuam falhando sem sobrescrever o alvo |
+| Initial creation | Target file did not exist, safe write created `.umem/memory/facts.jsonl`, snapshot has empty bytes hash and no physical backup | Rollback removes the target file or returns it to the absent state, returns success, and logs `success` audit | If the target became a directory or escaped the root, fails with a domain error and `failure` audit |
+| Normal snapshot | Target file existed before the mutation and physical backup exists | Rollback reads the backup, validates the hash, and restores the prior bytes | Hash mismatch or missing backup continues to fail without overwriting the target |
 
 </frozen-after-approval>
 
 ## Code Map
 
-- `src/universal_memory/application/security/safe_write_use_case.py` -- Cria snapshots antes da escrita segura; hoje calcula hash de `b""` quando o alvo nao existe.
-- `src/universal_memory/infrastructure/security/local_snapshot_repository.py` -- Persiste manifesto e copia fisica; hoje registra snapshot sem arquivo fisico quando o alvo nao existe.
-- `src/universal_memory/application/security/rollback_use_case.py` -- Escolhe o snapshot mais recente e sempre tenta ler backup fisico antes de restaurar.
-- `src/universal_memory/domain/entities/snapshot.py` -- Modelo de snapshot; possivel local para representar explicitamente se o arquivo existia antes.
-- `tests/application/security/test_rollback_use_case.py` -- Cobertura de rollback de dominio, hash mismatch e arquivo alvo deletado.
-- `tests/infrastructure/security/test_local_snapshot_repository.py` -- Cobertura do repositorio local, incluindo snapshot de criacao inicial sem copia fisica.
-- `_bmad-output/implementation-artifacts/alpha-bug-log.md` -- Registro BUG-004 a atualizar apos correcao e verificacao.
+- `src/universal_memory/application/security/safe_write_use_case.py` -- Creates snapshots before safe writing; currently calculates a hash of `b""` when the target does not exist.
+- `src/universal_memory/infrastructure/security/local_snapshot_repository.py` -- Persists the manifest and physical copy; currently registers a snapshot without a physical file when the target does not exist.
+- `src/universal_memory/application/security/rollback_use_case.py` -- Chooses the most recent snapshot and always attempts to read the physical backup before restoring.
+- `src/universal_memory/domain/entities/snapshot.py` -- Snapshot model; possible location to explicitly represent whether the file existed before.
+- `tests/application/security/test_rollback_use_case.py` -- Domain rollback, hash mismatch, and deleted target file coverage.
+- `tests/infrastructure/security/test_local_snapshot_repository.py` -- Local repository coverage, including initial creation snapshot without a physical copy.
+- `_bmad-output/implementation-artifacts/alpha-bug-log.md` -- BUG-004 log to be updated after fix and verification.
 
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `src/universal_memory/domain/entities/snapshot.py` e produtores/consumidores relacionados -- Representar de forma segura quando o arquivo existia antes do snapshot, preferindo uma alteracao minima e compativel com manifestos atuais -- Evita confundir arquivo vazio com arquivo inexistente.
-- [x] `src/universal_memory/application/security/rollback_use_case.py` -- Restaurar snapshots de criacao inicial removendo o arquivo alvo quando apropriado; manter leitura e hash do backup para snapshots normais -- Corrige o BUG-004 sem relaxar integridade.
-- [x] `src/universal_memory/infrastructure/security/local_snapshot_repository.py` -- Persistir/carregar qualquer metadado novo necessario sem quebrar manifestos existentes -- Mantem snapshots locais utilizaveis.
-- [x] `tests/application/security/test_rollback_use_case.py` e/ou `tests/infrastructure/security/test_local_snapshot_repository.py` -- Adicionar regressao para safe write de arquivo inexistente seguido de rollback -- Garante que o caso do alpha nao volte a falhar.
-- [x] `_bmad-output/implementation-artifacts/alpha-bug-log.md` -- Atualizar BUG-004 com correcao e comandos executados -- Mantem rastreabilidade alpha.
+- [x] `src/universal_memory/domain/entities/snapshot.py` and related producers/consumers -- Securely represent whether the file existed before the snapshot, preferring a minimal change compatible with current manifests -- Prevents confusing an empty file with a non-existent file.
+- [x] `src/universal_memory/application/security/rollback_use_case.py` -- Restore initial creation snapshots by removing the target file when appropriate; maintain backup reading and hashing for normal snapshots -- Fixes BUG-004 without relaxing integrity.
+- [x] `src/universal_memory/infrastructure/security/local_snapshot_repository.py` -- Persist/load any new metadata needed without breaking existing manifests -- Keeps local snapshots usable.
+- [x] `tests/application/security/test_rollback_use_case.py` and/or `tests/infrastructure/security/test_local_snapshot_repository.py` -- Add regression test for safe write of a non-existent file followed by rollback -- Ensures the alpha scenario does not fail again.
+- [x] `_bmad-output/implementation-artifacts/alpha-bug-log.md` -- Update BUG-004 with the fix and executed commands -- Maintains alpha traceability.
 
 **Acceptance Criteria:**
-- Given um projeto limpo onde `umem remember "Fato antes do rollback." --scope project` criou o primeiro arquivo de facts, when `umem rollback --scope project --yes` executa, then o rollback retorna sucesso e o arquivo volta ao estado anterior ausente ou vazio sem o fato ativo.
-- Given um snapshot com backup fisico valido, when rollback executa, then o conteudo anterior e restaurado somente depois de validar o hash SHA-256.
-- Given um snapshot normal cujo backup fisico esta ausente ou corrompido, when rollback executa, then a operacao falha e nao sobrescreve nem remove o alvo.
+- Given a clean project where `umem remember "Fato antes do rollback." --scope project` created the first facts file, when `umem rollback --scope project --yes` executes, then the rollback returns success and the file returns to the prior absent or empty state without the fact active.
+- Given a snapshot with a valid physical backup, when rollback executes, then the prior content is restored only after validating the SHA-256 hash.
+- Given a normal snapshot whose physical backup is missing or corrupted, when rollback executes, then the operation fails and does not overwrite or remove the target.
 
 ## Spec Change Log
 
@@ -63,40 +63,40 @@ context:
 
 **Commands:**
 - `uv run pytest tests/application/security/test_rollback_use_case.py tests/infrastructure/security/test_local_snapshot_repository.py tests/interfaces/cli/test_rollback_command.py tests/interfaces/mcp/test_server.py::test_real_mcp_rollback_removes_file_created_by_first_remember` -- passed: 27 passed.
-- Smoke CLI em sandbox isolado com `umem init`, `umem remember "Fato antes do rollback." --scope project`, `umem rollback --scope project --yes --format json`, e `test ! -e .umem/memory/facts.jsonl` -- passed: rollback `ok=true` e arquivo removido.
+- Smoke CLI in isolated sandbox with `umem init`, `umem remember "Fato antes do rollback." --scope project`, `umem rollback --scope project --yes --format json\`, and `test ! -e .umem/memory/facts.jsonl` -- passed: rollback `ok=true` and file removed.
 - `uv run pytest` -- passed: 395 passed.
 
 ## Suggested Review Order
 
-**Rollback Sem Backup Fisico**
+**Rollback Without Physical Backup**
 
-- Entrada principal distingue snapshot normal, novo ausente e legado seguro.
+- Main entry point distinguishes between normal, new absent, and legacy safe snapshots.
   [`rollback_use_case.py:64`](../../src/universal_memory/application/security/rollback_use_case.py#L64)
 
-- Remocao exige hash vazio para nao apagar snapshot inconsistente.
+- Removal requires an empty hash to avoid deleting an inconsistent snapshot.
   [`rollback_use_case.py:117`](../../src/universal_memory/application/security/rollback_use_case.py#L117)
 
-- Compatibilidade legado fica limitada a campo ausente com hash vazio.
+- Legacy compatibility is limited to a missing field with an empty hash.
   [`rollback_use_case.py:126`](../../src/universal_memory/application/security/rollback_use_case.py#L126)
 
 **Snapshot Metadata**
 
-- Snapshot carrega a semantica de existencia anterior com default compativel.
+- Snapshot carries the semantics of prior existence with a compatible default.
   [`snapshot.py:28`](../../src/universal_memory/domain/entities/snapshot.py#L28)
 
-- Safe write captura existencia antes de registrar o snapshot.
+- Safe write captures existence before registering the snapshot.
   [`safe_write_use_case.py:65`](../../src/universal_memory/application/security/safe_write_use_case.py#L65)
 
-- Snapshot persistido recebe o metadado junto do hash anterior.
+- Persisted snapshot receives the metadata along with the prior hash.
   [`safe_write_use_case.py:168`](../../src/universal_memory/application/security/safe_write_use_case.py#L168)
 
-**Regressoes**
+**Regressions**
 
-- Testes cobrem novo snapshot, legado sem campo e hash invalido.
+- Tests cover new snapshot, legacy without field, and invalid hash.
   [`test_rollback_use_case.py:234`](../../tests/application/security/test_rollback_use_case.py#L234)
 
-- Reproducao CLI alpha valida primeira mutacao seguida de rollback.
+- Alpha CLI reproduction validates first mutation followed by rollback.
   [`test_rollback_command.py:93`](../../tests/interfaces/cli/test_rollback_command.py#L93)
 
-- Reproducao MCP valida initialize, remember e rollback_scope reais.
+- Real MCP reproduction validates initialize, remember, and rollback_scope.
   [`test_server.py:205`](../../tests/interfaces/mcp/test_server.py#L205)

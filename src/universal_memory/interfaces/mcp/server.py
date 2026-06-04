@@ -9,6 +9,10 @@ from typing import Any, Literal
 
 from fastmcp import FastMCP
 
+from universal_memory.application.diagnostics import (
+    DoctorCommand,
+    DoctorResult,
+)
 from universal_memory.application.host import (
     ConfigureHostCommand,
     ConfigureHostResult,
@@ -86,6 +90,7 @@ DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 TOKEN_ESTIMATE_CHARS = 4
 SetupProjectCommandHandler = Callable[[Path], SetupProjectResult]
 StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
+DoctorCommandHandler = Callable[[DoctorCommand], DoctorResult]
 ContextCommandHandler = Callable[[AssembleContextSummaryCommand], AssembleContextSummaryResult]
 RememberCommandHandler = Callable[[RememberFactCommand], RememberFactResult]
 ListFactsCommandHandler = Callable[[ListFactsCommand], ListFactsResult]
@@ -115,6 +120,7 @@ def _missing_use_case(_command: Any) -> Any:
 class MCPUseCases:
     status: StatusCommandHandler
     context: ContextCommandHandler
+    doctor: DoctorCommandHandler = _missing_use_case
     initialize_project: SetupProjectCommandHandler = _missing_use_case
     remember: RememberCommandHandler = _missing_use_case
     list_facts: ListFactsCommandHandler = _missing_use_case
@@ -183,6 +189,15 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="status", scope="project")
+
+    @server.tool(name="doctor")
+    def doctor() -> ToolResponse:
+        """Run read-only environment diagnostics for Universal Memory."""
+        try:
+            result = use_cases.doctor(DoctorCommand(project_root=root))
+            return _doctor_success_envelope(result)
+        except Exception as error:
+            return _mcp_tool_error(error, operation="doctor", scope="environment")
 
     @server.tool(name="context")
     def context(
@@ -669,18 +684,30 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
         return {
             "initialized": False,
             "project_path": result.project_path,
+            "installed_version": result.installed_version,
             "recommended_action": result.recommended_action,
         }
 
     return {
         "initialized": True,
         "project_path": result.project_path,
+        "installed_version": result.installed_version,
         "fact_counts": result.fact_counts,
         "active_rules_count": result.active_rules_count,
         "registered_skills_count": result.registered_skills_count,
         "approximate_size_bytes": result.approximate_size_bytes,
         "last_health_check": result.last_health_check,
         "host_validation": result.host_validation,
+    }
+
+
+def _doctor_success_envelope(result: DoctorResult) -> dict[str, Any]:
+    return {
+        "ok": result.ok,
+        "operation": "doctor",
+        "scope": "environment",
+        "data": result.to_payload(),
+        "warnings": [],
     }
 
 
