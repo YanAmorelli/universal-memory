@@ -106,6 +106,7 @@ CONTRACT_KEYS_BY_TOOL = {
     "status": {
         "initialized",
         "project_path",
+        "installed_version",
         "fact_counts",
         "active_rules_count",
         "registered_skills_count",
@@ -232,6 +233,7 @@ CONTRACT_TYPES_BY_TOOL = {
     "status": {
         "initialized": bool,
         "project_path": str,
+        "installed_version": str,
         "fact_counts": dict,
         "active_rules_count": int,
         "registered_skills_count": int,

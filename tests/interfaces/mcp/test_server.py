@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from fastmcp import FastMCP
 
+from universal_memory import __version__
 from universal_memory.__main__ import main
 from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
 from universal_memory.application.host.sync_instructions_use_case import (
@@ -354,6 +355,7 @@ async def test_status_tool_uses_injected_use_case_and_matches_cli_json_contract(
             },
             "active_rules_count": 2,
             "registered_skills_count": 3,
+            "installed_version": __version__,
             "approximate_size_bytes": 42,
             "last_health_check": "2026-05-27T20:00:00Z",
             "host_validation": {

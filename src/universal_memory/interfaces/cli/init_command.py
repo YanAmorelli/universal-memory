@@ -16,6 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from universal_memory import __version__
 from universal_memory.application.host import (
     ConfigureHostCommand,
     ConfigureHostResult,
@@ -287,6 +288,12 @@ def main(  # noqa: PLR0913
     return 0
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"umem {__version__}")
+        raise typer.Exit()
+
+
 def create_typer_app(  # noqa: PLR0913, PLR0915
     *,
     setup_project_command: SetupProjectCommand | None = None,
@@ -332,6 +339,15 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @app.callback()
     def callback(
         ctx: typer.Context,
+        version: Annotated[
+            bool,
+            typer.Option(
+                "--version",
+                help="Show installed version and exit.",
+                callback=_version_callback,
+                is_eager=True,
+            ),
+        ] = False,
         output_format: Annotated[
             str,
             typer.Option(
@@ -343,6 +359,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             ),
         ] = "human",
     ) -> None:
+        _ = version
         ctx.obj = {"output_format": output_format.lower()}
 
     @app.command("init")
@@ -2845,12 +2862,14 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
         return {
             "initialized": False,
             "project_path": result.project_path,
+            "installed_version": result.installed_version,
             "recommended_action": result.recommended_action,
         }
 
     return {
         "initialized": True,
         "project_path": result.project_path,
+        "installed_version": result.installed_version,
         "fact_counts": result.fact_counts,
         "active_rules_count": result.active_rules_count,
         "registered_skills_count": result.registered_skills_count,
@@ -2936,6 +2955,7 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
             [
                 "Local memory is not initialized.",
                 f"Project: {result.project_path}",
+                f"Installed version: {result.installed_version}",
                 f"Next action: {result.recommended_action}",
             ]
         )
@@ -2943,6 +2963,7 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
     lines = [
         "Local memory initialized.",
         f"Project: {result.project_path}",
+        f"Installed version: {result.installed_version}",
         f"Approximate size: {result.approximate_size_bytes} bytes",
         f"Last health check: {result.last_health_check}",
         f"Active rules: {result.active_rules_count}",

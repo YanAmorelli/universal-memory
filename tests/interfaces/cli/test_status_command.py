@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from universal_memory import __version__
 from universal_memory.__main__ import main
 from universal_memory.application.memory import GetMemoryStatusCommand, GetMemoryStatusResult
 from universal_memory.interfaces.cli import main as cli_main
@@ -68,6 +69,7 @@ def test_status_json_outputs_pure_success_envelope(
         "data": {
             "initialized": True,
             "project_path": ".",
+            "installed_version": __version__,
             "fact_counts": {
                 "global": {"active": 0, "stale": 0, "archived": 0, "purged": 0},
                 "project": {"active": 1, "stale": 0, "archived": 0, "purged": 0},
@@ -119,6 +121,7 @@ def test_status_uninitialized_json_includes_recommended_action(
     assert payload["data"] == {
         "initialized": False,
         "project_path": ".",
+        "installed_version": __version__,
         "recommended_action": "Run umem init from the project root.",
     }
 
@@ -133,6 +136,7 @@ def test_status_human_output_summarizes_health(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "Local memory initialized." in captured.out
+    assert f"Installed version: {__version__}" in captured.out
     assert "Facts by scope/status" in captured.out
     assert "project active: 1" in captured.out
     assert "Active rules: 2" in captured.out
@@ -168,3 +172,14 @@ def test_status_bootstrap_uses_local_data_and_no_network(
 def test_cli_adapter_requires_composed_status_dependency() -> None:
     with pytest.raises(RuntimeError, match="status_command"):
         cli_main(["status"])
+
+
+def test_root_version_option_outputs_installed_version(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli_main(["--version"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == f"umem {__version__}\n"
+    assert captured.err == ""

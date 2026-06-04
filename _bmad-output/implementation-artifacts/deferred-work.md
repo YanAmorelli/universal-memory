@@ -79,3 +79,6 @@
 - Tratamento estético de ValidationError do Pydantic na CLI: A CLI repassa o string do ValidationError cru, que é feio/verboso, mas não quebra funcionalidade. [src/universal_memory/interfaces/cli/init_command.py:501-504]
 - Tratamento de caminhos quando project_root é resolved para /: Se o root do projeto for /, substituições de caminho podem corromper caminhos relativos, mas a raiz nunca será / em ambientes de desenvolvimento reais dos usuários. [src/universal_memory/application/skills/generate_skill.py:249]
 
+## Deferred from: code review of spec-cli-version-status.md (2026-06-04)
+
+- Version fallback is hardcoded when package metadata is unavailable. The fallback in `src/universal_memory/__init__.py` still reports `0.1.0` while `pyproject.toml` declares `0.1.1`; this is pre-existing, but the new `--version`/status feature makes the fallback more visible.

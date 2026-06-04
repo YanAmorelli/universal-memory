@@ -669,12 +669,14 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
         return {
             "initialized": False,
             "project_path": result.project_path,
+            "installed_version": result.installed_version,
             "recommended_action": result.recommended_action,
         }
 
     return {
         "initialized": True,
         "project_path": result.project_path,
+        "installed_version": result.installed_version,
         "fact_counts": result.fact_counts,
         "active_rules_count": result.active_rules_count,
         "registered_skills_count": result.registered_skills_count,
