@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+from universal_memory.application.diagnostics import DoctorCheck, DoctorResult
 from universal_memory.application.host import ConfigureHostResult, SyncInstructionsResult
 from universal_memory.application.memory import (
     AssembleContextSummaryResult,
@@ -65,6 +66,7 @@ FACT_ID = "11111111-1111-4111-8111-111111111111"
 PUBLIC_MCP_TOOLS = {
     "initialize_project": {},
     "status": {},
+    "doctor": {},
     "context": {},
     "remember_fact": {"content": "Use respostas concisas."},
     "list_facts": {},
@@ -106,6 +108,7 @@ CONTRACT_KEYS_BY_TOOL = {
     "status": {
         "initialized",
         "project_path",
+        "installed_version",
         "fact_counts",
         "active_rules_count",
         "registered_skills_count",
@@ -113,6 +116,7 @@ CONTRACT_KEYS_BY_TOOL = {
         "last_health_check",
         "host_validation",
     },
+    "doctor": {"checks", "summary"},
     "context": {
         "project_summary",
         "universal_preferences",
@@ -232,12 +236,17 @@ CONTRACT_TYPES_BY_TOOL = {
     "status": {
         "initialized": bool,
         "project_path": str,
+        "installed_version": str,
         "fact_counts": dict,
         "active_rules_count": int,
         "registered_skills_count": int,
         "approximate_size_bytes": int,
         "last_health_check": str,
         "host_validation": dict,
+    },
+    "doctor": {
+        "checks": list,
+        "summary": dict,
     },
     "context": {
         "project_summary": str,
@@ -479,6 +488,7 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
     return MCPUseCases(
         initialize_project=lambda _project_root: setup_result(root),
         status=lambda _command: status_result(),
+        doctor=lambda _command: doctor_result(),
         context=lambda _command: context_result(),
         remember=lambda _command: RememberFactResult(
             fact=fact_fixture(),
@@ -690,6 +700,18 @@ def status_result() -> GetMemoryStatusResult:
         last_health_check="2026-05-28T12:00:00Z",
         host_validation={},
         recommended_action=None,
+    )
+
+
+def doctor_result() -> DoctorResult:
+    return DoctorResult(
+        checks=[
+            DoctorCheck(
+                name="python_version",
+                status="success",
+                detail="Python 3.12.13",
+            )
+        ]
     )
 
 

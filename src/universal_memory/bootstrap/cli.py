@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from universal_memory.application.diagnostics import DoctorUseCase
 from universal_memory.application.host import (
     ConfigureHostUseCase,
     SyncInstructionsUseCase,
@@ -176,6 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         safe_write_use_case=safe_write_use_case,
         fact_repository=fact_repository,
     )
+    doctor_use_case = DoctorUseCase(host_check_command=host_use_case.execute)
     host_sync_use_case = SyncInstructionsUseCase(
         project_root=project_root,
         safe_write_use_case=safe_write_use_case,
@@ -262,6 +264,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         rollback_command=rollback_use_case.execute,
         rollback_preview_command=rollback_preview,
         status_command=status_use_case.execute,
+        doctor_command=doctor_use_case.execute,
         context_command=context_use_case.execute,
         remember_command=remember_use_case.execute,
         facts_list_command=facts_list_use_case.execute,

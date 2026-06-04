@@ -1,711 +1,711 @@
 # Alpha Bug Log
 
-## Objetivo
+## Objective
 
-Este arquivo centraliza os bugs encontrados durante a fase de alpha testing do `universal-memory`.
+This file centralizes the bugs found during the alpha testing phase of `universal-memory`.
 
-Uso combinado sugerido:
+Suggested combined usage:
 
-- registrar novos bugs aqui assim que forem observados;
-- investigar bugs ambíguos com `bmad-investigate`;
-- corrigir bugs pequenos com `bmad-quick-dev`;
-- corrigir bugs ligados a story/sprint com `bmad-dev-story` ou fluxo normal de story.
+- register new bugs here as soon as they are observed;
+- investigate ambiguous bugs with `bmad-investigate`;
+- fix small bugs with `bmad-quick-dev`;
+- fix bugs linked to story/sprint with `bmad-dev-story` or the normal story workflow.
 
 ## Status
 
-- `open`: bug confirmado e ainda nao corrigido
-- `investigating`: bug em analise
-- `blocked`: depende de decisao ou contexto externo
-- `fixed`: correcao aplicada
-- `verified`: correcao validada manualmente ou por teste relevante
-- `deferred`: bug conhecido, mas adiado
+- `open`: bug confirmed and not yet fixed
+- `investigating`: bug under analysis
+- `blocked`: depends on external decision or context
+- `fixed`: correction applied
+- `verified`: correction validated manually or by a relevant test
+- `deferred`: known bug, but deferred
 
-## Severidade
+## Severity
 
-- `high`: bloqueia onboarding, quebra fluxo principal ou compromete confianca basica
-- `medium`: nao bloqueia tudo, mas causa falha relevante, UX ruim ou comportamento inconsistente
-- `low`: aresta menor, cosmetica ou melhoria de ergonomia
+- `high`: blocks onboarding, breaks main workflow, or compromises basic trust
+- `medium`: does not block everything, but causes a relevant failure, poor UX, or inconsistent behavior
+- `low`: minor rough edge, cosmetic issue, or ergonomics improvement
 
 ## Template
 
 ```md
-## BUG-XXX - Titulo curto
+## BUG-XXX - Short title
 
 - Status: verified
-- Severidade: medium
-- Superficie: CLI | MCP | Packaging | Docs | Global State | Host Setup
-- Encontrado em: 2026-05-29
-- Contexto: onde e como apareceu
+- Severity: medium
+- Surface: CLI | MCP | Packaging | Docs | Global State | Host Setup
+- Found on: 2026-05-29
+- Context: where and how it appeared
 
-### Reproducao
+### Reproduction
 
-1. passo 1
-2. passo 2
-3. passo 3
+1. step 1
+2. step 2
+3. step 3
 
-### Esperado
+### Expected
 
-- comportamento esperado
+- expected behavior
 
-### Obtido
+### Obtained
 
-- comportamento observado
+- observed behavior
 
-### Evidencias
+### Evidence
 
-- caminhos de arquivo
-- output relevante
-- auditoria relevante
+- file paths
+- relevant output
+- relevant audit
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- preencher quando houver
+- fill in when available
 
-### Correcao
+### Fix
 
-- preencher quando corrigido
+- fill in when fixed
 
-### Verificacao
+### Verification
 
-- testes executados
-- validacao manual
+- tests run
+- manual validation
 ```
 
 ## Bugs
 
-## BUG-001 - `CLAUDE.md` gerado nao satisfaz o proprio validador de claude_code
+## BUG-001 - Generated `CLAUDE.md` does not satisfy the validator of `claude_code` itself
 
 - Status: verified
-- Severidade: high
-- Superficie: Host Setup
-- Encontrado em: 2026-05-29
-- Contexto: durante smoke test manual em projeto limpo, `umem init` configurou `claude_code`, mas o `umem status` retornou falha para esse host.
+- Severity: high
+- Surface: Host Setup
+- Found on: 2026-05-29
+- Context: during manual smoke test in a clean project, `umem init` configured `claude_code`, but `umem status` returned failure for this host.
 
-### Reproducao
+### Reproduction
 
-1. criar uma pasta vazia
-2. rodar `umem init`
-3. aceitar configuracao de `claude_code`
-4. rodar `umem status`
+1. create an empty folder
+2. run `umem init`
+3. accept the configuration of `claude_code`
+4. run `umem status`
 
-### Esperado
+### Expected
 
-- `claude_code` configurado com status `success`
-- `CLAUDE.md` gerado em conformidade com a validacao do host
+- `claude_code` configured with status `success`
+- `CLAUDE.md` generated in compliance with the host validation
 
-### Obtido
+### Obtained
 
-- `claude_code` aparece com status `failure`
-- a validacao acusa ausencia de referencia a `universal-memory`, `MCP/FastMCP` ou comandos como `umem context/status`
+- `claude_code` appears with status `failure`
+- validation indicates the absence of reference to `universal-memory`, `MCP/FastMCP` or commands like `umem context/status`
 
-### Evidencias
+### Evidence
 
-- projeto de teste: `/Users/amorelliaoyan/projects/smart-studio/app`
-- arquivo: `/Users/amorelliaoyan/projects/smart-studio/app/CLAUDE.md`
-- auditoria: `4bba24fd-48e4-4dfd-812f-6e60136e1f70`
-- auditoria apos reinstalacao limpa: `996761b9-5258-478c-a979-667fcea58476`
-- evento: `host_validation.claude_code`
-- metodo: `claude_md_delta_validator`
+- test project: `/Users/amorelliaoyan/projects/smart-studio/app`
+- file: `/Users/amorelliaoyan/projects/smart-studio/app/CLAUDE.md`
+- audit: `4bba24fd-48e4-4dfd-812f-6e60136e1f70`
+- audit after clean reinstall: `996761b9-5258-478c-a979-667fcea58476`
+- event: `host_validation.claude_code`
+- method: `claude_md_delta_validator`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- o renderer de `CLAUDE.md` gera um bloco minimo sem referencia MCP quando nao ha deltas especificos
-- o validador exige essa referencia sempre
-- ha inconsistencia entre geracao e validacao
+- the `CLAUDE.md` renderer generates a minimal block without MCP reference when there are no specific deltas
+- the validator always requires this reference
+- there is an inconsistency between generation and validation
 
-### Correcao
+### Fix
 
-- `CLAUDE.md` gerado para `claude_code` agora inclui uma referencia operacional fixa a `universal-memory`, `umem context`, `umem status` e MCP/FastMCP no bloco UMEM gerenciado.
-- Adicionado teste de regressao cobrindo setup de `claude_code` sem deltas seguido de `check=True` com sucesso.
+- `CLAUDE.md` generated for `claude_code` now includes a fixed operational reference to `universal-memory`, `umem context`, `umem status` and MCP/FastMCP in the managed UMEM block.
+- Added regression test covering `claude_code` setup without deltas followed by successful `check=True`.
 
-### Verificacao
+### Verification
 
 - `uv run pytest tests/application/test_setup_host.py` -> 15 passed
-- smoke em sandbox temporaria: `uv --project /Users/amorelliaoyan/projects/personal/lab/universal-memory run umem init --hosts claude_code --yes --format json` -> `validation_status: success`
-- smoke em sandbox temporaria: `uv --project /Users/amorelliaoyan/projects/personal/lab/universal-memory run umem status --format json` -> `host_validation.claude_code.status: success`
+- smoke in temporary sandbox: `uv --project /Users/amorelliaoyan/projects/personal/lab/universal-memory run umem init --hosts claude_code --yes --format json` -> `validation_status: success`
+- smoke in temporary sandbox: `uv --project /Users/amorelliaoyan/projects/personal/lab/universal-memory run umem status --format json` -> `host_validation.claude_code.status: success`
 - `uv run pytest` -> 386 passed
 
-## BUG-003 - Mensagem de `umem skills list` sem skills sugere comando pouco acionavel
+## BUG-003 - `umem skills list` message when no skills exist suggests a barely actionable command
 
 - Status: verified
-- Severidade: low
-- Superficie: CLI
-- Encontrado em: 2026-05-29
-- Contexto: durante smoke test em projeto limpo, `umem skills list` retornou estado vazio com uma sugestao que exige um `latent_skill_id` que o usuario ainda nao tem.
+- Severity: low
+- Surface: CLI
+- Found on: 2026-05-29
+- Context: during smoke test in a clean project, `umem skills list` returned an empty state with a suggestion that requires a `latent_skill_id` that the user does not have yet.
 
-### Reproducao
+### Reproduction
 
-1. criar projeto limpo
-2. rodar `umem init`
-3. rodar `umem skills list`
+1. create a clean project
+2. run `umem init`
+3. run `umem skills list`
 
-### Esperado
+### Expected
 
-- mensagem orientar um proximo passo executavel por um usuario sem skills registradas
-- exemplo: explicar como latent skills surgem ou sugerir um fluxo anterior que gere/proponha uma candidata
+- message should guide the user to an executable next step without registered skills
+- example: explain how latent skills arise or suggest an earlier workflow that generates/proposes a candidate
 
-### Obtido
+### Obtained
 
-- `Nenhuma skill registrada.`
-- `Execute `umem skills propose <latent_skill_id>` para revisar uma skill candidata.`
+- `No skills registered.`
+- `Run `umem skills propose <latent_skill_id>` to review a candidate skill.`
 
-### Evidencias
+### Evidence
 
-- projeto de teste: `/Users/amorelliaoyan/projects/smart-studio/app`
-- comando: `umem skills list`
+- test project: `/Users/amorelliaoyan/projects/smart-studio/app`
+- command: `umem skills list`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- a mensagem assume que ja existe uma latent skill candidata conhecida, mas no onboarding limpo nao existe ID disponivel para o usuario
+- the message assumes a known candidate latent skill already exists, but in a clean onboarding there is no ID available to the user
 
-### Correcao
+### Fix
 
-- A recomendacao padrao do estado vazio de `umem skills list` agora explica que latent skills aparecem quando o `universal-memory` registra padroes recorrentes.
-- A mensagem sugere um proximo passo executavel sem exigir ID inexistente: continuar registrando memoria com `umem remember "..."` e rodar `umem skills list` novamente para acompanhar as skills quando uma candidata aparecer.
-- Testes de application e CLI foram atualizados para proteger contra a reintroducao da sugestao direta de `umem skills propose <latent_skill_id>` no estado vazio.
+- The default recommendation for the empty state of `umem skills list` now explains that latent skills appear when `universal-memory` records recurring patterns.
+- The message suggests an executable next step without requiring a non-existent ID: continue recording memory with `umem remember "..."` and run `umem skills list` again to track skills when a candidate appears.
+- Application and CLI tests were updated to protect against the reintroduction of the direct suggestion of `umem skills propose <latent_skill_id>` in the empty state.
 
-### Verificacao
+### Verification
 
 - `uv run pytest tests/application/skills/test_list_skills.py tests/interfaces/cli/test_skills_list.py` -> 10 passed
 
-## BUG-002 - Estrategia de armazenamento global usa caminhos diferentes por tipo de dado
+## BUG-002 - Global storage strategy uses different paths by data type
 
 - Status: verified
-- Severidade: medium
-- Superficie: Global State
-- Encontrado em: 2026-05-29
-- Contexto: ao inspecionar o estado global no macOS, ficou evidente que config, facts/rules e latent skills usam raizes globais diferentes.
+- Severity: medium
+- Surface: Global State
+- Found on: 2026-05-29
+- Context: when inspecting the global state on macOS, it became clear that config, facts/rules, and latent skills use different global roots.
 
-### Reproducao
+### Reproduction
 
-1. inspecionar o codigo dos repositórios locais e do loader de config
-2. comparar os caminhos globais usados por config, facts, rules e skills
+1. inspect the code of local repositories and the config loader
+2. compare the global paths used by config, facts, rules, and skills
 
-### Esperado
+### Expected
 
-- estrategia global consistente e previsivel para todos os tipos de armazenamento
+- consistent and predictable global strategy for all storage types
 
-### Obtido
+### Obtained
 
-- config global em `~/.config/universal-memory/config.toml`
-- facts e rules globais em `~/.umem/`
-- latent skills globais em `~/.local/share/universal-memory/`
+- global config in `~/.config/universal-memory/config.toml`
+- global facts and rules in `~/.umem/`
+- global latent skills in `~/.local/share/universal-memory/`
 
-### Evidencias
+### Evidence
 
 - `src/universal_memory/infrastructure/config/toml_loader.py`
 - `src/universal_memory/infrastructure/storage/local_fact_repository.py`
 - `src/universal_memory/infrastructure/storage/local_rule_repository.py`
 - `src/universal_memory/infrastructure/storage/local_latent_skill_repository.py`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- a evolucao incremental do projeto deixou convencoes globais diferentes entre subsistemas
+- the incremental evolution of the project left different global conventions between subsystems
 
-### Correcao
+### Fix
 
-- Config global padrao movida para `~/.config/umem/config.toml`.
-- Facts, rules e latent skills globais agora usam `~/.local/share/umem/memory/`.
-- Escritas globais via SafeWrite para facts/rules agora usam a raiz XDG de dados, preservando `.umem/memory/*` apenas para escopo de projeto.
-- Testes de regressao cobrem os caminhos globais XDG com nome `umem`.
+- Default global config moved to `~/.config/umem/config.toml`.
+- Global facts, rules, and latent skills now use `~/.local/share/umem/memory/`.
+- Global writes via SafeWrite for facts/rules now use the XDG data root, preserving `.umem/memory/*` only for project scope.
+- Regression tests cover XDG global paths with the name `umem`.
 
-### Verificacao
+### Verification
 
 - `uv run pytest tests/infrastructure/config/test_toml_loader.py tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_rule_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py tests/interfaces/cli/test_skills_propose.py` -> 44 passed
-- `uv run pytest tests/infrastructure/security/test_local_audit_log_repository.py::test_concurrent_writes_preserve_all_jsonl_events` -> 1 passed apos falha concorrente transiente na primeira suite completa
+- `uv run pytest tests/infrastructure/security/test_local_audit_log_repository.py::test_concurrent_writes_preserve_all_jsonl_events` -> 1 passed after transient concurrent failure in the first complete suite run
 - `uv run pytest` -> 390 passed
 
-## BUG-004 - Rollback falha quando o snapshot representa arquivo inexistente antes da mutacao
+## BUG-004 - Rollback fails when the snapshot represents a non-existent file before the mutation
 
 - Status: verified
-- Severidade: high
-- Superficie: CLI | MCP | Snapshots | Rollback
-- Encontrado em: 2026-05-29
-- Contexto: durante execucao do plano `docs/alpha-sandbox-test-plan.md`, rollback em sandbox recem-inicializado falhou apos criar o primeiro fato do projeto.
+- Severity: high
+- Surface: CLI | MCP | Snapshots | Rollback
+- Found on: 2026-05-29
+- Context: during the execution of the plan `docs/alpha-sandbox-test-plan.md`, rollback in a newly initialized sandbox failed after creating the project's first fact.
 
-### Reproducao
+### Reproduction
 
-1. criar sandbox limpo com `HOME`, `XDG_CONFIG_HOME` e `XDG_DATA_HOME` isolados
-2. rodar `uv run --project <repo> umem init --yes --format json`
-3. rodar `uv run --project <repo> umem remember "Fato antes do rollback." --scope project --format json`
-4. rodar `uv run --project <repo> umem rollback --scope project --yes --format json`
+1. create a clean sandbox with isolated `HOME`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME`
+2. run `uv run --project <repo> umem init --yes --format json`
+3. run `uv run --project <repo> umem remember "Fato antes do rollback." --scope project --format json`
+4. run `uv run --project <repo> umem rollback --scope project --yes --format json`
 
-### Esperado
+### Expected
 
-- rollback usa o snapshot mais recente
-- `.umem/memory/facts.jsonl` volta ao estado anterior esperado
-- evento de rollback aparece no audit log com sucesso
+- rollback uses the most recent snapshot
+- `.umem/memory/facts.jsonl` returns to the expected previous state
+- rollback event appears successfully in the audit log
 
-### Obtido
+### Obtained
 
-- rollback retorna erro de armazenamento
-- mensagem: `Snapshot backup file not found: <snapshot-id>`
-- arquivo de memoria continua com o fato ativo
-- audit log registra `rollback` com `result=failure`
+- rollback returns a storage error
+- message: `Snapshot backup file not found: <snapshot-id>`
+- memory file still has the active fact
+- audit log records `rollback` with `result=failure`
 
-### Evidencias
+### Evidence
 
-- sandbox observado: `/tmp/umem-rollback.0RhTdN/project`
-- erro CLI: `Snapshot backup file not found: cdedaf37-f300-4cf9-a4ed-a94d38092a39`
-- manifest registra snapshot `write_fact` para `.umem/memory/facts.jsonl`
-- diretorio `.umem/snapshots/files/` estava vazio no caso em que o arquivo nao existia antes da primeira escrita
-- mesmo sintoma apareceu via MCP em `rollback_scope(scope="project", confirm=true)`: `Snapshot backup file not found: 27f1cf91-3c5f-44e5-870f-43cb271f7c27`
+- observed sandbox: `/tmp/umem-rollback.0RhTdN/project`
+- CLI error: `Snapshot backup file not found: cdedaf37-f300-4cf9-a4ed-a94d38092a39`
+- manifest registers `write_fact` snapshot for `.umem/memory/facts.jsonl`
+- `.umem/snapshots/files/` directory was empty in the case where the file did not exist before the first write
+- the same symptom appeared via MCP in `rollback_scope(scope="project", confirm=true)`: `Snapshot backup file not found: 27f1cf91-3c5f-44e5-870f-43cb271f7c27`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- `SafeWriteUseCase` cria snapshot com hash de `previous_bytes=b""` quando o arquivo alvo ainda nao existe
-- `LocalSnapshotRepository._copy_current_file()` retorna `None` quando o arquivo fonte nao existe e nao cria backup fisico vazio em `.umem/snapshots/files/<snapshot-id>`
-- `RollbackUseCase` sempre chama `snapshot_repository.get_content(snapshot.id)`, entao snapshots sem arquivo fisico nao sao restauraveis
+- `SafeWriteUseCase` creates a snapshot with hash of `previous_bytes=b""` when the target file does not yet exist
+- `LocalSnapshotRepository._copy_current_file()` returns `None` when the source file does not exist and does not create a physical empty backup in `.umem/snapshots/files/<snapshot-id>`
+- `RollbackUseCase` always calls `snapshot_repository.get_content(snapshot.id)`, so snapshots without a physical file are not restorable
 
-### Correcao
+### Fix
 
-- `Snapshot` agora registra `previous_file_existed`, permitindo distinguir estado anterior ausente de arquivo existente vazio.
-- `SafeWriteUseCase` preenche esse metadado antes de criar o snapshot.
-- `RollbackUseCase` remove o arquivo alvo quando o snapshot representa ausencia anterior; snapshots normais continuam exigindo backup fisico e validacao SHA-256.
-- Rollback valida hash vazio antes de remover arquivo criado e trata snapshots legados sem `previous_file_existed` quando o backup fisico esta ausente e o hash e de conteudo vazio.
-- Testes de application, infraestrutura, CLI e MCP cobrem rollback apos primeira mutacao em sandbox limpo, manifesto legado e rejeicao de hash inconsistente.
+- `Snapshot` now records `previous_file_existed`, allowing to distinguish absent previous state from empty existing file.
+- `SafeWriteUseCase` populates this metadata before creating the snapshot.
+- `RollbackUseCase` removes the target file when the snapshot represents previous absence; normal snapshots continue to require physical backup and SHA-256 validation.
+- Rollback validates empty hash before removing a created file and handles legacy snapshots without `previous_file_existed` when the physical backup is absent and the hash is of empty content.
+- Application, infrastructure, CLI, and MCP tests cover rollback after first mutation in a clean sandbox, legacy manifest, and inconsistent hash rejection.
 
-### Verificacao
+### Verification
 
 - `uv run pytest tests/application/security/test_rollback_use_case.py tests/infrastructure/security/test_local_snapshot_repository.py tests/interfaces/cli/test_rollback_command.py tests/interfaces/mcp/test_server.py::test_real_mcp_rollback_removes_file_created_by_first_remember` -> 27 passed
-- smoke CLI em sandbox isolado: `umem init`, `umem remember "Fato antes do rollback." --scope project`, `umem rollback --scope project --yes --format json`, seguido de `test ! -e .umem/memory/facts.jsonl` -> rollback `ok=true`
-- teste MCP real com `initialize_project`, `remember_fact` e `rollback_scope(scope="project", confirm=true)` -> rollback `ok=true` e arquivo removido
+- smoke CLI in isolated sandbox: `umem init`, `umem remember "Fato antes do rollback." --scope project`, `umem rollback --scope project --yes --format json`, followed by `test ! -e .umem/memory/facts.jsonl` -> rollback `ok=true`
+- real MCP test with `initialize_project`, `remember_fact` and `rollback_scope(scope="project", confirm=true)` -> rollback `ok=true` and file removed
 - `uv run pytest` -> 395 passed
 
-## BUG-005 - Erros MCP nao preservam envelope uniforme com `operation`, `scope` e `warnings`
+## BUG-005 - MCP errors do not preserve uniform envelope with `operation`, `scope` and `warnings`
 
 - Status: verified
-- Severidade: medium
-- Superficie: MCP
-- Encontrado em: 2026-05-29
-- Contexto: durante teste black-box MCP via `stdio` com cliente FastMCP real, erros controlados retornaram payload parcial diferente do envelope exigido pelo plano.
+- Severity: medium
+- Surface: MCP
+- Found on: 2026-05-29
+- Context: during black-box MCP test via `stdio` with a real FastMCP client, controlled errors returned a partial payload different from the envelope required by the plan.
 
-### Reproducao
+### Reproduction
 
-1. subir `umem-mcp` via cliente MCP em sandbox limpo
-2. inicializar projeto com `initialize_project`
-3. criar/listar um fato para obter `id`
-4. chamar `purge_fact(id=<id>, confirm=false)`
+1. start `umem-mcp` via MCP client in a clean sandbox
+2. initialize project with `initialize_project`
+3. create/list a fact to obtain `id`
+4. call `purge_fact(id=<id>, confirm=false)`
 
-### Esperado
+### Expected
 
-- toda resposta MCP segue envelope com `ok`, `operation`, `scope`, `data`, `warnings`
-- erros destrutivos sem confirmacao retornam erro controlado mantendo metadados de operacao e escopo
+- all MCP responses follow an envelope with `ok`, `operation`, `scope`, `data`, `warnings`
+- destructive errors without confirmation return a controlled error keeping operation and scope metadata
 
-### Obtido
+### Obtained
 
-- erro retorna apenas `ok=false` e `error`
-- faltam `operation`, `scope` e `warnings`
-- mesmo padrao apareceu em erros de `rollback_scope`, `activate_skill` e `update_skill`
+- error returns only `ok=false` and `error`
+- `operation`, `scope`, and `warnings` are missing
+- same pattern appeared in errors from `rollback_scope`, `activate_skill`, and `update_skill`
 
-### Evidencias
+### Evidence
 
-- sandbox observado: `/tmp/umem-mcp.TgpvXe/project`
-- chamada: `purge_fact(id=<id>, confirm=false)`
-- payload observado: chaves `error`, `ok`
-- erro: `Validation failed.`, detalhe `Purging facts is destructive and requires explicit confirmation. Please call this tool with confirm=True.`
-- sandbox adicional: `/tmp/umem-mcp2.pDb3Xp/project`
-- `rollback_scope` com falha tambem retornou apenas `error`, `ok`
+- observed sandbox: `/tmp/umem-mcp.TgpvXe/project`
+- call: `purge_fact(id=<id>, confirm=false)`
+- observed payload: keys `error`, `ok`
+- error: `Validation failed.`, detail `Purging facts is destructive and requires explicit confirmation. Please call this tool with confirm=True.`
+- additional sandbox: `/tmp/umem-mcp2.pDb3Xp/project`
+- failed `rollback_scope` also returned only `error`, `ok`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- tratamento de excecoes MCP monta envelope de erro JSON-RPC sem preencher os campos comuns usados no envelope de sucesso
-- contrato de erro MCP nao esta alinhado ao contrato documentado no plano alpha
+- MCP exception handling builds a JSON-RPC error envelope without filling the common fields used in the success envelope
+- MCP error contract is not aligned with the contract documented in the alpha plan
 
-### Correcao
+### Fix
 
-- `_mcp_tool_error` agora preserva o envelope MCP uniforme tambem em falhas, preenchendo `ok=false`, `operation`, `scope`, `data`, `warnings` e `error`.
-- As tools MCP passam explicitamente a operacao e escopo esperado ao montar erros controlados, incluindo `purge_fact`, `rollback_scope`, `activate_skill` e `update_skill`.
-- Testes de regressao cobrem erros destrutivos sem confirmacao e erros de mutacao de skills mantendo `operation`, `scope` e `warnings`.
+- `_mcp_tool_error` now preserves the uniform MCP envelope in failures as well, filling in `ok=false`, `operation`, `scope`, `data`, `warnings`, and `error`.
+- MCP tools explicitly pass the expected operation and scope when building controlled errors, including `purge_fact`, `rollback_scope`, `activate_skill`, and `update_skill`.
+- Regression tests cover destructive errors without confirmation and skill mutation errors maintaining `operation`, `scope`, and `warnings`.
 
-### Verificacao
+### Verification
 
 - `uv run pytest tests/interfaces/mcp/test_server.py tests/interfaces/mcp/test_skills.py` -> 25 passed
 - `uv run pytest tests/interfaces/mcp` -> 29 passed
-- Validado por regressao automatizada que respostas de erro incluem `ok`, `operation`, `scope`, `data`, `warnings` e `error`.
+- Validated by automated regression that error responses include `ok`, `operation`, `scope`, `data`, `warnings`, and `error`.
 
-## BUG-006 - MCP permite mutacao antes de inicializacao e deixa layout `.umem` parcial
+## BUG-006 - MCP allows mutation before initialization and leaves a partial `.umem` layout
 
 - Status: verified
-- Severidade: high
-- Superficie: MCP | Onboarding | Storage
-- Encontrado em: 2026-05-29
-- Contexto: durante teste MCP black-box, uma chamada invalida de `initialize_project` seguida de mutacao (`remember_fact`) criou parte do layout `.umem`; depois `initialize_project` nao conseguiu reparar o estado parcial.
+- Severity: high
+- Surface: MCP | Onboarding | Storage
+- Found on: 2026-05-29
+- Context: during black-box MCP testing, an invalid call to `initialize_project` followed by mutation (`remember_fact`) created part of the `.umem` layout; afterwards, `initialize_project` could not repair the partial state.
 
-### Reproducao
+### Reproduction
 
-1. criar sandbox limpo para MCP
-2. chamar `initialize_project` com argumentos invalidos, por exemplo `yes` e `hosts`
-3. chamar `remember_fact(content="MCP grava fatos corretamente", scope="project", tags=["mcp"])`
-4. chamar `initialize_project` novamente sem argumentos
+1. create a clean sandbox for MCP
+2. call `initialize_project` with invalid arguments, for example `yes` and `hosts`
+3. call `remember_fact(content="MCP grava fatos corretamente", scope="project", tags=["mcp"])`
+4. call `initialize_project` again without arguments
 
-### Esperado
+### Expected
 
-- mutacoes antes de inicializacao sao bloqueadas com erro controlado sem criar layout parcial, ou
-- `initialize_project` repara/completa um layout parcial criado por operacoes anteriores
+- mutations before initialization are blocked with a controlled error without creating a partial layout, or
+- `initialize_project` repairs/completes a partial layout created by previous operations
 
-### Obtido
+### Obtained
 
-- `remember_fact` executa e cria estado parcial
-- chamada posterior de `initialize_project {}` falha com `storage_error`
-- detalhe: `Project layout '.umem' is partial or corrupted; missing canonical paths: .umem/config.toml, .umem/skills, .umem/benchmarks, .umem/benchmarks/retrieval-results.json`
+- `remember_fact` executes and creates a partial state
+- subsequent call to `initialize_project {}` fails with `storage_error`
+- detail: `Project layout '.umem' is partial or corrupted; missing canonical paths: .umem/config.toml, .umem/skills, .umem/benchmarks, .umem/benchmarks/retrieval-results.json`
 
-### Evidencias
+### Evidence
 
-- sandbox observado: `/tmp/umem-mcp.TgpvXe/project`
-- `initialize_project` com argumentos `yes` e `hosts` falhou por argumentos inesperados
-- `remember_fact` em seguida retornou `ok=true`
-- `initialize_project {}` depois retornou erro de layout parcial/corrompido
-- em sandbox MCP limpo, `initialize_project {}` funcionou corretamente, isolando o problema ao estado parcial criado antes do init
+- observed sandbox: `/tmp/umem-mcp.TgpvXe/project`
+- `initialize_project` with arguments `yes` and `hosts` failed due to unexpected arguments
+- `remember_fact` immediately after returned `ok=true`
+- `initialize_project {}` later returned a partial/corrupted layout error
+- in a clean MCP sandbox, `initialize_project {}` worked correctly, isolating the issue to the partial state created before init
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- tools MCP de mutacao nao exigem projeto inicializado antes de escrever em `.umem`
-- validacao/reparo de layout no onboarding trata layout parcial como corrupcao fatal em vez de completar caminhos canonicos ausentes
+- mutation MCP tools do not require the project to be initialized before writing to `.umem`
+- layout validation/repair in onboarding treats partial layout as fatal corruption instead of completing missing canonical paths
 
-### Correcao
+### Fix
 
-- Tools MCP de escopo `project` agora exigem projeto inicializado antes de acessar use cases que leem ou escrevem estado local.
-- A guarda usa `status(GetMemoryStatusCommand(project_root=...))` e retorna erro controlado com envelope MCP uniforme quando o layout ainda nao existe, orientando chamar `initialize_project` primeiro.
-- `initialize_project` e `status` continuam permitidos antes da inicializacao; operacoes `global` continuam disponiveis sem criar `.umem` do projeto.
-- Adicionado teste de regressao real para `remember_fact(scope="project")` antes de init, garantindo que `.umem` nao e criado parcialmente e que `initialize_project {}` posterior completa o layout canonico.
+- MCP tools with `project` scope now require the project to be initialized before accessing use cases that read or write local state.
+- The guard uses `status(GetMemoryStatusCommand(project_root=...))` and returns a controlled error with a uniform MCP envelope when the layout does not yet exist, guiding to call `initialize_project` first.
+- `initialize_project` and `status` remain allowed before initialization; `global` operations remain available without creating the project's `.umem`.
+- Added real regression test for `remember_fact(scope="project")` before init, ensuring that `.umem` is not partially created and that a subsequent `initialize_project {}` completes the canonical layout.
 
-### Verificacao
+### Verification
 
 - `uv run pytest tests/interfaces/mcp/test_server.py` -> 18 passed
 - `uv run pytest tests/interfaces/mcp` -> 30 passed
 - `uv run pytest` -> 397 passed
 
-## BUG-007 - Plano alpha usa argumentos incorretos para tools MCP de skills
+## BUG-007 - Alpha plan uses incorrect arguments for skill MCP tools
 
 - Status: verified
-- Severidade: low
-- Superficie: Docs | MCP | Skills
-- Encontrado em: 2026-05-30
-- Contexto: durante nova execucao black-box do plano `docs/alpha-sandbox-test-plan.md` com cliente FastMCP real via `stdio`, o fluxo MCP de skills falhou quando executado com argumentos inferidos do plano/CLI.
+- Severity: low
+- Surface: Docs | MCP | Skills
+- Found on: 2026-05-30
+- Context: during a new black-box execution of the plan `docs/alpha-sandbox-test-plan.md` with a real FastMCP client via `stdio`, the skill MCP workflow failed when executed with arguments inferred from the plan/CLI.
 
-### Reproducao
+### Reproduction
 
-1. criar sandbox isolado com `HOME`, `XDG_CONFIG_HOME` e `XDG_DATA_HOME`
-2. subir `umem-mcp` via cliente FastMCP real usando `uv run --project <repo> umem-mcp`
-3. inicializar projeto com `initialize_project`
-4. criar fixture valida em `.umem/memory/latent_skills.jsonl`
-5. chamar `get_skill_detail(latent_skill_id=<id>)`
-6. chamar `generate_skill(latent_skill_id=<id>, confirm=true)`
+1. create an isolated sandbox with `HOME`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME`
+2. start `umem-mcp` via a real FastMCP client using `uv run --project <repo> umem-mcp`
+3. initialize project with `initialize_project`
+4. create a valid fixture in `.umem/memory/latent_skills.jsonl`
+5. call `get_skill_detail(latent_skill_id=<id>)`
+6. call `generate_skill(latent_skill_id=<id>, confirm=true)`
 
-### Esperado
+### Expected
 
-- o plano alpha deve refletir os nomes reais dos argumentos MCP expostos pelo schema das tools
-- uma pessoa seguindo o plano nao deve precisar inferir diferencas entre CLI e MCP
+- the alpha plan should reflect the real names of the MCP arguments exposed by the tools' schemas
+- a person following the plan should not need to infer differences between CLI and MCP
 
-### Obtido
+### Obtained
 
-- `get_skill_detail` rejeita `latent_skill_id`; o argumento real e `name_or_id`
-- `generate_skill` rejeita `confirm`; a tool MCP real aceita `latent_skill_id` e `update_existing`
-- ao corrigir o fluxo para `get_skill_detail(name_or_id=<id>)` e `generate_skill(latent_skill_id=<id>)`, as tools passam com envelope MCP valido
+- `get_skill_detail` rejects `latent_skill_id`; the real argument is `name_or_id`
+- `generate_skill` rejects `confirm`; the real MCP tool accepts `latent_skill_id` and `update_existing`
+- when correcting the flow to `get_skill_detail(name_or_id=<id>)` and `generate_skill(latent_skill_id=<id>)`, the tools succeed with a valid MCP envelope
 
-### Evidencias
+### Evidence
 
-- sandbox MCP com falha por argumento: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-smoke.yvochg57/project`
-- erro observado em `get_skill_detail`: `Missing required argument name_or_id` e `Unexpected keyword argument latent_skill_id`
-- erro observado em `generate_skill`: `Unexpected keyword argument confirm`
-- codigo MCP: `src/universal_memory/interfaces/mcp/server.py`
-- assinaturas observadas: `get_skill_detail(name_or_id: str)` e `generate_skill(latent_skill_id: str, update_existing: bool = False)`
+- MCP sandbox failing due to argument: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-smoke.yvochg57/project`
+- observed error in `get_skill_detail`: `Missing required argument name_or_id` and `Unexpected keyword argument latent_skill_id`
+- observed error in `generate_skill`: `Unexpected keyword argument confirm`
+- MCP code: `src/universal_memory/interfaces/mcp/server.py`
+- observed signatures: `get_skill_detail(name_or_id: str)` and `generate_skill(latent_skill_id: str, update_existing: bool = False)`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- o plano alpha mistura o contrato CLI (`skills detail <id>`, `skills generate <id> --yes`) com o contrato MCP real
-- a documentacao do plano nao foi atualizada apos estabilizacao das assinaturas MCP de skills
+- the alpha plan mixes the CLI contract (`skills detail <id>`, `skills generate <id> --yes`) with the real MCP contract
+- the plan documentation was not updated after the stabilization of the skill MCP signatures
 
-### Correcao
+### Fix
 
-- `docs/alpha-sandbox-test-plan.md` atualizado para usar `get_skill_detail(name_or_id=<id>)` no fluxo MCP de skills.
-- `generate_skill` no fluxo MCP agora usa `generate_skill(latent_skill_id=<id>, update_existing=false)` e a validacao documenta que tools MCP nao devem reutilizar flags CLI como `--yes` ou `confirm`.
-- A sequencia MCP recomendada agora inclui explicitamente os passos de skills com os nomes de argumentos expostos pelo schema MCP real.
+- `docs/alpha-sandbox-test-plan.md` updated to use `get_skill_detail(name_or_id=<id>)` in the skill MCP workflow.
+- `generate_skill` in the MCP workflow now uses `generate_skill(latent_skill_id=<id>, update_existing=false)` and validation documents that MCP tools must not reuse CLI flags like `--yes` or `confirm`.
+- The recommended MCP sequence now explicitly includes the skill steps with argument names exposed by the real MCP schema.
 
-### Verificacao
+### Verification
 
-- fluxo corrigido validado via cliente FastMCP real em sandbox: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-skills.pmuawni_/project`
-- checks MCP de skills corrigidos: 19 passed, 0 failed
-- inspecao documental: `docs/alpha-sandbox-test-plan.md` agora referencia `get_skill_detail(name_or_id=<id>)` e `generate_skill(latent_skill_id=<id>, update_existing=false)`, sem `confirm` no fluxo MCP de skills.
+- corrected flow validated via a real FastMCP client in sandbox: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-skills.pmuawni_/project`
+- corrected skill MCP checks: 19 passed, 0 failed
+- document inspection: `docs/alpha-sandbox-test-plan.md` now references `get_skill_detail(name_or_id=<id>)` and `generate_skill(latent_skill_id=<id>, update_existing=false)`, without `confirm` in the skill MCP workflow.
 
-## BUG-008 - Plano alpha nao lista `deactivate_skill` entre tools MCP esperadas
-
-- Status: verified
-- Severidade: low
-- Superficie: Docs | MCP | Skills
-- Encontrado em: 2026-05-30
-- Contexto: durante nova execucao black-box do plano `docs/alpha-sandbox-test-plan.md`, o fluxo de skills MCP completo exigiu `deactivate_skill` para validar `generate -> deactivate -> activate -> update`, mas a lista de tools esperadas no plano omite essa tool.
-
-### Reproducao
-
-1. abrir `docs/alpha-sandbox-test-plan.md`
-2. verificar a secao `8. MCP Black-Box`
-3. comparar a lista de tools esperadas com as tools reais expostas pelo servidor MCP
-
-### Esperado
-
-- a lista de tools MCP do plano deve incluir todas as tools publicas relevantes para o fluxo alpha de skills
-- o fluxo MCP deve espelhar a cobertura CLI quando aplicavel
-
-### Obtido
-
-- a lista inclui `activate_skill` e `update_skill`, mas nao inclui `deactivate_skill`
-- `deactivate_skill` esta exposta pelo servidor MCP e passou no teste black-box corrigido
-
-### Evidencias
-
-- plano: `docs/alpha-sandbox-test-plan.md`, secao `8. MCP Black-Box`
-- codigo MCP: `src/universal_memory/interfaces/mcp/server.py`
-- tool real observada via `client.list_tools()`: `deactivate_skill`
-- validacao corrigida: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-skills.pmuawni_/project`
-
-### Hipotese / Causa Raiz
-
-- lacuna de documentacao no plano alpha apos introducao da tool MCP de desativacao de skills
-
-### Correcao
-
-- `deactivate_skill` adicionado a lista de tools MCP esperadas em `docs/alpha-sandbox-test-plan.md`.
-- O fluxo MCP de skills agora inclui explicitamente `deactivate_skill(latent_skill_id=<id>)` antes de `activate_skill(latent_skill_id=<id>)`.
-
-### Verificacao
-
-- fluxo corrigido com `deactivate_skill` validado via cliente FastMCP real: 19 passed, 0 failed
-- inspecao documental: `docs/alpha-sandbox-test-plan.md` lista `deactivate_skill` e inclui o passo `deactivate_skill(latent_skill_id=<id>)` antes de `activate_skill(latent_skill_id=<id>)`.
-
-## BUG-009 - Plano alpha usa `trigger` singular em `update_skill` MCP
+## BUG-008 - Alpha plan does not list `deactivate_skill` among expected MCP tools
 
 - Status: verified
-- Severidade: low
-- Superficie: Docs | MCP | Skills
-- Encontrado em: 2026-05-30
-- Contexto: durante nova execucao black-box do plano `docs/alpha-sandbox-test-plan.md` com cliente FastMCP real via `stdio`, a etapa final de skills MCP falhou ao seguir literalmente o plano.
+- Severity: low
+- Surface: Docs | MCP | Skills
+- Found on: 2026-05-30
+- Context: during a new black-box execution of the plan `docs/alpha-sandbox-test-plan.md`, the complete MCP skill workflow required `deactivate_skill` to validate `generate -> deactivate -> activate -> update`, but the list of expected tools in the plan omits this tool.
 
-### Reproducao
+### Reproduction
 
-1. criar sandbox isolado com `HOME`, `XDG_CONFIG_HOME` e `XDG_DATA_HOME`
-2. subir `umem-mcp` via cliente FastMCP real usando `uv run --project <repo> umem-mcp`
-3. inicializar projeto com `initialize_project`
-4. criar fixture valida em `.umem/memory/latent_skills.jsonl`
-5. executar o fluxo MCP de skills ate `activate_skill(latent_skill_id=<id>)`
-6. chamar `update_skill(latent_skill_id=<id>, name="Nova Skill", trigger="quando revisar contexto")`
+1. open `docs/alpha-sandbox-test-plan.md`
+2. verify section `8. MCP Black-Box`
+3. compare the list of expected tools with the real tools exposed by the MCP server
 
-### Esperado
+### Expected
 
-- o plano alpha deve usar os nomes reais dos argumentos MCP expostos pelo schema da tool
-- a etapa `update_skill` deve ser executavel por uma pessoa seguindo o plano literalmente
+- the plan's MCP tool list should include all public tools relevant to the alpha skill workflow
+- the MCP workflow should mirror CLI coverage where applicable
 
-### Obtido
+### Obtained
 
-- FastMCP rejeita `trigger` como argumento inesperado
-- erro observado: `Unexpected keyword argument` em `trigger`
-- a chamada corrigida `update_skill(latent_skill_id=<id>, name="Nova Skill", triggers=["quando revisar contexto"])` funciona
+- the list includes `activate_skill` and `update_skill`, but does not include `deactivate_skill`
+- `deactivate_skill` is exposed by the MCP server and passed the corrected black-box test
 
-### Evidencias
+### Evidence
 
-- sandbox MCP: `/tmp/umem-alpha.CVvZrW/mcp-project-full2`
-- tool real: `update_skill(latent_skill_id: str, name: str | None = None, description: str | None = None, triggers: list[str] | None = None, raw_markdown: str | None = None)`
-- plano: `docs/alpha-sandbox-test-plan.md`, secao `8. MCP Black-Box`, passo 19
+- plan: `docs/alpha-sandbox-test-plan.md`, section `8. MCP Black-Box`
+- MCP code: `src/universal_memory/interfaces/mcp/server.py`
+- real tool observed via `client.list_tools()`: `deactivate_skill`
+- corrected validation: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-mcp-skills.pmuawni_/project`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- o plano reutilizou o conceito singular do CLI `--trigger`, mas a tool MCP estabilizada usa `triggers` plural em formato de lista
+- documentation gap in the alpha plan after the introduction of the skill deactivation MCP tool
 
-### Correcao
+### Fix
 
-- `docs/alpha-sandbox-test-plan.md` atualizado para usar `update_skill(latent_skill_id=<id>, name="Nova Skill", triggers=["quando revisar contexto"])`.
+- `deactivate_skill` added to the expected MCP tools list in `docs/alpha-sandbox-test-plan.md`.
+- The MCP skill workflow now explicitly includes `deactivate_skill(latent_skill_id=<id>)` before `activate_skill(latent_skill_id=<id>)`.
 
-### Verificacao
+### Verification
 
-- fluxo MCP corrigido validado via cliente FastMCP real: `MCP_ALPHA_OK project=/tmp/umem-alpha.CVvZrW/mcp-project-full2 fact_id=1fad751f-27d6-49ec-9531-d04901731843 latent_skill_id=9e5b5b6f-30bc-4d67-ab85-6e382e38278e`
-- compatibilidade CLI/MCP validada no mesmo sandbox: `CLI_MCP_COMPAT_OK project=/tmp/umem-alpha.CVvZrW/mcp-project-full2 global_home=/tmp/umem-alpha.CVvZrW/home`
+- corrected workflow with `deactivate_skill` validated via a real FastMCP client: 19 passed, 0 failed
+- document inspection: `docs/alpha-sandbox-test-plan.md` lists `deactivate_skill` and includes the step `deactivate_skill(latent_skill_id=<id>)` before `activate_skill(latent_skill_id=<id>)`.
 
-## BUG-010 - Plano alpha passa `scope` para `list_skills` MCP, mas a tool nao aceita filtros
+## BUG-009 - Alpha plan uses singular `trigger` in `update_skill` MCP
 
 - Status: verified
-- Severidade: low
-- Superficie: Docs | MCP | Skills
-- Encontrado em: 2026-05-30
-- Contexto: durante nova execucao black-box do plano `docs/alpha-sandbox-test-plan.md` com cliente FastMCP real via `stdio`, o fluxo MCP de skills falhou ao seguir literalmente o passo `list_skills(scope="project")`.
+- Severity: low
+- Surface: Docs | MCP | Skills
+- Found on: 2026-05-30
+- Context: during a new black-box execution of the plan `docs/alpha-sandbox-test-plan.md` with a real FastMCP client via `stdio`, the final step of MCP skills failed when following the plan literally.
 
-### Reproducao
+### Reproduction
 
-1. criar sandbox isolado com `HOME`, `XDG_CONFIG_HOME` e `XDG_DATA_HOME`
-2. subir `umem-mcp` via cliente FastMCP real usando `uv run --project <repo> umem-mcp`
-3. inicializar projeto com `initialize_project`
-4. criar fixture valida em `.umem/memory/latent_skills.jsonl`
-5. chamar `list_skills(scope="project")`
+1. create an isolated sandbox with `HOME`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME`
+2. start `umem-mcp` via a real FastMCP client using `uv run --project <repo> umem-mcp`
+3. initialize project with `initialize_project`
+4. create a valid fixture in `.umem/memory/latent_skills.jsonl`
+5. execute the MCP skill workflow up to `activate_skill(latent_skill_id=<id>)`
+6. call `update_skill(latent_skill_id=<id>, name="Nova Skill", trigger="when reviewing context")`
 
-### Esperado
+### Expected
 
-- o plano alpha deve usar apenas argumentos expostos pelo schema MCP real
-- o fluxo MCP de skills deve ser executavel literalmente por uma pessoa seguindo o plano
+- the alpha plan should use the real names of the MCP arguments exposed by the tool schema
+- the `update_skill` step should be executable by a person following the plan literally
 
-### Obtido
+### Obtained
 
-- FastMCP rejeita `scope` como argumento inesperado em `list_skills`
-- a tool real e exposta como `list_skills()` sem argumentos
-- ao corrigir a chamada para `list_skills()`, o fluxo MCP completo passa
+- FastMCP rejects `trigger` as an unexpected argument
+- observed error: `Unexpected keyword argument` in `trigger`
+- the corrected call `update_skill(latent_skill_id=<id>, name="Nova Skill", triggers=["when reviewing context"])` works
 
-### Evidencias
+### Evidence
 
-- sandbox MCP com falha por argumento: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-alpha-smoke.ds51m9tj/mcp-project`
-- erro observado: `Unexpected keyword argument` em `scope`
-- codigo MCP: `src/universal_memory/interfaces/mcp/server.py`
-- assinatura observada: `list_skills()`
+- MCP sandbox: `/tmp/umem-alpha.CVvZrW/mcp-project-full2`
+- real tool: `update_skill(latent_skill_id: str, name: str | None = None, description: str | None = None, triggers: list[str] | None = None, raw_markdown: str | None = None)`
+- plan: `docs/alpha-sandbox-test-plan.md`, section `8. MCP Black-Box`, step 19
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- o plano alpha reaproveitou o padrao de filtros por escopo de outras tools MCP, mas `list_skills` MCP atualmente lista skills sem aceitar argumentos
+- the plan reused the singular CLI concept `--trigger`, but the stabilized MCP tool uses plural `triggers` in a list format
 
-### Correcao
+### Fix
 
-- `docs/alpha-sandbox-test-plan.md` atualizado para usar `list_skills()` no fluxo MCP de skills.
-- A validacao documental agora explicita que tools MCP de skills nao devem receber filtros nao expostos como `scope` em `list_skills()`.
+- `docs/alpha-sandbox-test-plan.md` updated to use `update_skill(latent_skill_id=<id>, name="Nova Skill", triggers=["when reviewing context"])`.
 
-### Verificacao
+### Verification
 
-- fluxo alpha completo validado via runner sandbox com cliente FastMCP real por `stdio`: `ALPHA_SMOKE_OK sandbox=/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-alpha-smoke.mq1so31a`
-- o fluxo validado cobriu CLI, MCP, compatibilidade CLI/MCP, hosts, snapshots, rollback, purge, memoria local/global e geracao/ativacao/atualizacao de skills.
+- corrected MCP workflow validated via a real FastMCP client: `MCP_ALPHA_OK project=/tmp/umem-alpha.CVvZrW/mcp-project-full2 fact_id=1fad751f-27d6-49ec-9531-d04901731843 latent_skill_id=9e5b5b6f-30bc-4d67-ab85-6e382e38278e`
+- CLI/MCP compatibility validated in the same sandbox: `CLI_MCP_COMPAT_OK project=/tmp/umem-alpha.CVvZrW/mcp-project-full2 global_home=/tmp/umem-alpha.CVvZrW/home`
 
-## BUG-011 - Banner ANSI do `umem init` ainda renderiza quebrado
+## BUG-010 - Alpha plan passes `scope` to `list_skills` MCP, but the tool does not accept filters
+
+- Status: verified
+- Severity: low
+- Surface: Docs | MCP | Skills
+- Found on: 2026-05-30
+- Context: during a new black-box execution of the plan `docs/alpha-sandbox-test-plan.md` with a real FastMCP client via `stdio`, the MCP skill workflow failed when following the step `list_skills(scope="project")` literally.
+
+### Reproduction
+
+1. create an isolated sandbox with `HOME`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME`
+2. start `umem-mcp` via a real FastMCP client using `uv run --project <repo> umem-mcp`
+3. initialize project with `initialize_project`
+4. create a valid fixture in `.umem/memory/latent_skills.jsonl`
+5. call `list_skills(scope="project")`
+
+### Expected
+
+- the alpha plan should use only arguments exposed by the real MCP schema
+- the MCP skill workflow should be executable literally by a person following the plan
+
+### Obtained
+
+- FastMCP rejects `scope` as an unexpected argument in `list_skills`
+- the real tool is exposed as `list_skills()` without arguments
+- when correcting the call to `list_skills()`, the complete MCP workflow succeeds
+
+### Evidence
+
+- MCP sandbox failing due to argument: `/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-alpha-smoke.ds51m9tj/mcp-project`
+- observed error: `Unexpected keyword argument` in `scope`
+- MCP code: `src/universal_memory/interfaces/mcp/server.py`
+- observed signature: `list_skills()`
+
+### Hypothesis / Root Cause
+
+- the alpha plan reused the scope filtering pattern from other MCP tools, but `list_skills` MCP currently lists skills without accepting arguments
+
+### Fix
+
+- `docs/alpha-sandbox-test-plan.md` updated to use `list_skills()` in the MCP skill workflow.
+- Document validation now makes it explicit that MCP skill tools should not receive unexposed filters like `scope` in `list_skills()`.
+
+### Verification
+
+- complete alpha workflow validated via a sandbox runner with a real FastMCP client over `stdio`: `ALPHA_SMOKE_OK sandbox=/var/folders/f1/xg5dn91j7bj59zh2ljy9czlm0000gn/T/umem-alpha-smoke.mq1so31a`
+- the validated workflow covered CLI, MCP, CLI/MCP compatibility, hosts, snapshots, rollback, purge, local/global memory, and skill generation/activation/updating.
+
+## BUG-011 - `umem init` ANSI banner still renders broken
 
 - Status: open
-- Severidade: low
-- Superficie: CLI
-- Encontrado em: 2026-06-02
-- Contexto: durante a inclusao da identidade visual do `umem init`, o banner ANSI foi salvo mesmo ainda apresentando renderizacao quebrada.
+- Severity: low
+- Surface: CLI
+- Found on: 2026-06-02
+- Context: during the inclusion of the visual identity for `umem init`, the ANSI banner was saved even though it still showed a broken rendering.
 
-### Reproducao
+### Reproduction
 
-1. executar `umem init` em terminal com suporte a cor
-2. observar o splash exibido antes do prompt de selecao de runtimes
+1. run `umem init` in a terminal with color support
+2. observe the splash displayed before the runtime selection prompt
 
-### Esperado
+### Expected
 
-- banner visual alinhado, legivel e consistente em terminais comuns
-- fallback sem cor legivel quando ANSI nao estiver habilitado
+- visual banner aligned, legible, and consistent in common terminals
+- legible colorless fallback when ANSI is not enabled
 
-### Obtido
+### Obtained
 
-- banner ANSI conhecido como quebrado/desalinhado
-- alteracao foi preservada para correcao posterior
+- ANSI banner known to be broken/misaligned
+- change was preserved for a later fix
 
-### Evidencias
+### Evidence
 
 - `src/universal_memory/interfaces/cli/init_command.py`
 - `assets/umem-logo.png`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- conversao do asset visual para ANSI precisa de ajuste de largura, paleta ou estrategia de renderizacao
+- conversion of the visual asset to ANSI needs adjustment of width, palette, or rendering strategy
 
-### Correcao
+### Fix
 
-- pendente
+- pending
 
-### Verificacao
+### Verification
 
-- pendente
+- pending
 
-## BUG-012 - Bootstrap UMEM pode ser ignorado quando workflow de skill assume prioridade
+## BUG-012 - UMEM bootstrap can be ignored when a skill workflow takes priority
 
 - Status: verified
-- Severidade: medium
-- Superficie: Host Setup | Skills | Runtime Behavior
-- Encontrado em: 2026-06-02
-- Contexto: durante teste real com Claude Code em outro projeto, o bloco UMEM em `CLAUDE.md` estava presente e validado, mas o agente so executou `umem status/context/skills` quando o usuario pediu explicitamente. Em sessao com workflow BMad, a ativacao estruturada da skill competiu com as instrucoes do manifesto e assumiu prioridade operacional.
+- Severity: medium
+- Surface: Host Setup | Skills | Runtime Behavior
+- Found on: 2026-06-02
+- Context: during real testing with Claude Code in another project, the UMEM block in `CLAUDE.md` was present and validated, but the agent only executed `umem status/context/skills` when the user explicitly requested it. In a session with BMad workflow, the structured activation of the skill competed with the manifest instructions and took operational priority.
 
-### Reproducao
+### Reproduction
 
-1. inicializar um projeto com `umem init` para `claude_code`
-2. confirmar `umem status --format json` com `host_validation.claude_code.status: success`
-3. iniciar uma tarefa por uma skill/workflow com ativacao forte, como code review
-4. observar se o agente executa `umem status --format json`, `umem context --scope project --format json` e `umem skills list --format json` antes do workflow
+1. initialize a project with `umem init` for `claude_code`
+2. confirm `umem status --format json` has `host_validation.claude_code.status: success`
+3. start a task via a skill/workflow with strong activation, such as code review
+4. observe if the agent executes `umem status --format json`, `umem context --scope project --format json`, and `umem skills list --format json` before the workflow
 
-### Esperado
+### Expected
 
-- o agente deve carregar o contexto UMEM antes de planejar, revisar, investigar, implementar ou executar workflows de skill
-- se `umem` estiver indisponivel ou nao inicializado, o agente deve reportar isso explicitamente antes de continuar sem memoria externa
-- o contrato operacional deve deixar claro que o bootstrap UMEM precede skills, slash commands e workflows estruturados
+- the agent must load the UMEM context before planning, editing, investigating, reviewing, implementing, or running skill workflows
+- if `umem` is unavailable or not initialized, the agent must explicitly report this before continuing without external memory
+- the operational contract must make it clear that the UMEM bootstrap precedes skills, slash commands, and structured workflows
 
-### Obtido
+### Obtained
 
-- o bloco UMEM em `CLAUDE.md` pode ser lido como instrucao declarativa, mas nao como preflight inevitavel
-- workflows de skill com passos de ativacao detalhados podem capturar a atencao do agente antes de ele executar o bootstrap UMEM
-- o usuario precisa pedir explicitamente para o agente usar `umem` para garantir o carregamento
+- the UMEM block in `CLAUDE.md` can be read as a declarative instruction, but not as an inevitable preflight
+- skill workflows with detailed activation steps can capture the agent's attention before it runs the UMEM bootstrap
+- the user needs to explicitly ask the agent to use `umem` to ensure loading
 
-### Evidencias
+### Evidence
 
-- `CLAUDE.md` gerado contem comandos `umem status --format json`, `umem context --scope project --format json`, `umem skills list --format json` e referencia a `.umem/skills/use-universal-memory/SKILL.md`
-- `src/universal_memory/application/host/setup_host_use_case.py` renderiza os blocos gerenciados de `AGENTS.md` e `CLAUDE.md`
-- `tests/application/test_setup_host.py` valida a presenca dos comandos e a leitura do host, mas nao valida prioridade de execucao frente a workflows de skill
-- `.umem/skills/use-universal-memory/SKILL.md` descreve o procedimento operacional, mas a ativacao nativa ainda depende do agente respeitar o manifesto
+- generated `CLAUDE.md` contains commands `umem status --format json`, `umem context --scope project --format json`, `umem skills list --format json` and reference to `.umem/skills/use-universal-memory/SKILL.md`
+- `src/universal_memory/application/host/setup_host_use_case.py` renders the managed blocks in `AGENTS.md` and `CLAUDE.md`
+- `tests/application/test_setup_host.py` validates the presence of commands and host reading, but does not validate execution priority over skill workflows
+- `.umem/skills/use-universal-memory/SKILL.md` describes the operational procedure, but native activation still relies on the agent respecting the manifest
+- Operational validation in this session: even when initiated by `$bmad-dev-story`, execution ran `umem status --format json`, `umem context --scope project --format json` and `umem skills list --format json` before the skill activation; the commands reported a storage error, which was made explicit before continuing.
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- o produto valida presenca textual do bootstrap, mas nao tem uma garantia operacional de ordem de execucao
-- agentes priorizam instrucoes mais procedurais e recentes quando uma skill entra em modo de ativacao
-- a instrucao atual nao explicita com forca suficiente que o bootstrap UMEM deve rodar antes de qualquer skill, slash command ou workflow estruturado
+- the product validates the textual presence of the bootstrap, but lacks an operational guarantee of execution order
+- agents prioritize more procedural and recent instructions when a skill enters activation mode
+- the current instruction does not make it strong enough that the UMEM bootstrap must run before any skill, slash command, or structured workflow
 
-### Correcao
+### Fix
 
-- O texto gerado para `AGENTS.md` agora declara o bootstrap UMEM como preflight obrigatorio antes de planejamento, edicao, investigacao, review, skill workflow, slash command ou workflow estruturado.
-- O texto gerado para `CLAUDE.md`, tanto no modo manifesto completo quanto no modo delta com `AGENTS.md` existente, agora reforca que o bootstrap UMEM precede workflows de skill e exige reporte explicito quando `umem` estiver indisponivel ou nao inicializado.
-- A skill padrao `.umem/skills/use-universal-memory/SKILL.md` gerada por `umem init` agora instrui que skills, slash commands e workflows estruturados nao substituem o preflight UMEM.
-- Testes de regressao foram atualizados para validar a prioridade operacional do preflight nos blocos de host e na skill padrao.
+- The text generated for `AGENTS.md` now declares the UMEM bootstrap as a mandatory preflight before planning, editing, investigating, reviewing, skill workflow, slash command, or structured workflow.
+- The text generated for `CLAUDE.md`, both in full manifest mode and delta mode with an existing `AGENTS.md`, now reinforces that the UMEM bootstrap precedes skill workflows and requires explicit reporting when `umem` is unavailable or not initialized.
+- The default skill `.umem/skills/use-universal-memory/SKILL.md` generated by `umem init` now instructs that skills, slash commands, and structured workflows do not replace the UMEM preflight.
+- Regression tests were updated to validate the operational priority of the preflight in host blocks and the default skill.
 
-### Verificacao
+### Verification
 
 - `uv run pytest tests/application/test_setup_host.py tests/application/test_setup_project.py tests/application/host/test_sync_instructions.py` -> 30 passed
 - `uv run pytest` -> 457 passed
-- Sandbox temporario em `/private/tmp/umem-bug012.STlwSX`: `uv run umem init --hosts claude_code --yes --format json` -> `validation_status: success`
-- Sandbox temporario em `/private/tmp/umem-bug012.STlwSX`: `uv run umem host check claude_code --format json` -> `validation_status: success`
-- Sandbox temporario em `/private/tmp/umem-bug012.STlwSX`: `rg -n 'mandatory preflight|skill workflow|slash command|not initialized|Do not let the workflow replace this preflight' CLAUDE.md .umem/skills/use-universal-memory/SKILL.md` confirmou o contrato reforcado em `CLAUDE.md` e na skill padrao.
-- Validacao operacional nesta sessao: mesmo iniciada por `$bmad-dev-story`, a execucao rodou `umem status --format json`, `umem context --scope project --format json` e `umem skills list --format json` antes da ativacao da skill; os comandos reportaram erro de storage, que foi explicitado antes de continuar.
+- Temporary sandbox in `/private/tmp/umem-bug012.STlwSX`: `uv run umem init --hosts claude_code --yes --format json` -> `validation_status: success`
+- Temporary sandbox in `/private/tmp/umem-bug012.STlwSX`: `uv run umem host check claude_code --format json` -> `validation_status: success`
+- Temporary sandbox in `/private/tmp/umem-bug012.STlwSX`: `rg -n 'mandatory preflight|skill workflow|slash command|not initialized|Do not let the workflow replace this preflight' CLAUDE.md .umem/skills/use-universal-memory/SKILL.md` confirmed the reinforced contract in `CLAUDE.md` and the default skill.
 
-## BUG-013 - Sincronização de host falha (excede tamanho máximo) devido ao dump de fatos / memórias em AGENTS.md e CLAUDE.md
+## BUG-013 - Host synchronization fails (exceeds maximum size) due to fact / memory dump in AGENTS.md and CLAUDE.md
 
 - Status: verified
-- Severidade: high
-- Superficie: Host Setup
-- Encontrado em: 2026-06-02
-- Contexto: Quando o usuário ou agente registra múltiplos fatos na memória via `umem remember`, o comando `umem host sync` tenta sincronizar todos os fatos ativamente na seção de políticas consolidadas dos arquivos de host (`AGENTS.md` e `CLAUDE.md`). Isso incha rapidamente esses arquivos e causa a falha da validação de limite de linhas/caracteres (100 linhas / 4000 caracteres), impossibilitando o sincronismo de regras legítimas.
+- Severity: high
+- Surface: Host Setup
+- Found on: 2026-06-02
+- Context: When the user or agent registers multiple facts in memory via `umem remember`, the `umem host sync` command tries to actively synchronize all facts in the consolidated policies section of the host files (`AGENTS.md` and `CLAUDE.md`). This rapidly bloats those files and causes the line/character limit validation (100 lines / 4000 characters) to fail, preventing the synchronization of legitimate rules.
 
-### Reproducao
+### Reproduction
 
-1. criar múltiplos fatos via `umem remember "Fato X" --scope project`
-2. executar `umem host sync --apply`
-3. observar erro de validação: `ValidationFailedError: Manifesto AGENTS.md deve permanecer compacto; mova conteudo longo para docs/.`
+1. create multiple facts via `umem remember "Fato X" --scope project`
+2. run `umem host sync --apply`
+3. observe validation error: `ValidationFailedError: AGENTS.md manifest must remain compact; move long content to docs/.`
 
-### Esperado
+### Expected
 
-- O agente deve ser capaz de carregar e sincronizar regras legítimas sem que fatos e memórias explodam o tamanho físico dos arquivos de instruções estáticas do host.
-- Fatos/memórias de contexto dinâmico devem ser consumidos sob demanda através do comando `umem context` e não duplicados/injetados textualmente nos manifestos estáticos.
+- The agent should be able to load and synchronize legitimate rules without facts and memories exploding the physical size of the host's static instruction files.
+- Dynamic context facts/memories should be consumed on demand via the `umem context` command and not duplicated/injected textually into static manifests.
 
-### Obtido
+### Obtained
 
-- Sincronização falhava ao ultrapassar 100 linhas ou 4000 caracteres em `AGENTS.md` devido ao acúmulo de memórias dinâmicas.
-- Inexistência de chaves de configuração globais para limites no `.umem/config.toml` ou flags CLI `--max-lines`/`--max-chars` no `host sync` dificultavam o controle fino dos limites.
+- Synchronization failed when exceeding 100 lines or 4000 characters in `AGENTS.md` due to the accumulation of dynamic memories.
+- Absence of global configuration keys for limits in `.umem/config.toml` or CLI flags `--max-lines`/`--max-chars` in `host sync` made fine control of limits difficult.
 
-### Evidencias
+### Evidence
 
 - `src/universal_memory/application/host/setup_host_use_case.py`
 - `src/universal_memory/application/host/sync_instructions_use_case.py`
 - `tests/application/host/test_sync_instructions.py`
 
-### Hipotese / Causa Raiz
+### Hypothesis / Root Cause
 
-- O design do UMEM prevê que fatos e memórias de contexto dinâmico sejam consumidos pelo agente dinamicamente através do comando `umem context`. Portanto, despejar todo o histórico de fatos dentro dos arquivos de texto estáticos de host (`AGENTS.md`/`CLAUDE.md`) causa redundância e estouro de limites físicos de tamanho desnecessariamente.
+- The UMEM design intends for dynamic context facts and memories to be consumed by the agent dynamically via the `umem context` command. Therefore, dumping the entire history of facts into static host text files (`AGENTS.md`/`CLAUDE.md`) causes redundancy and unnecessarily blows past physical size limits.
 
-### Correcao
+### Fix
 
-- Desvinculamos a persistência de fatos de dentro de `ConfigureHostUseCase` e `SyncInstructionsUseCase`. Agora, apenas regras de fato (`Rule`) são compiladas nos manifestos de host.
-- Adicionamos suporte persistente a limites de tamanho (`max_managed_lines` e `max_managed_chars`) no arquivo `.umem/config.toml` (tabelas `[runtimes]` ou `[hosts]`) e flags CLI `--max-lines` / `--max-chars` no comando `host sync` para dar flexibilidade total ao usuário.
-- Os manifestos de host permanecem estáticos, estáveis e compactos, remetendo o agente ao uso de `umem context` para leitura dinâmica de fatos.
+- We decoupled fact persistence from `ConfigureHostUseCase` and `SyncInstructionsUseCase`. Now, only fact rules (`Rule`) are compiled into host manifests.
+- We added persistent support for size limits (`max_managed_lines` and `max_managed_chars`) in the `.umem/config.toml` file (tables `[runtimes]` or `[hosts]`) and CLI flags `--max-lines` / `--max-chars` in the `host sync` command to give full flexibility to the user.
+- Host manifests remain static, stable, and compact, directing the agent to use `umem context` for dynamic reading of facts.
 
-### Verificacao
+### Verification
 
-- Testes adicionados no `test_sync_instructions.py` e `test_host_sync.py` validam o suporte a limites de tamanho via `config.toml` e CLI.
-- Toda a suíte de 459 testes passando (`uv run pytest`).
+- Tests added in `test_sync_instructions.py` and `test_host_sync.py` validate support for size limits via `config.toml` and CLI.
+- Entire suite of 459 tests passing (`uv run pytest`).

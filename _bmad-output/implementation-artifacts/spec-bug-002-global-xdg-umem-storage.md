@@ -1,5 +1,5 @@
 ---
-title: 'BUG-002 - Unificar armazenamento global XDG em umem'
+title: 'BUG-002 - Unify global XDG storage in umem'
 type: 'bugfix'
 created: '2026-05-29'
 status: 'done'
@@ -12,106 +12,106 @@ context:
 
 ## Intent
 
-**Problem:** O armazenamento global usa raizes diferentes: config em `~/.config/universal-memory/config.toml`, facts/rules em `~/.umem/` e latent skills em `~/.local/share/universal-memory/`. Isso torna o estado global dificil de prever, inspecionar e documentar durante alpha testing.
+**Problem:** Global storage uses different roots: config in `~/.config/universal-memory/config.toml`, facts/rules in `~/.umem/`, and latent skills in `~/.local/share/universal-memory/`. This makes the global state difficult to predict, inspect, and document during alpha testing.
 
-**Approach:** Padronizar o estado global em caminhos XDG com nome curto `umem`: config global em `~/.config/umem/config.toml` e dados globais em `~/.local/share/umem/memory/*`. Manter o armazenamento por projeto em `<projeto>/.umem/` inalterado.
+**Approach:** Standardize global state in XDG paths with the short name `umem`: global config in `~/.config/umem/config.toml` and global data in `~/.local/share/umem/memory/*`. Keep project-specific storage in `<project>/.umem/` unchanged.
 
 ## Boundaries & Constraints
 
-**Always:** Preservar `global_home` como ponto de injeção para testes; manter escopo de projeto em `.umem`; manter SafeWrite, snapshot e auditoria funcionando para writes globais; atualizar testes que codificam caminhos antigos.
+**Always:** Preserve `global_home` as an injection point for testing; keep project scope in `.umem`; keep SafeWrite, snapshot, and auditing working for global writes; update tests that hardcode old paths.
 
-**Ask First:** Qualquer migração/leitura de caminhos legados (`~/.umem`, `~/.config/universal-memory`, `~/.local/share/universal-memory`), mudança de nomes publicos de comandos, ou alteração no contrato de payload CLI/MCP.
+**Ask First:** Any migration/reading of legacy paths (`~/.umem`, `~/.config/universal-memory`, `~/.local/share/universal-memory`), changes to public command names, or modifications to the CLI/MCP payload contract.
 
-**Never:** Adicionar compatibilidade retroativa sem aprovação humana; mover storage de projeto para XDG; relaxar validações de escrita segura para acomodar a mudança de caminho.
+**Never:** Add backward compatibility without human approval; move project storage to XDG; relax safe write validations to accommodate path changes.
 
 ## I/O & Edge-Case Matrix
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
-| Config global padrao | `load_config(project_root=...)` sem `global_config_path`, com `HOME=/tmp/home` | `global_config_path` resolve para `/tmp/home/.config/umem/config.toml` | Config ausente continua retornando `{}` |
-| Facts/rules globais | Repositorios com `global_home=/tmp/home` gravam entidades de escopo global | JSONL global fica em `/tmp/home/.local/share/umem/memory/facts.jsonl` e `rules.jsonl` | Falhas de I/O continuam mapeadas para `StorageError` |
-| Latent skills globais | `LocalLatentSkillRepository` grava `LatentSkillScope.global_` | JSONL global fica em `/tmp/home/.local/share/umem/memory/latent_skills.jsonl` | SafeWrite global usa a raiz XDG correta para snapshot/auditoria |
-| Escopo de projeto | Qualquer repositorio grava entidade de escopo project | Arquivos permanecem em `<projeto>/.umem/memory/*` | Sem regressao de path local |
+| Default global config | `load_config(project_root=...)` without `global_config_path`, with `HOME=/tmp/home` | `global_config_path` resolves to `/tmp/home/.config/umem/config.toml` | Missing config continues to return `{}` |
+| Global facts/rules | Repositories with `global_home=/tmp/home` write global-scope entities | Global JSONL resides in `/tmp/home/.local/share/umem/memory/facts.jsonl` and `rules.jsonl` | I/O failures remain mapped to `StorageError` |
+| Global latent skills | `LocalLatentSkillRepository` writes `LatentSkillScope.global_` | Global JSONL resides in `/tmp/home/.local/share/umem/memory/latent_skills.jsonl` | Global SafeWrite uses the correct XDG root for snapshot/audit |
+| Project scope | Any repository writes project-scope entity | Files remain in `<project>/.umem/memory/*` | No local path regression |
 
 </frozen-after-approval>
 
 ## Code Map
 
-- `src/universal_memory/infrastructure/config/toml_loader.py` -- Define o caminho default da config global e resolve caminhos relativos da config.
-- `src/universal_memory/infrastructure/storage/local_fact_repository.py` -- Define raiz global de facts e SafeWrite global atualmente baseado em `global_home/.umem`.
-- `src/universal_memory/infrastructure/storage/local_rule_repository.py` -- Define raiz global de rules e SafeWrite global atualmente baseado em `global_home/.umem`.
-- `src/universal_memory/infrastructure/storage/local_latent_skill_repository.py` -- Ja usa XDG para dados globais, mas com nome `universal-memory` em vez de `umem`.
-- `tests/infrastructure/config/test_toml_loader.py` -- Protege o caminho default da config global.
-- `tests/infrastructure/storage/test_local_fact_repository.py` -- Deve cobrir o novo caminho global de facts.
-- `tests/infrastructure/storage/test_local_rule_repository.py` -- Deve cobrir o novo caminho global de rules.
-- `tests/infrastructure/storage/test_local_latent_skill_repository.py` -- Contem expectativa atual para `.local/share/universal-memory`.
-- `_bmad-output/implementation-artifacts/alpha-bug-log.md` -- Registro alpha do BUG-002 a atualizar apos correcao e verificacao.
+- `src/universal_memory/infrastructure/config/toml_loader.py` -- Defines the default path for the global config and resolves relative config paths.
+- `src/universal_memory/infrastructure/storage/local_fact_repository.py` -- Defines the global facts root and global SafeWrite currently based on `global_home/.umem`.
+- `src/universal_memory/infrastructure/storage/local_rule_repository.py` -- Defines the global rules root and global SafeWrite currently based on `global_home/.umem`.
+- `src/universal_memory/infrastructure/storage/local_latent_skill_repository.py` -- Already uses XDG for global data, but with the name `universal-memory` instead of `umem`.
+- `tests/infrastructure/config/test_toml_loader.py` -- Protects the default path of the global config.
+- `tests/infrastructure/storage/test_local_fact_repository.py` -- Must cover the new global facts path.
+- `tests/infrastructure/storage/test_local_rule_repository.py` -- Must cover the new global rules path.
+- `tests/infrastructure/storage/test_local_latent_skill_repository.py` -- Contains the current expectation for `.local/share/universal-memory`.
+- `_bmad-output/implementation-artifacts/alpha-bug-log.md` -- Alpha log of BUG-002 to be updated after fix and verification.
 
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `src/universal_memory/infrastructure/config/toml_loader.py` -- Trocar o default de config global para `Path.home() / ".config" / "umem" / "config.toml"` -- Alinha config ao nome XDG decidido.
-- [x] `src/universal_memory/infrastructure/storage/local_fact_repository.py` -- Trocar raiz global para `global_home/.local/share/umem` e ajustar SafeWrite global para essa raiz -- Centraliza facts globais no mesmo data dir XDG.
-- [x] `src/universal_memory/infrastructure/storage/local_rule_repository.py` -- Trocar raiz global para `global_home/.local/share/umem` e ajustar SafeWrite global para essa raiz -- Centraliza rules globais no mesmo data dir XDG.
-- [x] `src/universal_memory/infrastructure/storage/local_latent_skill_repository.py` -- Trocar o nome do app no data dir global de `universal-memory` para `umem`, inclusive Windows -- Mantem latent skills no mesmo padrao nominal.
-- [x] `tests/infrastructure/config/test_toml_loader.py`, `tests/infrastructure/storage/test_local_fact_repository.py`, `tests/infrastructure/storage/test_local_rule_repository.py`, `tests/infrastructure/storage/test_local_latent_skill_repository.py` -- Atualizar/adicionar testes dos caminhos globais -- Previne regressao para as tres raizes antigas.
-- [x] `_bmad-output/implementation-artifacts/alpha-bug-log.md` -- Marcar BUG-002 como corrigido/verificado com resumo e comandos executados -- Mantem rastreabilidade alpha.
+- [x] `src/universal_memory/infrastructure/config/toml_loader.py` -- Change the global config default to `Path.home() / ".config" / "umem" / "config.toml"` -- Aligns config with the decided XDG name.
+- [x] `src/universal_memory/infrastructure/storage/local_fact_repository.py` -- Change the global root to `global_home/.local/share/umem` and adjust the global SafeWrite for this root -- Centralizes global facts in the same XDG data dir.
+- [x] `src/universal_memory/infrastructure/storage/local_rule_repository.py` -- Change the global root to `global_home/.local/share/umem` and adjust the global SafeWrite for this root -- Centralizes global rules in the same XDG data dir.
+- [x] `src/universal_memory/infrastructure/storage/local_latent_skill_repository.py` -- Change the app name in the global data dir from `universal-memory` to `umem`, including Windows -- Keeps latent skills under the same naming convention.
+- [x] `tests/infrastructure/config/test_toml_loader.py`, `tests/infrastructure/storage/test_local_fact_repository.py`, `tests/infrastructure/storage/test_local_rule_repository.py`, `tests/infrastructure/storage/test_local_latent_skill_repository.py` -- Update/add tests for global paths -- Prevents regression to the three old roots.
+- [x] `_bmad-output/implementation-artifacts/alpha-bug-log.md` -- Mark BUG-002 as fixed/verified with summary and executed commands -- Maintains alpha traceability.
 
 **Acceptance Criteria:**
-- Given um `HOME` isolado, when a config global default e carregada, then o caminho usado e `~/.config/umem/config.toml`.
-- Given repositorios de facts, rules e latent skills com `global_home` isolado, when entidades globais sao gravadas, then todos os JSONL globais ficam sob `~/.local/share/umem/memory/`.
-- Given entidades de escopo project, when repositorios gravam dados, then os caminhos de projeto permanecem sob `<projeto>/.umem/memory/`.
-- Given a suite de storage/config relevante, when os testes rodam, then nao ha expectativa restante para `~/.umem`, `~/.config/universal-memory` ou `~/.local/share/universal-memory` como caminho global default.
+- Given an isolated `HOME`, when the default global config is loaded, then the path used is `~/.config/umem/config.toml`.
+- Given repositories of facts, rules, and latent skills with an isolated `global_home`, when global entities are written, then all global JSONLs are located under `~/.local/share/umem/memory/`.
+- Given project-scope entities, when repositories write data, then the project paths remain under `<project>/.umem/memory/`.
+- Given the relevant storage/config suite, when tests are run, then there is no remaining expectation for `~/.umem`, `~/.config/universal-memory`, or `~/.local/share/universal-memory` as the default global path.
 
 ## Spec Change Log
 
 ## Verification
 
 **Commands:**
-- `uv run pytest tests/infrastructure/config/test_toml_loader.py tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_rule_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py` -- expected: testes de caminhos globais passam.
-- `uv run pytest tests/interfaces/cli/test_skills_propose.py` -- expected: output humano de proposta global usa `~/.config/umem/config.toml`.
-- `uv run pytest` -- expected: suite completa passa sem regressao em CLI/MCP/storage.
+- `uv run pytest tests/infrastructure/config/test_toml_loader.py tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_rule_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py` -- expected: global paths tests pass.
+- `uv run pytest tests/interfaces/cli/test_skills_propose.py` -- expected: human output of global proposal uses `~/.config/umem/config.toml`.
+- `uv run pytest` -- expected: complete suite passes with no regressions in CLI/MCP/storage.
 
 ## Suggested Review Order
 
 **Global Path Contract**
 
-- Entrada principal da decisão XDG para config global.
+- Main entry point of the XDG decision for global config.
   [`toml_loader.py:49`](../../src/universal_memory/infrastructure/config/toml_loader.py#L49)
 
-- Facts globais usam data root XDG e SafeWrite global isolado.
+- Global facts use XDG data root and isolated global SafeWrite.
   [`local_fact_repository.py:60`](../../src/universal_memory/infrastructure/storage/local_fact_repository.py#L60)
 
-- Rules globais espelham a mesma estratégia de facts.
+- Global rules mirror the same strategy as facts.
   [`local_rule_repository.py:58`](../../src/universal_memory/infrastructure/storage/local_rule_repository.py#L58)
 
-- Latent skills mantem XDG, agora com nome `umem`.
+- Latent skills maintain XDG, now named `umem`.
   [`local_latent_skill_repository.py:65`](../../src/universal_memory/infrastructure/storage/local_latent_skill_repository.py#L65)
 
 **SafeWrite And Audit**
 
-- Escritas globais de facts usam `memory/facts.jsonl` sob a raiz XDG.
+- Global facts writes use `memory/facts.jsonl` under the XDG root.
   [`local_fact_repository.py:327`](../../src/universal_memory/infrastructure/storage/local_fact_repository.py#L327)
 
-- SafeWrite global de rules cria snapshot e auditoria na raiz XDG.
+- Global rules SafeWrite creates snapshot and audit in the XDG root.
   [`local_rule_repository.py:65`](../../src/universal_memory/infrastructure/storage/local_rule_repository.py#L65)
 
-- Mensagem humana de proposta global aponta para a config nova.
+- Human message for global proposal points to the new config.
   [`init_command.py:2373`](../../src/universal_memory/interfaces/cli/init_command.py#L2373)
 
 **Regression Coverage**
 
-- Config default protege `~/.config/umem/config.toml`.
+- Default config protects `~/.config/umem/config.toml`.
   [`test_toml_loader.py:55`](../../tests/infrastructure/config/test_toml_loader.py#L55)
 
-- Facts globais validam JSONL, audit e snapshots no XDG.
+- Global facts validate JSONL, audit, and snapshots in XDG.
   [`test_local_fact_repository.py:70`](../../tests/infrastructure/storage/test_local_fact_repository.py#L70)
 
-- Rules globais cobrem projeto e global separadamente.
+- Global rules cover project and global separately.
   [`test_local_rule_repository.py:30`](../../tests/infrastructure/storage/test_local_rule_repository.py#L30)
 
-- Latent skills validam dados, audit e snapshots globais.
+- Latent skills validate global data, audit, and snapshots.
   [`test_local_latent_skill_repository.py:133`](../../tests/infrastructure/storage/test_local_latent_skill_repository.py#L133)
 
-- CLI protege contra regressao para `universal-memory/config.toml`.
+- CLI protects against regression to `universal-memory/config.toml`.
   [`test_skills_propose.py:68`](../../tests/interfaces/cli/test_skills_propose.py#L68)

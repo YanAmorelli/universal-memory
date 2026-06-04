@@ -381,7 +381,7 @@ Functional Requirements demonstrate good SMART quality overall.
 ### Top 3 Improvements
 
 1. **Tighten remaining success criteria measurement**
-   Define how "bloqueio operacional relevante" and configuration integrity will be measured or surveyed.
+   Define how "relevant operational blocker" and configuration integrity will be measured or surveyed.
 
 2. **Preserve CLI/API examples through architecture**
    Convert the new example commands and MCP response shape into architecture interfaces and epic acceptance criteria.
@@ -421,7 +421,7 @@ No template variables remaining.
 ### Section-Specific Completeness
 
 **Success Criteria Measurability:** Some measurable
-- Most criteria include thresholds, but "considera a ausência da memória um bloqueio operacional relevante" and configuration integrity need clearer measurement methods.
+- Most criteria include thresholds, but "considers the absence of memory a relevant operational blocker" and configuration integrity need clearer measurement methods.
 
 **User Journeys Coverage:** Yes - covers all user/agent roles introduced by the PRD
 
