@@ -319,21 +319,39 @@ class DoctorUseCase:
     ) -> str | None:
         display_path = self._relative_or_user_path(path, project_root)
         if path.exists():
-            if expected_kind == "directory":
-                if not path.is_dir():
-                    return f"{display_path}: path must be a directory"
-                if os.access(path, os.R_OK | os.W_OK | os.X_OK):
-                    return None
-                return f"{display_path}: directory is not readable, writable, and searchable"
-            if not path.is_file():
-                return f"{display_path}: path must be a file"
-            if expected_kind == "file":
-                if os.access(path, os.R_OK | os.W_OK):
-                    return None
-                return f"{display_path}: file is not readable and writable"
+            return self._existing_path_permission_failure(path, expected_kind, display_path)
 
+        return self._missing_path_permission_failure(path, display_path)
+
+    @staticmethod
+    def _existing_path_permission_failure(
+        path: Path,
+        expected_kind: str,
+        display_path: str,
+    ) -> str | None:
+        if expected_kind == "directory":
+            if not path.is_dir():
+                return f"{display_path}: path must be a directory"
+            has_permissions = os.access(path, os.R_OK | os.W_OK | os.X_OK)
+            return (
+                None
+                if has_permissions
+                else f"{display_path}: directory is not readable, writable, and searchable"
+            )
+
+        if not path.is_file():
+            return f"{display_path}: path must be a file"
+
+        has_permissions = os.access(path, os.R_OK | os.W_OK)
+        return None if has_permissions else f"{display_path}: file is not readable and writable"
+
+    @staticmethod
+    def _missing_path_permission_failure(path: Path, display_path: str) -> str | None:
         parent = path.parent
-        if parent.exists() and parent.is_dir() and os.access(parent, os.R_OK | os.W_OK | os.X_OK):
+        parent_has_permissions = (
+            parent.exists() and parent.is_dir() and os.access(parent, os.R_OK | os.W_OK | os.X_OK)
+        )
+        if parent_has_permissions:
             return None
         if not parent.exists():
             return f"{display_path}: parent directory is missing"

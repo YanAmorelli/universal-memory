@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import json
 import os
-import shutil
 import subprocess
+import sys
 import tempfile
 import time
-import sys
 import traceback
 from pathlib import Path
 
@@ -122,9 +121,8 @@ def run_cli(args, cwd, env, expect_fail=False):
     if expect_fail:
         if result.returncode == 0:
             raise AssertionError(f"Esperava que o comando falhasse, mas retornou 0: {' '.join(cmd)}\nStdout: {result.stdout}\nStderr: {result.stderr}")
-    else:
-        if result.returncode != 0:
-            raise AssertionError(f"Comando falhou com codigo {result.returncode}: {' '.join(cmd)}\nStdout: {result.stdout}\nStderr: {result.stderr}")
+    elif result.returncode != 0:
+        raise AssertionError(f"Comando falhou com codigo {result.returncode}: {' '.join(cmd)}\nStdout: {result.stdout}\nStderr: {result.stderr}")
     return result.stdout, result.stderr, result.returncode
 
 

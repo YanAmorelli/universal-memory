@@ -67,6 +67,18 @@ line-length = 100
 select = ["E", "F", "I", "N", "UP", "PL", "RUF", "B", "S"]
 
 [tool.ruff.lint.per-file-ignores]
+"scripts/alpha_tester.py" = [
+    "E501",
+    "F841",
+    "PLR0912",
+    "PLR0915",
+    "PLW1510",
+    "RUF005",
+    "RUF059",
+    "S101",
+    "S603",
+    "S607",
+]
 "tests/**/*.py" = ["S101"]
 "src/universal_memory/interfaces/cli/init_command.py" = ["E501"]
 
