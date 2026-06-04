@@ -79,4 +79,4 @@
 
 ## Deferred from: code review of spec-cli-version-status.md (2026-06-04)
 
-- Version fallback is hardcoded when package metadata is unavailable. The fallback in `src/universal_memory/__init__.py` still reports `0.1.0` while `pyproject.toml` declares `0.1.1`; this is pre-existing, but the new `--version`/status feature makes the fallback more visible.
+- Version fallback is hardcoded when package metadata is unavailable. The fallback in `src/universal_memory/__init__.py` should stay aligned with the package version declared in `pyproject.toml`.
