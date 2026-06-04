@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/YanAmorelli/universal-memory/main/assets/umem-logo.png" alt="Universal Memory logo" width="720">
+  <img src="assets/umem-logo.png" alt="Universal Memory logo" width="720">
 </p>
 
 # Universal Memory (umem)
@@ -12,9 +12,9 @@ A vendor-agnostic cognitive persistence layer for AI agents. Eliminate the "repe
 
 To see the core idea visually, check out the [Excalidraw design](https://excalidraw.com/#json=j3XjQIWMYEnkIzHpypuBb,rNJaVOECDGZ3WSuEYcCDjQ) or the proposal structure:
 
-![Universal Memory MVP Proposal](https://raw.githubusercontent.com/YanAmorelli/universal-memory/main/docs/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
+![Universal Memory MVP Proposal](docs/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
 
-### Diagram Breakdown (English Translation)
+### Diagram Breakdown
 
 *   **Short-Term Memory (Ephemeral):** Project-specific (folder-level) memories. A simple summary of recent changes, pending tasks, and project or task-level constraints.
 *   **Agents Behaviours:** Comports the user's expected agent behaviors. Instead of requesting the same settings in every session, the agent understands the user by their traits, thoughts, and any context key to enhancing the overall experience. This encompasses:
