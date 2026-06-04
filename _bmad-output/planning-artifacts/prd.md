@@ -46,341 +46,341 @@ editHistory:
 **Author:** Yan
 **Date:** 2026-04-25
 
-<!-- Este documento será construído de forma incremental durante o workflow de criação de PRD -->
+<!-- This document will be built incrementally during the PRD creation workflow -->
 
 ## Executive Summary
 
-O **universal-memory** é uma camada de persistência cognitiva agnóstica projetada para eliminar o "imposto de repetição" no fluxo de trabalho com múltiplos agentes de IA. O sistema atua como um "pen drive de identidade", permitindo que o usuário transporte seu contexto, preferências e histórico de interações entre diferentes sessões e modelos sem fricção. O objetivo central é a coesão operacional: em vez de o usuário se adaptar a cada nova sessão, o ecossistema de agentes se adapta automaticamente ao comportamento e às instruções do usuário através de um motor de sincronização de configurações globais (`AGENTS.md`).
+**universal-memory** is an agnostic cognitive persistence layer designed to eliminate the "repetition tax" in workflows with multiple AI agents. The system acts as an "identity pen drive," allowing the user to seamlessly transport their context, preferences, and interaction history across different sessions and models. The core objective is operational cohesion: instead of the user adapting to each new session, the agent ecosystem automatically adapts to the user's behavior and instructions through a global settings synchronization engine (`AGENTS.md`).
 
 ### What Makes This Special
 
-*   **Portabilidade de Identidade:** Desacoplamento total de vendors ou produtos específicos, garantindo que o "cérebro" do usuário seja soberano e migrável.
-*   **Adaptação Comportamental Ativa:** Não apenas armazena dados, mas traduz interações em instruções de sistema, atualizando automaticamente arquivos de configuração (`AGENTS.md`) para alinhar todos os agentes auxiliares ao modelo mental do usuário.
-*   **Eficiência de Contexto e Custo:** Redução drástica na necessidade de re-explicação de tarefas e conceitos, otimizando o consumo de tokens e o tempo de resposta através de uma memória de curto e longo prazo compartilhada.
+*   **Identity Portability:** Full decoupling from specific vendors or products, ensuring the user's "brain" remains sovereign and migratable.
+*   **Active Behavioral Adaptation:** Not only stores data, but translates interactions into system instructions, automatically updating configuration files (`AGENTS.md`) to align all auxiliary agents with the user's mental model.
+*   **Context and Cost Efficiency:** Drastic reduction in the need to re-explain tasks and concepts, optimizing token consumption and response times through a shared short- and long-term memory.
 
 ## Project Classification
 
 *   **Project Type:** Developer Tool / AI Middleware
 *   **Domain:** AI Infrastructure / Developer Experience (DevEx)
-*   **Complexity:** Medium-High (Automação de configuração e manipulação de arquivos de sistema)
-*   **Project Context:** Greenfield (Novo Produto)
+*   **Complexity:** Medium-High (Configuration automation and system file manipulation)
+*   **Project Context:** Greenfield (New Product)
 
 ## Success Criteria
 
 ### User Success
 
-*   **Redução de Fricção:** Após 5 fatos salvos, o usuário inicia uma tarefa complexa em um novo agente suportado com pelo menos 80% menos texto de orientação inicial do que na linha de base manual.
-*   **Adoção por Necessidade:** Após 10 sessões com memória ativa, o usuário mantém o uso do universal-memory em pelo menos 2 ferramentas/agentes suportados e considera a ausência da memória um bloqueio operacional relevante.
-*   **Economia de Tokens:** O volume médio de tokens gastos em preâmbulos repetitivos cai pelo menos 60% em 10 sessões comparáveis.
+*   **Friction Reduction:** After 5 saved facts, the user initiates a complex task on a new supported agent with at least 80% less initial guidance text than the manual baseline.
+*   **Adoption by Necessity:** After 10 active memory sessions, the user maintains usage of universal-memory in at least 2 supported tools/agents and considers the absence of memory a relevant operational blocker.
+*   **Token Savings:** The average volume of tokens spent on repetitive preambles drops by at least 60% across 10 comparable sessions.
 
 ### Business Success
 
-*   **Agnosticismo de Vendor:** O MVP opera com pelo menos 2 hosts/agentes de IA diferentes usando a mesma base de memória e instruções consistentes.
-*   **Eficiência Operacional:** O tempo de onboarding de uma nova ferramenta suportada cai para menos de 10 minutos, medido do início da configuração até a primeira leitura bem-sucedida de contexto.
+*   **Vendor Agnosticism:** The MVP operates with at least 2 different AI hosts/agents using the same memory base and consistent instructions.
+*   **Operational Efficiency:** Onboarding time for a new supported tool drops to under 10 minutes, measured from the start of configuration to the first successful context read.
 
 ### Technical Success
 
-*   **Agnosticismo de Vendor:** O motor de memória e o arquivo `AGENTS.md` deve ser interpretado e aplicado com sucesso em pelo menos dois provedores de LLM diferentes (ex: OpenAI e Anthropic).
-*   **Integridade da Configuração:** O motor de adaptação automática deve atualizar o `AGENTS.md` sem corromper instruções existentes ou criar loops de comportamento conflitantes.
-*   **Latência de Injeção:** Recuperação de memória e montagem de contexto adicionam menos de 200ms ao início de uma sessão local em 95% das execuções de teste.
+*   **Vendor Agnosticism:** The memory engine and the `AGENTS.md` file must be successfully interpreted and applied across at least two different LLM providers (e.g., OpenAI and Anthropic).
+*   **Configuration Integrity:** The auto-adaptation engine must update `AGENTS.md` without corrupting existing instructions or creating conflicting behavioral loops.
+*   **Injection Latency:** Memory retrieval and context assembly add less than 200ms to the start of a local session in 95% of test executions.
 
 ### Measurable Outcomes
 
-*   Diminuição de 80% nas "mensagens de orientação inicial" em novas sessões após os primeiros 5 fatos salvos na memória universal.
-*   Zero edições manuais no arquivo `AGENTS.md` pelo usuário após a ativação do motor de adaptação.
+*   An 80% decrease in "initial guidance messages" in new sessions after the first 5 facts are saved in the universal memory.
+*   Zero manual edits to the `AGENTS.md` file by the user after the adaptation engine is activated.
 
 ## Product Scope
 
 ### MVP - Minimum Viable Product
 
-*   **Core Memory Engine:** Sistema de persistência local (JSON/Markdown) para armazenamento de fatos, preferências e histórico consolidado.
-*   **Auto-Adaptation Motor:** Um agente/rotina dedicado que analisa a memória e atualiza manifests compartilhados e arquivos nativos de runtimes suportados para refletir o comportamento do usuário sem drift.
-*   **On-Demand Skill Creation and Native Skill Installation:** Capacidade de gerar Agent Skills canônicas e instalá-las em diretórios nativos de agentes suportados quando o runtime consumir skills nativamente.
-*   **Multi-Runtime Onboarding:** Fluxo CLI para seleção múltipla de runtimes/agentes, com inglês como idioma default e feedback visual de terminal.
-*   **Interactive Update & Synchronization:** Capacidade de atualizar skills canônicas, propagar alterações para runtimes locais, sincronizar benchmarks/dados locais e interagir ativamente com o usuário em caso de conflitos em regras nativas (ex: Cursor).
-*   **Universal Interface:** CLI ou protocolo simples para que qualquer agente possa ler/escrever na memória.
-*   **Backup & Rollback Guardrails:** Proteção local contra perda de dados antes de alterações automáticas em memórias, regras, skills e arquivos de instrução.
+*   **Core Memory Engine:** Local persistence system (JSON/Markdown) for storing facts, preferences, and consolidated history.
+*   **Auto-Adaptation Motor:** A dedicated agent/routine that analyzes memory and updates shared manifests and native runtime files of supported runtimes to reflect user behavior without drift.
+*   **On-Demand Skill Creation and Native Skill Installation:** Ability to generate canonical Agent Skills and install them in native directories of supported agents when the runtime consumes skills natively.
+*   **Multi-Runtime Onboarding:** CLI flow for multi-selection of runtimes/agents, with English as the default language and visual terminal feedback.
+*   **Interactive Update & Synchronization:** Ability to update canonical skills, propagate changes to local runtimes, synchronize local benchmarks/data, and actively interact with the user in case of conflicts in native rules (e.g., Cursor).
+*   **Universal Interface:** CLI or simple protocol allowing any agent to read/write from/to memory.
+*   **Backup & Rollback Guardrails:** Local protection against data loss prior to automatic mutations in memories, rules, skills, and instruction files.
 
 ### Growth Features (Post-MVP)
 
-*   **Multi-Machine Sync:** Sincronização em nuvem ou via repositório Git para manter a memória consistente entre diferentes dispositivos.
-*   **Memory Import/Export:** Ferramentas de importação/exportação de bases de memória para migração manual, backup externo e portabilidade entre ambientes.
-*   **Session Sharing:** Capacidade de compartilhar "pedaços" de memória ou sessões específicas entre diferentes usuários ou times.
-*   **Memory Pruning:** Gestão inteligente de memória para evitar que o contexto fique "poluído" com informações obsoletas.
+*   **Multi-Machine Sync:** Cloud or Git repository synchronization to keep memory consistent across different devices.
+*   **Memory Import/Export:** Memory base import/export tools for manual migration, external backup, and portability across environments.
+*   **Session Sharing:** Ability to share specific "chunks" of memory or sessions across different users or teams.
+*   **Memory Pruning:** Intelligent memory management to prevent context from becoming "polluted" with obsolete information.
 
 ### Vision (Future)
 
-*   **Autonomous Optimization:** Um agente que atua como "Coach de Fluxo de Trabalho", sugerindo automações e melhorias proativas antes mesmo de o usuário sentir a necessidade.
-*   **Ecosystem Integration:** Integração nativa com IDEs e terminais para captura passiva de contexto (sem necessidade de input explícito).
+*   **Autonomous Optimization:** An agent acting as a "Workflow Coach," suggesting proactive automations and improvements even before the user senses the need.
+*   **Ecosystem Integration:** Native integration with IDEs and terminals for passive context capture (without requiring explicit input).
 
 ### Out of Scope for MVP
 
-*   Sincronização multi-máquina automática.
-*   Importação/exportação completa de bases de memória.
-*   Interfaces web hospedadas para uso fora de ambientes locais.
-*   Compartilhamento de memória entre usuários ou times.
-*   Otimização autônoma proativa fora dos fluxos explicitamente aprovados pelo usuário.
+*   Automatic multi-machine synchronization.
+*   Complete import/export of memory bases.
+*   Hosted web interfaces for usage outside of local environments.
+*   Memory sharing between users or teams.
+*   Proactive autonomous optimization outside of flows explicitly approved by the user.
 
 ## User Journeys
 
-### Journey 1: O Engenheiro Multi-Agente (Acesso à Memória de Curto Prazo)
-*   **Persona:** Yan, trabalhando em um repositório complexo com múltiplos sub-agentes.
-*   **Cenário:** Yan invoca um novo agente especializado em QA para criar testes de integração.
-*   **A Jornada:**
-    *   **Início:** O agente lê o arquivo `AGENTS.md` global, que contém a diretriz: "Antes de iniciar, consulte a Short Term Memory deste repositório".
-    *   **Ação:** O agente executa a ferramenta de leitura de memória e obtém um resumo: "Yan está usando TDD, o módulo X foi refatorado há 10 minutos e a prioridade atual é a cobertura do endpoint /auth".
-    *   **Clímax:** Sem que Yan digite nada, o agente responde: "Entendido, Yan. Li a memória do projeto. Vou focar nos testes de integração para o novo endpoint /auth seguindo o padrão TDD que você estabeleceu".
-    *   **Resolução:** Yan economiza ~300 tokens de preâmbulo e 5 minutos de explicação. O trabalho flui imediatamente.
+### Journey 1: The Multi-Agent Engineer (Short-Term Memory Access)
+*   **Persona:** Yan, working in a complex repository with multiple sub-agents.
+*   **Scenario:** Yan invokes a new QA-specialized agent to create integration tests.
+*   **The Journey:**
+    *   **Start:** The agent reads the global `AGENTS.md` file, which contains the directive: "Before starting, check the Short Term Memory of this repository."
+    *   **Action:** The agent executes the memory reading tool and obtains a summary: "Yan is using TDD, module X was refactored 10 minutes ago, and the current priority is coverage of the /auth endpoint."
+    *   **Climax:** Without Yan typing anything, the agent responds: "Understood, Yan. I read the project memory. I will focus on integration tests for the new /auth endpoint following the TDD pattern you established."
+    *   **Resolution:** Yan saves ~300 preamble tokens and 5 minutes of explanation. Workflow proceeds immediately.
 
-### Journey 2: O Curador de Instruções (Adaptação por Recorrência)
-*   **Persona:** O "Agente Adaptador" (rotina de fundo).
-*   **Cenário:** Durante o dia, Yan menciona em diferentes chats que prefere usar `tomllib` em vez de `pyyaml` para arquivos de configuração.
-*   **A Jornada:**
-    *   **Início:** O motor de memória universal registra essas menções como "fatos latentes".
-    *   **Ação:** No final do ciclo (ou após a 3ª menção), o Agente Adaptador analisa a recorrência: "O usuário expressou preferência por tomllib 3 vezes em 2 sessões diferentes. Relevância: Alta."
-    *   **Clímax:** O agente propõe ou executa uma atualização no `AGENTS.md`: "Adicionada regra: Preferir sempre tomllib para parsing de arquivos TOML".
-    *   **Resolução:** Yan não precisa mais lembrar de avisar aos agentes sobre sua biblioteca preferida; o ambiente "aprendeu" o comportamento.
+### Journey 2: The Instruction Curator (Adaptation by Recurrence)
+*   **Persona:** The "Adaptation Agent" (background routine).
+*   **Scenario:** During the day, Yan mentions in different chats that he prefers to use `tomllib` instead of `pyyaml` for configuration files.
+*   **The Journey:**
+    *   **Start:** The universal memory engine records these mentions as "latent facts."
+    *   **Action:** At the end of the cycle (or after the 3rd mention), the Adaptation Agent analyzes the recurrence: "The user expressed a preference for tomllib 3 times in 2 different sessions. Relevance: High."
+    *   **Climax:** The agent proposes or executes an update to `AGENTS.md`: "Added rule: Always prefer tomllib for parsing TOML files."
+    *   **Resolution:** Yan no longer needs to remember to inform agents about his preferred library; the environment has "learned" the behavior.
 
-### Journey 3: O Criador de Skills (Expansão de Capacidade)
-*   **Persona:** Yan, instruindo o sistema sobre uma nova metodologia (ex: SDD - Spec Driven Development).
-*   **Cenário:** Yan explica detalhadamente como quer que as especificações sejam geradas antes do código.
-*   **A Jornada:**
-    *   **Início:** O sistema detecta uma instrução metodológica complexa e repetitiva.
-    *   **Ação:** O Agente de Adaptação identifica que essa lógica pode ser encapsulada em uma ferramenta reutilizável para diminuir a carga cognitiva.
-    *   **Clímax:** O sistema gera o boilerplate e a lógica de uma nova skill `generate-sdd-spec` e a registra no sistema.
-    *   **Resolução:** Na próxima vez, Yan apenas diz "crie a spec SDD para o módulo Y", invocando a skill em vez de re-explicar a metodologia.
+### Journey 3: The Skill Creator (Capability Expansion)
+*   **Persona:** Yan, instructing the system on a new methodology (e.g., SDD - Spec Driven Development).
+*   **Scenario:** Yan explains in detail how he wants specifications to be generated before code.
+*   **The Journey:**
+    *   **Start:** The system detects a complex and repetitive methodological instruction.
+    *   **Action:** The Adaptation Agent identifies that this logic can be encapsulated into a reusable tool to reduce cognitive load.
+    *   **Climax:** The system generates the boilerplate and logic for a new skill `generate-sdd-spec` and registers it in the system.
+    *   **Resolution:** Next time, Yan simply says "create the SDD spec for module Y," invoking the skill instead of re-explaining the methodology.
 
-### Journey 4: O Integrador de Multi-Runtimes (Onboarding e Portabilidade)
-*   **Persona:** Yan, configurando o ambiente para trabalhar simultaneamente com Claude Code, OpenCode e Cursor.
-*   **Cenário:** Yan want to initialize context in a new project and configure all tools at once.
-*   **A Jornada:**
-    *   **Início:** Yan executa `umem init` no terminal. Ele é recebido por uma bela arte em ASCII/ANSI simulando a conexão de um pendrive no terminal de forma minimalista.
-    *   **Ação:** O prompt interativo em inglês pergunta: `Which runtime(s) would you like to install for?`. Yan seleciona múltiplos runtimes (Claude Code, OpenCode, Cursor) fornecendo os caminhos apropriados.
-    *   **Clímax:** O instalador detecta as pastas locais de cada agente, realiza o backup automático (snapshot) e insere as regras de inicialização e diretórios nativos de skills (como `.claude/`, `.opencode/` e `.cursor/rules/`) com zero fricção.
-    *   **Resolução:** Todos os agentes são sincronizados instantaneamente para ler a mesma base de memórias locais e skills de maneira portátil e consistente.
+### Journey 4: The Multi-Runtime Integrator (Onboarding and Portability)
+*   **Persona:** Yan, configuring the environment to work simultaneously with Claude Code, OpenCode, and Cursor.
+*   **Scenario:** Yan wants to initialize context in a new project and configure all tools at once.
+*   **The Journey:**
+    *   **Start:** Yan runs `umem init` in the terminal. He is greeted by a beautiful ASCII/ANSI art simulating plugging in a pendrive in the terminal in a minimalist way.
+    *   **Action:** The interactive English prompt asks: `Which runtime(s) would you like to install for?`. Yan selects multiple runtimes (Claude Code, OpenCode, Cursor) by providing the appropriate paths.
+    *   **Climax:** The installer detects the local folders of each agent, performs an automatic backup (snapshot), and inserts the initialization rules and native skill directories (such as `.claude/`, `.opencode/`, and `.cursor/rules/`) with zero friction.
+    *   **Resolution:** All agents are instantly synchronized to read the same base of local memories and skills in a portable and consistent manner.
 
-### Journey 5: O Curador de Versões (Atualização com Proteção contra Deriva)
-*   **Persona:** Yan, que customizou manualmente uma regra de instrução nativa do Cursor (`.cursor/rules/sdd-rules.md`).
-*   **Cenário:** O `umem` atualiza a biblioteca local e propõe atualizar a respectiva skill canônica em todos os runtimes.
-*   **A Jornada:**
-    *   **Início:** Yan executa `umem update --skills` para propagar melhorias de skills.
-    *   **Ação:** O `umem` detecta que o arquivo local do Cursor divergiu da versão canônica.
-    *   **Clímax:** Em vez de sobrescrever silenciosamente, a CLI do `umem` exibe um aviso interativo destacado em inglês: `Warning: Native Cursor target sdd-rules.md has manual changes. Overwriting it might break your current agent workflow. Keep local Cursor version or Overwrite with canonical library version? [Keep/Overwrite]`.
-    *   **Resolução:** Yan escolhe `Keep` (Manter). O `umem` preserva a customização local dele no Cursor, cria um snapshot de backup da skill, e atualiza as demais ferramentas sem drift cognitivo.
+### Journey 5: The Version Curator (Updates with Drift Protection)
+*   **Persona:** Yan, who manually customized a native Cursor instruction rule (`.cursor/rules/sdd-rules.md`).
+*   **Scenario:** `umem` updates the local library and proposes updating the respective canonical skill across all runtimes.
+*   **The Journey:**
+    *   **Start:** Yan runs `umem update --skills` to propagate skill improvements.
+    *   **Action:** `umem` detects that the local Cursor file has diverged from the canonical version.
+    *   **Climax:** Instead of silently overwriting, the `umem` CLI displays a highlighted interactive warning in English: `Warning: Native Cursor target sdd-rules.md has manual changes. Overwriting it might break your current agent workflow. Keep local Cursor version or Overwrite with canonical library version? [Keep/Overwrite]`.
+    *   **Resolution:** Yan chooses `Keep`. `umem` preserves his local Cursor customization, creates a backup snapshot of the skill, and updates the other tools without cognitive drift.
 
 ### Journey Requirements Summary
 
-Essas jornadas revelam a necessidade das seguintes capacidades:
-*   **Protocolo de Inicialização:** Regra padronizada no `AGENTS.md` para forçar a leitura da memória de curto prazo (Short Term Memory).
-*   **Motor de Análise de Relevância:** Lógica de pontuação baseada em recorrência (2-3 vezes) para transformar fatos efêmeros em regras permanentes.
-*   **Repositório de Metadados por Repo:** Capacidade de separar o que é "Universal" do que é específico de um projeto/pasta.
-*   **Motor de Geração de Código (Skills):** Infraestrutura para que um agente possa escrever, testar e registrar novos scripts/ferramentas no ambiente do usuário.
-*   **Fluxo de Integração de Host:** Procedimento repetível para configurar múltiplos runtimes, configurar seus diretórios nativos de skills/regras, validar leitura de memória e confirmar consistência de comportamento de ponta a ponta.
-*   **Motor de Sincronização e Resolução de Conflitos:** Lógica para detectar divergências entre arquivos nativos de runtimes e o repositório canônico de skills, com prompts de confirmação de quebra de fluxo para o usuário.
+These journeys reveal the need for the following capabilities:
+*   **Initialization Protocol:** Standardized rule in `AGENTS.md` to force reading the Short-Term Memory.
+*   **Relevance Analysis Engine:** Recurrence-based scoring logic (2-3 times) to transform ephemeral facts into permanent rules.
+*   **Metadata Repository per Repo:** Ability to separate what is "Universal" from what is specific to a project/folder.
+*   **Code Generation Engine (Skills):** Infrastructure allowing an agent to write, test, and register new scripts/tools in the user's environment.
+*   **Host Integration Flow:** Repeatable procedure to set up multiple runtimes, configure their native skill/rule directories, validate memory reading, and confirm end-to-end behavioral consistency.
+*   **Synchronization and Conflict Resolution Engine:** Logic to detect discrepancies between native runtime files and the canonical skill repository, with flow-break confirmation prompts for the user.
 
 ## Domain-Specific Requirements
 
 ### Compliance & Safety (Local MVP)
-- **Secret & ENV Guardrails:** O sistema deve implementar um motor de detecção passiva para impedir que chaves de API, credenciais ou variáveis de ambiente sensíveis sejam persistidas na memória (curto ou longo prazo) inadvertidamente.
-- **Soberania de Dados:** Por operar localmente, o usuário detém controle total sobre os arquivos de persistência, mas deve haver uma interface clara para purga seletiva de fatos.
+- **Secret & ENV Guardrails:** The system must implement a passive detection engine to prevent API keys, credentials, or sensitive environment variables from being inadvertently persisted in memory (short or long-term).
+- **Data Sovereignty:** By operating locally, the user retains full control over the persistence files, but there must be a clear interface for selective fact purging.
 
 ### Technical Constraints & Memory Model
-- **Arquitetura Dual de Memória:** Separação rígida entre **Short Term Memory** (efêmera, específica por projeto/pasta, focada em tarefas e restrições imediatas) e **Universal Memory** (persistente, global, focada em comportamentos e preferências).
-- **Gestão de Contexto (Signal-to-Noise):** A memória de curto prazo deve ser sumarizada e priorizada dinamicamente para garantir que a injeção no buffer de contexto do agente não degrade a performance ou cause overflow de tokens.
-- **Cross-Vendor Behavior Sync:** O output final da "memória" não é apenas dado bruto, mas a adaptação ativa do arquivo `AGENTS.MD` (ou equivalente), garantindo que agentes de diferentes provedores (OpenAI, Anthropic, etc.) operem sob as mesmas diretrizes comportamentais do usuário.
-- **Gate de Estratégia de Recuperação:** A arquitetura deve comparar busca textual local e busca semântica antes de selecionar o padrão de recuperação, usando benchmarks de latência, qualidade de resultado, custo operacional e simplicidade offline.
+- **Dual Memory Architecture:** Rigid separation between **Short-Term Memory** (ephemeral, project/folder-specific, focused on immediate tasks and constraints) and **Universal Memory** (persistent, global, focused on behaviors and preferences).
+- **Context Management (Signal-to-Noise):** The short-term memory must be dynamically summarized and prioritized to ensure that injection into the agent's context buffer does not degrade performance or cause token overflow.
+- **Cross-Vendor Behavior Sync:** The final output of the "memory" is not just raw data, but the active adaptation of the `AGENTS.md` file (or equivalent), ensuring that agents from different providers (OpenAI, Anthropic, etc.) operate under the same behavioral directives of the user.
+- **Retrieval Strategy Gate:** The architecture must compare local textual search and semantic search before selecting the retrieval pattern, using benchmarks of latency, result quality, operational cost, and offline simplicity.
 
 ### Risk Mitigations
-- **Context Hygiene:** Rotinas automáticas para remoção de fatos obsoletos na short-term memory após a conclusão de tarefas, evitando "poluição cognitiva".
-- **Encapsulamento de Habilidades:** Transformação de instruções complexas recorrentes em "Skills" formais para reduzir o risco de alucinação ou má interpretação de fatos brutos pelo agente.
+- **Context Hygiene:** Automatic routines for removing obsolete facts from short-term memory after task completion, preventing "cognitive pollution."
+- **Skill Encapsulation:** Transformation of recurring complex instructions into formal "Skills" to reduce the risk of hallucination or misinterpretation of raw facts by the agent.
 
 ## Innovation & Novel Patterns
 
 ### Detected Innovation Areas
-- **Consolidação de Padrões Fragmentados:** O sistema não apenas cria novas capacidades, mas orquestra padrões de mercado existentes (RAG, perfis, system prompts) em uma solução coesa e agnóstico de vendor.
-- **Adaptação Comportamental "Invisível":** A métrica de sucesso é o silêncio — a redução da necessidade de o usuário explicar premissas e preferências repetitivas.
-- **Aprendizado por Confirmação Ativa:** Introdução de um loop de feedback no final da sessão onde o agente pergunta: "Eu aprendi [X], posso salvar?". O usuário controla a evolução do seu próprio "agente universal" com opções de "Sim", "Sempre" ou "Não".
+- **Consolidation of Fragmented Patterns:** The system not only creates new capabilities, but orchestrates existing market patterns (RAG, profiles, system prompts) into a cohesive and vendor-agnostic solution.
+- **"Invisible" Behavioral Adaptation:** The metric of success is silence — reducing the need for the user to explain repetitive assumptions and preferences.
+- **Active Confirmation Learning:** Introduction of a feedback loop at the end of the session where the agent asks: "I learned [X], may I save it?". The user controls the evolution of their own "universal agent" with options of "Yes", "Always", or "No".
 
 ### Validation Approach
-- **Métrica de Repetição:** Monitoramento da frequência de mensagens de correção ou orientação do usuário sobre os mesmos temas em sessões subsequentes.
-- **Token Efficiency:** Medição da redução do tamanho do prompt de sistema necessário para atingir o mesmo nível de precisão operacional após a injeção de memória.
+- **Repetition Metric:** Monitoring the frequency of user correction or guidance messages on the same topics in subsequent sessions.
+- **Token Efficiency:** Measuring the reduction in the size of the system prompt required to achieve the same level of operational precision after memory injection.
 
 ### Risk Mitigation
-- **Feedback Loop Humano:** Todo fato promovido a "regra" passa por uma confirmação opcional mas recomendada, mitigando a deriva comportamental indesejada (alucinação de preferência).
-- **Testes de Regressão de Comportamento:** Verificação contínua se novas regras injetadas não entram em conflito com diretrizes pré-existentes no `AGENTS.md`.
+- **Human Feedback Loop:** Every fact promoted to a "rule" goes through an optional but recommended confirmation, mitigating undesired behavioral drift (preference hallucination).
+- **Behavior Regression Testing:** Continuous verification that newly injected rules do not conflict with pre-existing guidelines in `AGENTS.md`.
 
 ## Developer Tool Specific Requirements
 
 ### Language & Runtime Support
-- **Primary Runtime:** O MVP deve suportar Python 3.12+ como runtime de execução local.
-- **Package Support:** O MVP deve publicar instalação via PyPI e execução isolada via `uvx`.
-- **Host Support Matrix:** O MVP deve documentar, para cada host/agente suportado, o arquivo de instruções usado, o método de conexão MCP e o status de leitura/escrita de memória.
-- **Offline Operation:** Todas as capacidades essenciais do MVP devem funcionar sem conectividade externa após instalação e configuração local.
+- **Primary Runtime:** The MVP must support Python 3.12+ as the local execution runtime.
+- **Package Support:** The MVP must publish installation via PyPI and isolated execution via `uvx`.
+- **Host Support Matrix:** The MVP must document, for each supported host/agent, the instruction file used, the MCP connection method, and the memory read/write status.
+- **Offline Operation:** All essential MVP capabilities must function without external connectivity after local installation and configuration.
 
 ### Runtime & Host Support Matrix
 
-O ecossistema é modelado em **Tiers de Suporte de Runtime** para gerenciar o escopo de compatibilidade de caminhos nativos de instruções e skills:
+The ecosystem is modeled into **Runtime Support Tiers** to manage the compatibility scope of native paths for instructions and skills:
 
-| Runtime | Tier | Path Alvo Inicial / Diretórios Nativos |
+| Runtime | Tier | Initial Target Path / Native Directories |
 | --- | --- | --- |
-| **Claude Code** | Tier 1 (MVP completo) | `~/.claude/`, `.claude/`, `CLAUDE.md` |
-| **OpenCode** | Tier 1 (MVP completo) | `~/.config/opencode/`, `.opencode/`, `AGENTS.md` |
-| **Codex (OpenAI)** | Tier 1 (MVP completo) | `AGENTS.md`, paths locais de configuração do host |
-| **Cursor** | Tier 2 (MVP básico) | `~/.cursor/`, `.cursor/rules/` |
-| **Antigravity** | Tier 2 (MVP básico) | `~/.gemini/antigravity/` ou path do runtime adapter |
-| **Gemini** | Tier 2 (MVP básico) | `~/.gemini/`, `GEMINI.md` |
+| **Claude Code** | Tier 1 (Full MVP) | `~/.claude/`, `.claude/`, `CLAUDE.md` |
+| **OpenCode** | Tier 1 (Full MVP) | `~/.config/opencode/`, `.opencode/`, `AGENTS.md` |
+| **Codex (OpenAI)** | Tier 1 (Full MVP) | `AGENTS.md`, local host configuration paths |
+| **Cursor** | Tier 2 (Basic MVP) | `~/.cursor/`, `.cursor/rules/` |
+| **Antigravity** | Tier 2 (Basic MVP) | `~/.gemini/antigravity/` or runtime adapter path |
+| **Gemini** | Tier 2 (Basic MVP) | `~/.gemini/`, `GEMINI.md` |
 
-#### Critérios de Aceite de Integração de Runtimes:
+#### Runtime Integration Acceptance Criteria:
 
 | Surface | MVP Support Target | Acceptance Criteria |
 | --- | --- | --- |
-| Python runtime | Python 3.12+ | `universal-memory --version` executa com sucesso em ambiente Python 3.12 limpo. |
-| Package install | PyPI e `uvx` | Instalação via `pip install universal-memory` e execução via `uvx universal-memory --help` documentadas e verificadas. |
-| Tier 1 Runtimes | Claude Code, OpenCode, Codex | Setup interativo, injeção de instruções em caminhos nativos, instalação de skills em diretórios de skills locais, testes automatizados e rollback completo. |
-| Tier 2 Runtimes | Cursor, Antigravity, Gemini | Detecção básica de caminhos, instalação de regras/instruções quando o formato é conhecido, documentação de integração. |
-| Offline mode | CLI, MCP, persistência, auditoria e rollback | Fluxo de leitura, escrita, auditoria e rollback passa com rede desabilitada após instalação local. |
+| Python runtime | Python 3.12+ | `universal-memory --version` runs successfully in a clean Python 3.12 environment. |
+| Package install | PyPI and `uvx` | Installation via `pip install universal-memory` and execution via `uvx universal-memory --help` documented and verified. |
+| Tier 1 Runtimes | Claude Code, OpenCode, Codex | Interactive setup, instruction injection in native paths, skill installation in local skill directories, automated tests, and full rollback. |
+| Tier 2 Runtimes | Cursor, Antigravity, Gemini | Basic path detection, rule/instruction installation when the format is known, integration documentation. |
+| Offline mode | CLI, MCP, persistence, audit, and rollback | Read, write, audit, and rollback flow passes with network disabled after local installation. |
 
 ### Installation & Environment
-- **Multi-Package Manager Support:** O sistema deve estar disponível via PyPI (`pip install universal-memory`) e suportar execução direta/isolada via `uvx` para Python 3.12+.
-- **Local Persistence Layer:** Armazenamento baseado em arquivos legíveis por humanos, com metadados estruturados para automação, auditoria e controle via Git opcional.
+- **Multi-Package Manager Support:** The system must be available via PyPI (`pip install universal-memory`) and support direct/isolated execution via `uvx` for Python 3.12+.
+- **Local Persistence Layer:** Storage based on human-readable files, with structured metadata for automation, audit, and optional Git control.
 
 ### CLI Command Surface
-- **Project Initialization:** Comando para inicializar universal-memory em um diretório de projeto e registrar a memória de curto prazo local.
-- **Memory Read/Write:** Comandos para gravar fatos, listar fatos ativos, consultar contexto e purgar fatos selecionados.
-- **Status & Diagnostics:** Comando para exibir tamanho da base, hosts configurados, regras ativas, skills registradas e último resultado de health check.
-- **Host Setup:** Comando para configurar ou verificar integração com arquivos de instrução de agentes suportados.
-- **Audit Review:** Comando para listar alterações automáticas feitas em instruções, fatos e skills.
+- **Project Initialization:** Command to initialize universal-memory in a project directory and register local short-term memory.
+- **Memory Read/Write:** Commands to write facts, list active facts, query context, and purge selected facts.
+- **Status & Diagnostics:** Command to display database size, configured hosts, active rules, registered skills, and the latest health check result.
+- **Host Setup:** Command to configure or verify integration with instruction files of supported agents.
+- **Audit Review:** Command to list automatic changes made to instructions, facts, and skills.
 
 ### Communication & Interoperability
-- **MCP Protocol Implementation:** A API principal deve seguir o padrão **Model Context Protocol (MCP)** sobre JSON-RPC, permitindo integração plug-and-play com Claude Desktop e outros hosts MCP.
-- **CLI/API Parity:** Toda funcionalidade exposta pelo servidor de memória deve ser invocável via comandos CLI equivalentes para automação e uso manual.
+- **MCP Protocol Implementation:** The primary API must follow the **Model Context Protocol (MCP)** standard over JSON-RPC, allowing plug-and-play integration with Claude Desktop and other MCP hosts.
+- **CLI/API Parity:** All functionality exposed by the memory server must be invocable via equivalent CLI commands for automation and manual use.
 
 ### MCP/API Surface
-- **Context Retrieval:** Operação MCP para recuperar resumo de memória de curto prazo, preferências universais e regras ativas aplicáveis ao projeto atual.
-- **Fact Capture:** Operação MCP para propor ou gravar novos fatos com classificação de escopo, origem e expiração.
-- **Rule Proposal:** Operação MCP para propor promoção de fatos recorrentes para regras persistentes, exigindo confirmação quando aplicável.
-- **Skill Proposal:** Operação MCP para registrar uma oportunidade de skill latente e consultar o contador de recorrência associado.
-- **Health Check:** Operação MCP para verificar disponibilidade da base local, permissões de escrita, versão do servidor e hosts configurados.
+- **Context Retrieval:** MCP operation to retrieve the short-term memory summary, universal preferences, and active rules applicable to the current project.
+- **Fact Capture:** MCP operation to propose or record new facts with scope, origin, and expiration classification.
+- **Rule Proposal:** MCP operation to propose the promotion of recurring facts to persistent rules, requiring confirmation when applicable.
+- **Skill Proposal:** MCP operation to register a latent skill opportunity and query the associated recurrence counter.
+- **Health Check:** MCP operation to verify the availability of the local database, write permissions, server version, and configured hosts.
 
 ### Output Formats & Config Schema
-- **Human-Readable Storage:** Arquivos persistidos devem ser legíveis e editáveis por humanos.
-- **Structured Metadata:** Fatos, regras, skills latentes e eventos de auditoria devem conter metadados mínimos de escopo, origem, timestamp e status.
-- **CLI Output Modes:** Comandos devem suportar saída humana por padrão e saída estruturada para automação.
-- **Config Schema:** Configurações locais devem declarar caminhos de memória, hosts habilitados, política de confirmação e limites de contexto.
+- **Human-Readable Storage:** Persisted files must be readable and editable by humans.
+- **Structured Metadata:** Facts, rules, latent skills, and audit events must contain minimum metadata of scope, origin, timestamp, and status.
+- **CLI Output Modes:** Commands must support human-readable output by default and structured output for automation.
+- **Config Schema:** Local settings must declare memory paths, enabled hosts, confirmation policy, and context limits.
 
 ### Usage Examples
-- **Novo Projeto (Interativo):** `umem init` inicia o onboarding interativo com o terminal splash minimalista e pergunta múltipla de runtimes.
-- **Novo Projeto (Não-interativo):** `umem init --project . --runtime claude-code --runtime opencode` registra a memória de curto prazo e configura múltiplos runtimes sem interação.
-- **Salvar Fato:** `umem remember --scope project "Priorizar TDD para endpoints de autenticação"` grava um fato local e retorna identificador, escopo e origem.
-- **Consultar Contexto:** `umem context --format json` retorna resumo de memória aplicável ao diretório atual, incluindo fatos de projeto, preferências universais e regras ativas.
-- **Nova Regra:** `umem rules propose --from-recurrence` lista preferências recorrentes candidatas à promoção e exige resposta explícita: `yes`, `always` ou `no`.
-- **Novo Host:** `umem host setup --host <host-id>` detecta arquivo de instruções suportado, propõe alteração, cria snapshot e executa health check de leitura de contexto.
-- **MCP Context Retrieval:** Um host MCP invoca a operação de recuperação de contexto e recebe resposta estruturada com `project_summary`, `universal_preferences`, `active_rules` e `audit_reference`.
+- **New Project (Interactive):** `umem init` starts the interactive onboarding with the minimalist terminal splash and multi-selection of runtimes.
+- **New Project (Non-interactive):** `umem init --project . --runtime claude-code --runtime opencode` registers the short-term memory and configures multiple runtimes without interaction.
+- **Save Fact:** `umem remember --scope project "Prioritize TDD for authentication endpoints"` writes a local fact and returns the identifier, scope, and origin.
+- **Query Context:** `umem context --format json` returns a memory summary applicable to the current directory, including project facts, universal preferences, and active rules.
+- **New Rule:** `umem rules propose --from-recurrence` lists recurring candidate preferences for promotion and requires an explicit response: `yes`, `always`, or `no`.
+- **New Host:** `umem host setup --host <host-id>` detects the supported instruction file, proposes the change, creates a snapshot, and executes a context-reading health check.
+- **MCP Context Retrieval:** An MCP host invokes the context retrieval operation and receives a structured response with `project_summary`, `universal_preferences`, `active_rules`, and `audit_reference`.
 
 ### Migration & Onboarding
-- **Existing Instructions:** O onboarding deve detectar arquivos de instrução existentes e propor alterações sem sobrescrever conteúdo manual sem confirmação.
-- **Manual Memory Workflows:** O onboarding deve permitir registrar memórias iniciais a partir de notas locais aprovadas pelo usuário.
-- **Rollback Path:** Toda alteração automática em arquivos de instrução deve ter caminho de reversão documentado e auditável.
-- **Post-MVP Portability:** Importação/exportação completa de bases de memória fica fora do MVP, mas o modelo de dados deve evitar decisões que impeçam essa capacidade futura.
+- **Existing Instructions:** Onboarding must detect existing instruction files and propose modifications without overwriting manual content without confirmation.
+- **Manual Memory Workflows:** Onboarding must allow registering initial memories from user-approved local notes.
+- **Rollback Path:** Every automatic change to instruction files must have a documented and auditable rollback path.
+- **Post-MVP Portability:** Complete import/export of memory bases remains out of scope for the MVP, but the data model must avoid decisions that prevent this future capability.
 
 ### Backup & Recovery
-- **Snapshot Before Mutation:** Toda alteração automática em memórias, regras, skills ou arquivos de instrução deve criar um snapshot local antes da escrita.
-- **Rollback by Scope:** O usuário deve conseguir reverter a última alteração por escopo: projeto, memória universal, regra, skill ou arquivo de instrução.
-- **Backup Inspection:** O usuário deve conseguir listar snapshots disponíveis, ver origem da alteração, timestamp, escopo afetado e comando/ação responsável.
-- **Retention Policy:** O MVP deve manter uma política local mínima de retenção que proteja contra perda acidental sem exigir sincronização externa.
-- **Failure Behavior:** Se o snapshot falhar, a alteração automática não deve prosseguir.
+- **Snapshot Before Mutation:** Every automatic change to memories, rules, skills, or instruction files must create a local snapshot before writing.
+- **Rollback by Scope:** The user must be able to roll back the last change by scope: project, universal memory, rule, skill, or instruction file.
+- **Backup Inspection:** The user must be able to list available snapshots, view the origin of the change, timestamp, affected scope, and responsible command/action.
+- **Retention Policy:** The MVP must maintain a minimum local retention policy that protects against accidental loss without requiring external synchronization.
+- **Failure Behavior:** If the snapshot fails, the automatic change must not proceed.
 
 ### Skill Creation Engine (Agent Skills Standard)
-- **Padrão de Skills:** O sistema deve adotar o padrão **Agent Skills** (conforme agentskills.io), utilizando a estrutura de pastas com `SKILL.md` (instruções), `scripts/` (código executável) e `references/` (contexto).
-- **Fluxo de Geração Proativa:**
-  1. **Detecção:** O agente identifica quando uma metodologia ou fluxo procedimental está sendo explicado.
-  2. **Interpolação de Contexto:** O agente consulta a memória (curto e longo prazo) para consolidar instruções relacionadas ao tema.
-  3. **Proposta:** O agente pergunta ao usuário se deseja criar uma Skill formal para encapsular esse conhecimento.
-  4. **Aprovação:** Se aprovado, o sistema gera a estrutura de pastas e o arquivo `SKILL.md` seguindo o padrão.
-- **Latent Skill Tracking:** Caso o usuário esteja "com pressa", o agente deve registrar um fato de memória resumido com um contador de recorrência. Quando o padrão se repetir *N* vezes, o sistema re-propõe a criação da Skill com base no histórico acumulado.
-- **Skill Registry:** Interface para o desenvolvedor listar, testar e versionar as habilidades aprendidas pelo sistema.
+- **Skill Standard:** The system must adopt the **Agent Skills** standard (as per agentskills.io), using the folder structure with `SKILL.md` (instructions), `scripts/` (executable code), and `references/` (context).
+- **Proactive Generation Flow:**
+  1. **Detection:** The agent identifies when a methodology or procedural flow is being explained.
+  2. **Context Interpolation:** The agent queries the memory (short and long-term) to consolidate instructions related to the topic.
+  3. **Proposal:** The agent asks the user if they wish to create a formal Skill to encapsulate this knowledge.
+  4. **Approval:** If approved, the system generates the folder structure and the `SKILL.md` file following the standard.
+- **Latent Skill Tracking:** If the user is "in a hurry," the agent must record a summarized memory fact with a recurrence counter. When the pattern repeats *N* times, the system re-proposes the creation of the Skill based on the accumulated history.
+- **Skill Registry:** Interface for the developer to list, test, and version the skills learned by the system.
 
 ## Project Scoping & Phased Development
 
 ### MVP Strategy & Philosophy
-**MVP Approach:** Focado na resolução imediata do "imposto de repetição" através de persistência local, interface MCP e motor de adaptação comportamental passiva. O objetivo é validar o valor da "invisibilidade" e da economia de tokens em fluxos DevEx.
+**MVP Approach:** Focused on immediately resolving the "repetition tax" through local persistence, an MCP interface, and a passive behavioral adaptation engine. The goal is to validate the value of "invisibility" and token savings in DevEx workflows.
 
 ### MVP Feature Set (Phase 1)
 **Core User Journeys Supported:**
-- Acesso à Memória de Curto Prazo (Short Term Memory) para injeção imediata de contexto em novas sessões.
-- Adaptação por Recorrência: Transformação de fatos latentes em regras no `AGENTS.md` (via aprovação do usuário).
-- Criação Proativa de Skills: Detecção e encapsulamento de metodologias no padrão `Agent Skills`.
+- Access to Short-Term Memory for immediate context injection in new sessions.
+- Adaptation by Recurrence: Transforming latent facts into rules in `AGENTS.md` (via user approval).
+- Proactive Skill Creation: Detecting and encapsulating methodologies into the `Agent Skills` standard.
 
 **Must-Have Capabilities:**
-- Servidor MCP (JSON-RPC) para integração nativa.
-- CLI para gestão de memória e injeção manual.
-- Motor de persistência local legível por humanos e compatível com metadados estruturados.
-- Guardrails de segurança para Secrets e ENVs.
-- Mecanismo de confirmação de regras (Sim/Sempre/Não).
-- Fluxo de configuração de host para pelo menos dois agentes/ferramentas suportados.
-- Snapshots locais e rollback para alterações automáticas.
+- MCP Server (JSON-RPC) for native integration.
+- CLI for memory management and manual injection.
+- Local human-readable persistence engine compatible with structured metadata.
+- Security guardrails for Secrets and ENVs.
+- Rule confirmation mechanism (Yes/Always/No).
+- Host configuration flow for at least two supported agents/tools.
+- Local snapshots and rollback for automatic changes.
 
 ### Post-MVP Features
 **Phase 2 (Growth):**
-- **Multi-Machine Sync:** Sincronização via Git ou repositório centralizado.
-- **Cloud Gateway:** Possibilitar o uso da memória em interfaces web (ChatGPT, Gemini.com) via serviço de armazenamento em nuvem.
-- **Memory Import/Export:** Importação/exportação completa de bases de memória para migração manual, backup externo e portabilidade entre ambientes.
-- **Session Sharing:** Compartilhamento de contextos específicos entre times.
+- **Multi-Machine Sync:** Synchronization via Git or a centralized repository.
+- **Cloud Gateway:** Enable memory usage in web interfaces (ChatGPT, Gemini.com) via cloud storage service.
+- **Memory Import/Export:** Complete memory base import/export for manual migration, external backup, and portability between environments.
+- **Session Sharing:** Sharing of specific contexts between teams.
 
 **Phase 3 (Vision):**
-- **Autonomous Optimization:** IA que sugere melhorias proativas no workflow antes do usuário pedir.
-- **Native IDE Integration:** Captura passiva de contexto direto do VS Code/JetBrains sem necessidade de comandos explícitos.
+- **Autonomous Optimization:** AI that suggests proactive workflow improvements before the user asks.
+- **Native IDE Integration:** Passive context capture directly from VS Code/JetBrains without explicit commands.
 
 ### Risk Mitigation Strategy
-- **Technical Risks:** Injeção de contexto assíncrona para evitar degradação de performance; separação rígida entre memórias para evitar poluição do buffer de tokens.
-- **Market Risks:** Foco total no protocolo aberto MCP para garantir interoperabilidade imediata e evitar lock-in de ecossistema.
-- **Resource Risks:** Início 100% local para simplificar a infraestrutura e focar na qualidade do motor de adaptação.
+- **Technical Risks:** Asynchronous context injection to avoid performance degradation; rigid separation between memories to avoid token buffer pollution.
+- **Market Risks:** Full focus on the open MCP protocol to ensure immediate interoperability and prevent ecosystem lock-in.
+- **Resource Risks:** 100% local start to simplify infrastructure and focus on the quality of the adaptation engine.
 
 ## Functional Requirements
 
-### 1. Core Memory Management (Gestão de Memória)
-- **FR1:** O sistema deve persistir fatos e preferências do usuário em armazenamento local legível por humanos e compatível com metadados estruturados.
-- **FR2:** O sistema deve diferenciar logicamente entre Memória de Curto Prazo (específica por repositório) e Memória de Longo Prazo (global).
-- **FR3:** O sistema deve recuperar contexto por modos de busca locais definidos pela arquitetura, com seleção do modo padrão baseada em benchmark de latência, qualidade de resultado, custo operacional e funcionamento offline.
-- **FR4:** O usuário deve poder visualizar e editar manualmente os arquivos de persistência diretamente no sistema de arquivos.
-- **FR5:** O sistema deve permitir a purga (deleção) seletiva de fatos específicos ou de bases de memória completas.
-- **FR6:** O sistema deve executar rotinas de "Context Hygiene" para arquivar ou remover fatos de curto prazo obsoletos após a conclusão de tarefas.
+### 1. Core Memory Management
+- **FR1:** The system must persist facts and user preferences in human-readable local storage compatible with structured metadata.
+- **FR2:** The system must logically differentiate between Short-Term Memory (repository-specific) and Long-Term Memory (global).
+- **FR3:** The system must retrieve context through local search modes defined by the architecture, with the default mode selection based on a benchmark of latency, result quality, operational cost, and offline operation.
+- **FR4:** The user must be able to view and manually edit the persistence files directly in the filesystem.
+- **FR5:** The system must allow selective purging (deletion) of specific facts or complete memory databases.
+- **FR6:** The system must execute "Context Hygiene" routines to archive or remove obsolete short-term facts after task completion.
 
-### 2. Onboarding & Setup (Instalação e Ativação)
+### 2. Onboarding & Setup
 - **FR7:** During initial setup, the system must allow the user to select one or more supported runtimes/agents from a registry, including at least Claude Code, OpenCode and Codex/OpenAI-class AGENTS.md hosts, with Cursor and Antigravity represented according to their support tier.
 - **FR8:** The system must configure the selected runtimes by writing or updating their supported instruction targets and native skill targets, such as `AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/`, `.cursor/`, `.opencode/` or equivalent runtime-specific paths, with snapshot and audit protection before every mutation.
-- **FR9:** O usuário deve poder inicializar o `universal-memory` em um novo projeto/diretório via comando CLI (ex: `umem init`).
+- **FR9:** The user must be able to initialize `universal-memory` in a new project/directory via CLI command (e.g., `umem init`).
 
 ### 3. Command Line Interface (CLI)
-- **FR10:** O usuário deve poder consultar o status da memória (tamanho, regras ativas, skills disponíveis) via CLI.
-- **FR11:** Toda capacidade exposta pela API/MCP deve ter um comando CLI equivalente para uso manual.
+- **FR10:** The user must be able to query the memory status (size, active rules, available skills) via CLI.
+- **FR11:** Every capability exposed by the API/MCP must have an equivalent CLI command for manual usage.
 
 ### 4. Model Context Protocol (MCP) Interface
-- **FR12:** O sistema deve expor suas capacidades através de um servidor MCP nativo rodando sobre JSON-RPC.
-- **FR13:** O sistema deve permitir que agentes externos (ex: Claude Desktop) leiam o contexto atualizado da memória.
-- **FR14:** O sistema deve permitir que agentes externos gravem novos fatos e proponham regras na memória via comandos MCP.
+- **FR12:** The system must expose its capabilities through a native MCP server running over JSON-RPC.
+- **FR13:** The system must allow external agents (e.g., Claude Desktop) to read the updated memory context.
+- **FR14:** The system must allow external agents to record new facts and propose rules in memory via MCP commands.
 
-### 5. Auto-Adaptation & Synchronization (Sincronização Ativa)
-- **FR15:** O sistema deve atualizar dinamicamente as instruções contidas nos arquivos dos agentes (`AGENTS.md`, `CLAUDE.md`) conforme novas regras e fatos são consolidados na memória.
-- **FR16:** O sistema deve disponibilizar o resumo da Memória de Curto Prazo no contexto inicial dos agentes e expor, via status ou auditoria, evidência de última leitura, origem do resumo e falhas de injeção quando ocorrerem.
-- **FR17:** O sistema deve garantir que a injeção de contexto respeite limites de tamanho (sumarização) para não causar overflow de tokens no LLM.
+### 5. Auto-Adaptation & Synchronization
+- **FR15:** The system must dynamically update the instructions contained in the agents' files (`AGENTS.md`, `CLAUDE.md`) as new rules and facts are consolidated in memory.
+- **FR16:** The system must make the Short-Term Memory summary available in the initial context of the agents and expose, via status or audit, evidence of the last read, summary origin, and injection failures when they occur.
+- **FR17:** The system must ensure that context injection respects size limits (summarization) so as not to cause token overflow in the LLM.
 
-### 6. Skill Creation Engine (Padrão Agent Skills)
-- **FR18:** O sistema deve rastrear e contabilizar "Latent Skills" (instruções/metodologias recorrentes do usuário).
-- **FR19:** O sistema deve solicitar aprovação explícita (Sim/Sempre/Não) ao atingir o gatilho de recorrência para criar uma nova Skill.
+### 6. Skill Creation Engine (Agent Skills Standard)
+- **FR18:** The system must track and count "Latent Skills" (recurring user instructions/methodologies).
+- **FR19:** The system must request explicit approval (Yes/Always/No) upon reaching the recurrence trigger to create a new Skill.
 - **FR20:** The system must generate a canonical Agent Skill structure with `SKILL.md`, optional `scripts/` and optional `references/`, then install or link it into native skill directories for selected runtimes when supported by that runtime adapter.
 - **FR21:** The user must be able to list, activate, edit, disable and inspect both canonical skills and per-runtime installed skill targets through CLI and MCP-equivalent capabilities.
 
 ### 7. Security & Safety Guardrails
-- **FR22:** O sistema deve escanear passivamente todos os dados recebidos para interceptar chaves de API, credenciais ou variáveis de ambiente sensíveis antes da gravação.
-- **FR23:** O sistema deve impedir a persistência de segredos detectados, notificando o usuário sobre a tentativa.
-- **FR24:** O sistema deve manter um log de auditoria local de todas as alterações feitas automaticamente nas configurações dos agentes e na criação de novas skills.
+- **FR22:** The system must passively scan all received data to intercept API keys, credentials, or sensitive environment variables before writing.
+- **FR23:** The system must prevent the persistence of detected secrets, notifying the user of the attempt.
+- **FR24:** The system must maintain a local audit log of all changes made automatically to agent configurations and new skill creations.
 
 ### 8. Backup & Recovery Guardrails
-- **FR25:** O sistema deve criar snapshot local antes de qualquer alteração automática em memórias, regras, skills ou arquivos de instrução.
-- **FR26:** O sistema deve bloquear a alteração automática quando o snapshot prévio falhar.
-- **FR27:** O usuário deve poder listar snapshots disponíveis e identificar timestamp, escopo, origem e ação responsável por cada snapshot.
-- **FR28:** O usuário deve poder reverter a última alteração automática por escopo via CLI.
+- **FR25:** The system must create a local snapshot before any automatic change to memories, rules, skills, or instruction files.
+- **FR26:** The system must block the automatic change when the preceding snapshot fails.
+- **FR27:** The user must be able to list available snapshots and identify the timestamp, scope, origin, and action responsible for each snapshot.
+- **FR28:** The user must be able to roll back the last automatic change by scope via CLI.
 
 ### 9. Language & Visual Identity Guardrails
 - **FR29:** The product must use English as the default language for CLI prompts, help text, generated instructions, skill scaffolds and documentation templates, while allowing an explicit locale configuration for other supported languages such as Portuguese.
@@ -394,22 +394,22 @@ O ecossistema é modelado em **Tiers de Suporte de Runtime** para gerenciar o es
 ## Non-Functional Requirements
 
 ### Performance
-- **Latência de Recuperação:** Consultas locais de contexto devem responder em menos de 150ms no percentil 95 em uma base de teste com pelo menos 1.000 fatos, medido por benchmark automatizado em máquina de desenvolvimento.
-- **Impacto de Inicialização:** Leitura de memória e montagem do contexto inicial não devem adicionar mais de 200ms no percentil 95 ao início de uma sessão de agente configurado, medido por teste de integração local.
-- **Benchmark de Recuperação:** Antes da arquitetura final, busca textual local e busca semântica devem ser comparadas em pelo menos 30 consultas representativas, medindo latência, qualidade de resultado em escala 1-5 definida no protocolo de benchmark, custo operacional e funcionamento offline; a estratégia padrão deve ser justificada pelos resultados.
+- **Retrieval Latency:** Local context queries must respond in less than 150ms at the 95th percentile on a test database with at least 1,000 facts, measured by an automated benchmark on a development machine.
+- **Initialization Impact:** Memory reading and initial context assembly must not add more than 200ms at the 95th percentile to the start of a configured agent session, measured by a local integration test.
+- **Retrieval Benchmark:** Before the final architecture, local textual search and semantic search must be compared on at least 30 representative queries, measuring latency, result quality on a 1-5 scale defined in the benchmark protocol, operational cost, and offline operation; the default strategy must be justified by the results.
 
 ### Security
-- **Detecção de Segredos:** O sistema deve bloquear 100% dos padrões de segredo cobertos pela suíte de testes de segurança antes da persistência, medido por testes automatizados com exemplos positivos e negativos.
-- **Auditoria de Acesso:** Logs de alteração e alertas de interceptação de segredos devem ser consultáveis via CLI em menos de 2 comandos a partir do diretório do projeto, validado por teste de aceitação.
+- **Secret Detection:** The system must block 100% of secret patterns covered by the security test suite before persistence, measured by automated tests with positive and negative examples.
+- **Access Audit:** Change logs and secret interception alerts must be queryable via CLI in fewer than 2 commands from the project directory, validated by an acceptance test.
 
-### Reliability (Confiabilidade)
-- **Estratégia de Backup Local:** Antes de qualquer alteração automática em arquivos de instrução ou bases de fatos, o sistema deve criar um snapshot local recuperável e manter pelo menos as 5 versões mais recentes por escopo, validado por teste de rollback.
-- **Rollback:** O usuário deve conseguir reverter a última alteração automática em menos de 1 minuto usando CLI, medido por teste de aceitação em arquivos de instrução e base de fatos.
+### Reliability
+- **Local Backup Strategy:** Prior to any automatic change in instruction files or fact databases, the system must create a recoverable local snapshot and maintain at least the 5 most recent versions per scope, validated by a rollback test.
+- **Rollback:** The user must be able to roll back the last automatic change in less than 1 minute using the CLI, measured by an acceptance test on instruction files and the fact database.
 
 ### Integration
-- **MCP Compliance:** O servidor deve passar em 100% da suíte de conformidade definida pela arquitetura para o Model Context Protocol, incluindo pelo menos health check, recuperação de contexto, gravação/proposta de fato, proposta de regra e tratamento de erros JSON-RPC.
-- **Prontidão para Storage Alternativo:** A lógica de persistência deve isolar operações de leitura, escrita, listagem e versionamento atrás de um contrato interno testável; a troca de backend de armazenamento não deve exigir mudanças no motor de regras, MCP ou CLI, validado por testes de contrato.
-- **Host Compatibility:** O MVP deve validar leitura de contexto em pelo menos 2 hosts/agentes suportados, medido por teste manual documentado ou teste de integração quando o host permitir automação.
+- **MCP Compliance:** The server must pass 100% of the compliance suite defined by the architecture for the Model Context Protocol, including at least health check, context retrieval, fact recording/proposal, rule proposal, and JSON-RPC error handling.
+- **Alternative Storage Readiness:** The persistence logic must isolate read, write, list, and versioning operations behind a testable internal contract; switching the storage backend must not require changes to the rules engine, MCP, or CLI, validated by contract tests.
+- **Host Compatibility:** The MVP must validate context reading on at least 2 supported hosts/agents, measured by a documented manual test or integration test when the host allows automation.
 
-### Accessibility (Disponibilidade)
-- **Offline-First:** CLI, motor de persistência e servidor MCP devem executar leitura, gravação, consulta, auditoria e rollback com rede desabilitada, validado por teste automatizado ou checklist manual reproduzível.
+### Accessibility
+- **Offline-First:** The CLI, persistence engine, and MCP server must perform reads, writes, queries, audits, and rollbacks with network disabled, validated by automated tests or a reproducible manual checklist.

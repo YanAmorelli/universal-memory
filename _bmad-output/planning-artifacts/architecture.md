@@ -17,29 +17,29 @@ readinessStatus: 'ready-for-implementation'
 
 # Architecture Decision Document
 
-_This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together._
+*This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together.*
 
 ## Project Context Analysis
 
 ### Requirements Overview
 
 **Functional Requirements:**
-28 requisitos funcionais organizados em 8 domínios:
-1. **Core Memory Management (FR1–FR6):** Persistência local legível, separação lógica STM/LTM, busca por modos locais, edição manual, purga seletiva, higiene de contexto.
-2. **Onboarding & Setup (FR7–FR9):** Seleção de provedores, configuração automática de arquivos de instrução, inicialização por CLI.
-3. **CLI (FR10–FR11):** Status de memória, paridade total com API/MCP.
-4. **MCP Interface (FR12–FR14):** Servidor MCP nativo (JSON-RPC), leitura e escrita de contexto por agentes externos.
-5. **Auto-Adaptation & Sync (FR15–FR17):** Atualização dinâmica de AGENTS.md/CLAUDE.md, injeção de STM com sumarização, controle de overflow de tokens.
-6. **Skill Creation Engine (FR18–FR21):** Tracking de latent skills, gatilho de recorrência, geração de estrutura Agent Skills, gestão de skills via CLI.
-7. **Security & Safety (FR22–FR24):** Detecção passiva de segredos, bloqueio de persistência, log de auditoria.
-8. **Backup & Recovery (FR25–FR28):** Snapshot antes de mutação, bloqueio se snapshot falhar, listagem de snapshots, rollback por escopo.
+28 functional requirements organized into 8 domains:
+1. **Core Memory Management (FR1–FR6):** Readable local persistence, logical STM/LTM separation, search by local modes, manual editing, selective purging, context hygiene.
+2. **Onboarding & Setup (FR7–FR9):** Provider selection, automatic configuration of instruction files, CLI initialization.
+3. **CLI (FR10–FR11):** Memory status, full parity with API/MCP.
+4. **MCP Interface (FR12–FR14):** Native MCP server (JSON-RPC), context read and write by external agents.
+5. **Auto-Adaptation & Sync (FR15–FR17):** Dynamic update of AGENTS.md/CLAUDE.md, STM injection with summarization, token overflow control.
+6. **Skill Creation Engine (FR18–FR21):** Tracking of latent skills, recurrence triggering, Agent Skills structure generation, skill management via CLI.
+7. **Security & Safety (FR22–FR24):** Passive secret detection, persistence blocking, audit log.
+8. **Backup & Recovery (FR25–FR28):** Snapshot before mutation, block if snapshot fails, snapshot listing, scope-based rollback.
 
 **Non-Functional Requirements:**
-- **Performance:** Consultas de contexto < 150ms p95 (1.000 fatos); inicialização < 200ms p95; benchmark obrigatório texto vs semântica (30 consultas).
-- **Security:** 100% bloqueio de padrões de segredo cobertos pela suíte de testes; auditoria consultável em < 2 comandos.
-- **Reliability:** Snapshot automático com retenção mínima de 5 versões por escopo; rollback em < 1 minuto via CLI.
-- **Integration:** Conformidade MCP 100%; contrato interno de persistência isolado (storage-agnostic); validação em ≥ 2 hosts.
-- **Accessibility:** Offline-first total (CLI, MCP, persistência, auditoria, rollback).
+- **Performance:** Context queries < 150ms p95 (1,000 facts); initialization < 200ms p95; mandatory text vs. semantic benchmark (30 queries).
+- **Security:** 100% blocking of secret patterns covered by the test suite; audit queryable in < 2 commands.
+- **Reliability:** Automatic snapshot with a minimum retention of 5 versions per scope; rollback in < 1 minute via CLI.
+- **Integration:** 100% MCP compliance; isolated internal persistence contract (storage-agnostic); validation on ≥ 2 hosts.
+- **Accessibility:** Full offline-first (CLI, MCP, persistence, audit, rollback).
 
 **Scale & Complexity:**
 - Primary domain: Developer Tool / AI Middleware (CLI + MCP + Local Persistence)
@@ -50,20 +50,20 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 
 - **Runtime:** Python 3.12+
 - **Distribution:** PyPI + uvx
-- **Storage:** Arquivos locais legíveis por humanos (JSON/Markdown) com metadados estruturados
-- **Protocol:** MCP sobre JSON-RPC
-- **Offline-first:** Todas as capacidades essenciais sem conectividade
-- **Storage abstraction:** Contrato interno isolado para permitir troca futura de backend sem impactar motor de regras, MCP ou CLI
-- **Post-MVP readiness:** Modelo de dados deve suportar import/export futuro sem breaking changes
+- **Storage:** Human-readable local files (JSON/Markdown) with structured metadata
+- **Protocol:** MCP over JSON-RPC
+- **Offline-first:** All essential capabilities without connectivity
+- **Storage abstraction:** Isolated internal contract to allow future backend swapping without impacting rules engine, MCP, or CLI
+- **Post-MVP readiness:** Data model must support future import/export without breaking changes
 
 ### Cross-Cutting Concerns Identified
 
-1. **Auditoria universal:** Toda mutação automática (memória, regras, skills, arquivos de instrução) gera registro de auditoria consultável.
-2. **Snapshot/Rollback:** Pré-condição obrigatória para qualquer escrita automática; falha de snapshot bloqueia a operação.
-3. **Detecção de Segredos:** Camada de interceptação transversal que precede qualquer operação de persistência.
-4. **Paridade CLI ↔ MCP:** Toda funcionalidade exposta por uma interface deve existir na outra.
-5. **Sumarização de Contexto:** Gestão de tamanho de injeção para respeitar limites de tokens do LLM alvo.
-6. **Confirmação Humana:** Loop de feedback (Sim/Sempre/Não) antes de promoção de fatos a regras ou criação de skills.
+1. **Universal Audit:** Every automatic mutation (memory, rules, skills, instruction files) generates a queryable audit record.
+2. **Snapshot/Rollback:** Mandatory precondition for any automatic write; snapshot failure blocks the operation.
+3. **Secret Detection:** Cross-cutting interception layer that precedes any persistence operation.
+4. **CLI ↔ MCP Parity:** Every functionality exposed by one interface must exist in the other.
+5. **Context Summarization:** Injection size management to respect token limits of the target LLM.
+6. **Human Confirmation:** Feedback loop (Yes/Always/No) before promoting facts to rules or creating skills.
 
 ## Starter Template Evaluation
 
@@ -72,10 +72,10 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - **Package Manager:** uv
 - **Linting/Formatting:** Ruff (all-in-one: lint + format + import sort)
 - **Type Checking:** Pyright (strict mode, VS Code/Pylance integration)
-- **CLI Framework:** Typer + Rich (FastAPI-like DX, output profissional)
-- **MCP Framework:** FastMCP 3.x (`fastmcp>=3.3.1,<4`) (experiência existente do usuário; Components, Providers, Transforms)
+- **CLI Framework:** Typer + Rich (FastAPI-like DX, professional output)
+- **MCP Framework:** FastMCP 3.x (`fastmcp>=3.3.1,<4`) (existing user experience; Components, Providers, Transforms)
 - **Testing:** pytest + pytest-cov
-- **Layout:** src/ com Clean Architecture
+- **Layout:** src/ with Clean Architecture
 - **Distribution:** PyPI (MVP) → Container/Homebrew (post-MVP)
 
 ### Primary Technology Domain
@@ -84,17 +84,15 @@ Developer Tool / AI Middleware — CLI Tool + MCP Server (Python 3.12+)
 
 ### Starter Options Considered
 
-| Opção | Avaliação | Decisão |
+| Option | Evaluation | Decision |
 | :--- | :--- | :--- |
-| `uv init --package` | Scaffolding oficial, minimal, src/ layout | ✅ Selecionado como base |
-| Cookiecutter/Copier templates | Opiniados, genéricos, não cobrem MCP | ❌ Overhead desnecessário |
+| `uv init --package` | Official scaffolding, minimal, src/ layout | ✅ Selected as base |
+| Cookiecutter/Copier templates | Opinionated, generic, do not cover MCP | ❌ Unnecessary overhead |
 
 ### Selected Starter: `uv init --package` + Clean Architecture Manual
 
 **Rationale for Selection:**
-Projeto com requisitos específicos (CLI + MCP dual-interface, Clean Arch, múltiplos subsistemas)
-que nenhum template genérico cobre. O scaffolding mínimo do `uv` dá controle total sobre a
-estrutura de camadas sem carregar decisões indesejadas.
+Project with specific requirements (CLI + MCP dual-interface, Clean Arch, multiple subsystems) that no generic template covers. The minimal scaffolding of `uv` gives full control over the layer structure without bringing in unwanted decisions.
 
 **Initialization Command:**
 
@@ -108,28 +106,28 @@ uv add --dev pytest pytest-cov ruff pyright
 **Architectural Decisions Provided by Starter:**
 
 **Language & Runtime:**
-Python 3.12+ com type hints obrigatórios (Pyright strict mode)
+Python 3.12+ with mandatory type hints (Pyright strict mode)
 
 **CLI Framework:**
-Typer + Rich para interface de terminal profissional com saída colorida, tabelas e spinners
+Typer + Rich for a professional terminal interface with colored output, tables, and spinners
 
 **MCP Framework:**
-FastMCP 3.x (`fastmcp>=3.3.1,<4`) — Components, Providers, Transforms. Hot reload em dev, auto-threading, authorization granular
+FastMCP 3.x (`fastmcp>=3.3.1,<4`) — Components, Providers, Transforms. Hot reload in dev, auto-threading, granular authorization
 
 **Build Tooling:**
-uv (build, lock, run, publish) + Hatchling como build-backend
+uv (build, lock, run, publish) + Hatchling as build-backend
 
 **Testing Framework:**
-pytest + pytest-cov para cobertura integrada ao fluxo de testes
+pytest + pytest-cov for integrated testing workflow coverage
 
 **Code Organization:**
-src/ layout com Clean Architecture — separação clara entre domínio, aplicação, infraestrutura e interfaces (CLI/MCP)
+src/ layout with Clean Architecture — clear separation between domain, application, infrastructure, and interfaces (CLI/MCP)
 
 **Development Experience:**
-- `uv run` para execução no ambiente correto sem ativação manual de venv
-- `ruff check . && ruff format .` para lint/format unificado
-- `pyright` para type checking estrito
-- `uv tool install . --editable` para desenvolvimento local do CLI
+- `uv run` for execution in the correct environment without manual venv activation
+- `ruff check . && ruff format .` for unified linting/formatting
+- `pyright` for strict type checking
+- `uv tool install . --editable` for local CLI development
 
 **Note:** Project initialization using this command should be the first implementation story.
 
@@ -138,89 +136,83 @@ src/ layout com Clean Architecture — separação clara entre domínio, aplica�
 ### Decision Priority Analysis
 
 **Critical Decisions (Block Implementation):**
-- Formato de persistência dual (JSON + Markdown)
-- Validação com Pydantic v2
-- Paridade CLI ↔ MCP via camada de aplicação unificada (Use Cases)
-- Exceções de domínio tipadas
-- Configuração em TOML
+- Dual persistence format (JSON + Markdown)
+- Validation with Pydantic v2
+- CLI ↔ MCP parity via unified application layer (Use Cases)
+- Typed domain exceptions
+- TOML configuration
 
 **Important Decisions (Shape Architecture):**
-- Detecção de segredos via regex + heurística de entropia
-- Snapshot via cópia + manifest JSON
-- Auditoria em JSONL (append-only)
-- Busca textual como estratégia padrão de recuperação
+- Secret detection via regex + entropy heuristics
+- Snapshot via copy + JSON manifest
+- Audit logging in JSONL (append-only)
+- Text search as default retrieval strategy
 
 **Deferred Decisions (Post-MVP):**
-- Busca semântica com embeddings locais (interface abstrata pronta)
+- Semantic search with local embeddings (abstract interface ready)
 - Structured logging (structlog)
 - Container/Homebrew distribution
 
 ### Data Architecture
 
-**Formato de Persistência:** Dual — JSON para dados estruturados (fatos, regras, auditoria,
-snapshots, latent skills) + Markdown para documentos (skills, arquivos de instrução).
-Rationale: combina "metadados estruturados para automação" com "legível por humanos".
+**Persistence Format:** Dual — JSON for structured data (facts, rules, audit, snapshots, latent skills) + Markdown for documents (skills, instruction files).
+Rationale: combines "structured metadata for automation" with "human-readable".
 
-**Validação de Dados:** Pydantic v2 como modelo de domínio e contrato.
-Rationale: padrão do ecossistema FastAPI/FastMCP; validação + serialização unificadas.
+**Data Validation:** Pydantic v2 as domain model and contract.
+Rationale: standard of the FastAPI/FastMCP ecosystem; unified validation + serialization.
 
-**Busca/Recuperação:** Busca textual local (substring/regex em JSON) como hipótese padrão MVP.
-Interface abstrata (contrato/port) para permitir implementação semântica futura.
-O padrão final de recuperação só pode ser confirmado após o benchmark obrigatório com 30 consultas representativas.
-Rationale: manter zero dependência e offline-first como hipótese inicial, mas validar latência, qualidade e custo operacional antes de congelar a estratégia.
+**Search/Retrieval:** Local text search (substring/regex in JSON) as the default MVP hypothesis.
+Abstract interface (contract/port) to allow future semantic implementation.
+The final retrieval pattern can only be confirmed after the mandatory benchmark with 30 representative queries.
+Rationale: keep zero dependencies and offline-first as the initial hypothesis, but validate latency, quality, and operational cost before freezing the strategy.
 
 ### Security & Guardrails
 
-**Detecção de Segredos:** Regex patterns para formatos conhecidos (AWS keys, Bearer tokens,
-GitHub PATs, etc.) + heurística de entropia para segredos genéricos.
-Zero dependências externas, extensível via configuração.
-Rationale: cobertura ampla sem deps pesadas; atende FR22-FR23.
+**Secret Detection:** Regex patterns for known formats (AWS keys, Bearer tokens, GitHub PATs, etc.) + entropy heuristics for generic secrets.
+Zero external dependencies, extensible via configuration.
+Rationale: broad coverage without heavy dependencies; addresses FR22-FR23.
 
-**Snapshot/Backup:** Cópia de arquivo + manifest JSON com metadados (timestamp, escopo,
-ação responsável, hash do arquivo). Retenção: 5 últimas versões por escopo.
-Falha no snapshot bloqueia a operação de mutação.
-Rationale: simples, auditável, sem deps; atende FR25-FR28.
+**Snapshot/Backup:** File copy + JSON manifest with metadata (timestamp, scope, responsible action, file hash). Retention: last 5 versions per scope.
+Snapshot failure blocks the mutation operation.
+Rationale: simple, auditable, without dependencies; addresses FR25-FR28.
 
-**Log de Auditoria:** JSONL (append-only). Cada linha é um evento JSON independente
-com timestamp, ação, escopo, origem e resultado.
-Consultável via CLI ou `grep`/`jq` direto.
-Rationale: append-only natural para auditoria; atende "consultável em < 2 comandos".
+**Audit Log:** JSONL (append-only). Each line is an independent JSON event with timestamp, action, scope, source, and result.
+Queryable via CLI or direct `grep`/`jq`.
+Rationale: natural append-only for auditing; meets the "queryable in < 2 commands" requirement.
 
 ### API & Communication Patterns
 
-**Paridade CLI ↔ MCP:** Camada de Aplicação unificada (Use Cases / Application Services).
-CLI (Typer) e MCP (FastMCP) são thin adapters na camada de interface.
-Cada adapter formata I/O do seu jeito, mas delega para os mesmos use cases.
-Rationale: paridade garantida por design; DRY; testabilidade; Clean Architecture natural.
+**CLI ↔ MCP Parity:** Unified Application Layer (Use Cases / Application Services).
+CLI (Typer) and MCP (FastMCP) are thin adapters in the interface layer.
+Each adapter formats I/O its own way, but delegates to the same use cases.
+Rationale: parity guaranteed by design; DRY; testability; natural Clean Architecture.
 
-**Estratégia de Erro:** Hierarquia de exceções de domínio tipadas.
-Base: `UniversalMemoryError`. Especializações: `FactNotFoundError`,
-`SecretDetectedError`, `SnapshotFailedError`, `InvalidConfigError`, etc.
-CLI traduz para mensagens Rich coloridas; MCP traduz para JSON-RPC error codes.
-Rationale: expressivo, idiomático em Python, cada interface traduz independentemente.
+**Error Strategy:** Hierarchy of typed domain exceptions.
+Base: `UniversalMemoryError`. Specializations: `FactNotFoundError`, `SecretDetectedError`, `SnapshotFailedError`, `InvalidConfigError`, etc.
+CLI translates to colorful Rich messages; MCP translates to JSON-RPC error codes.
+Rationale: expressive, idiomatic in Python, each interface translates independently.
 
-**Gestão de Configuração:** TOML.
+**Configuration Management:** TOML.
 Global: `~/.config/umem/config.toml`
-Por projeto: `<projeto>/.umem/config.toml`
-Leitura nativa com `tomllib` (Python 3.12+); escrita com `tomli-w`.
-Rationale: padrão do ecossistema Python moderno, suporta comentários, legível.
+Per project: `<project>/.umem/config.toml`
+Native reading with `tomllib` (Python 3.12+); writing with `tomli-w`.
+Rationale: standard of the modern Python ecosystem, supports comments, readable.
 
 ### Infrastructure & Deployment
 
-**CI/CD:** GitHub Actions — workflow de lint (ruff) + type check (pyright) +
-test (pytest --cov) + publish to PyPI. Detalhamento na fase de implementação.
+**CI/CD:** GitHub Actions — workflow for linting (ruff) + type checking (pyright) + testing (pytest --cov) + publishing to PyPI. Details in the implementation phase.
 
-**Logging da Aplicação:** `logging` stdlib para MVP.
-Interface preparada para migração futura para `structlog` se necessário.
-Rationale: zero deps, single-user local, logs simples são suficientes.
+**Application Logging:** stdlib `logging` for MVP.
+Interface prepared for future migration to `structlog` if necessary.
+Rationale: zero dependencies, single-user local, simple logs are sufficient.
 
 ### Decision Impact Analysis
 
 **Implementation Sequence:**
-1. Modelos de domínio (Pydantic v2) — base para tudo
-2. Contrato de persistência (ports/interfaces)
-3. Implementação de storage (JSON + MD adapters)
-4. Use Cases (camada de aplicação)
+1. Domain models (Pydantic v2) — base for everything
+2. Persistence contract (ports/interfaces)
+3. Storage implementation (JSON + MD adapters)
+4. Use Cases (application layer)
 5. CLI adapter (Typer + Rich)
 6. MCP adapter (FastMCP 3.x)
 7. Secret scanner (cross-cutting)
@@ -229,72 +221,72 @@ Rationale: zero deps, single-user local, logs simples são suficientes.
 10. Host configurator (AGENTS.md, CLAUDE.md)
 
 **Cross-Component Dependencies:**
-- Secret Scanner intercepta todas as operações de escrita (Memory Engine, Skill Engine)
-- Snapshot Manager é pré-condição de todas as mutações automáticas
-- Audit Logger registra ações de todos os componentes
-- Use Cases são compartilhados entre CLI e MCP (paridade por design)
-- Pydantic models são compartilhados entre domínio, persistência e interfaces
+- Secret Scanner intercepts all write operations (Memory Engine, Skill Engine)
+- Snapshot Manager is a precondition for all automatic mutations
+- Audit Logger records actions from all components
+- Use Cases are shared between CLI and MCP (parity by design)
+- Pydantic models are shared between domain, persistence, and interfaces
 
 ## Implementation Patterns & Consistency Rules
 
-### Contexto Operacional
+### Operational Context
 
-**O CLI do universal-memory é operado primariamente por agentes de IA em contexto conversacional (tool-use / `run_command`), não por humanos em terminal separado.**
-- **Implicações:** MCP é a interface primária; `--format json` é crucial para parsing programático; Rich output é usado quando o agente exibe resultados no chat.
+**The universal-memory CLI is operated primarily by AI agents in a conversational context (tool-use / `run_command`), not by humans in a separate terminal.**
+- **Implications:** MCP is the primary interface; `--format json` is crucial for programmatic parsing; Rich output is used when the agent displays results in chat.
 
 ### Naming Patterns
 
-**Código Python:**
-- Módulos/arquivos: `snake_case` (ex: `memory_engine.py`)
-- Classes: `PascalCase` (ex: `FactRepository`)
-- Funções/métodos: `snake_case` (ex: `save_fact()`)
-- Variáveis: `snake_case` (ex: `fact_id`)
-- Constantes: `UPPER_SNAKE_CASE` (ex: `MAX_RETENTION_COUNT`)
-- Tipos/TypeAlias: `PascalCase` (ex: `FactScope`)
-- Módulos privados: Prefixo `_` (ex: `_internal.py`)
-- Interfaces/Ports (ABC): Prefixo com conceito, sufixo `Port` ou `Repository` (ex: `FactRepository`, `SearchPort`)
+**Python Code:**
+- Modules/files: `snake_case` (e.g., `memory_engine.py`)
+- Classes: `PascalCase` (e.g., `FactRepository`)
+- Functions/methods: `snake_case` (e.g., `save_fact()`)
+- Variables: `snake_case` (e.g., `fact_id`)
+- Constants: `UPPER_SNAKE_CASE` (e.g., `MAX_RETENTION_COUNT`)
+- Types/TypeAlias: `PascalCase` (e.g., `FactScope`)
+- Private modules: Prefix `_` (e.g., `_internal.py`)
+- Interfaces/Ports (ABC): Prefix with concept, suffix `Port` or `Repository` (e.g., `FactRepository`, `SearchPort`)
 
-**Dados JSON (Persistência):**
-- Campos JSON: `snake_case` (ex: `"created_at"`)
-- IDs: UUID v4 como string
-- Timestamps: ISO 8601 UTC (ex: `"2026-05-22T15:00:00Z"`)
-- Enums em JSON: `lowercase_snake` (ex: `"project"`)
-- Booleans: `true`/`false` (nunca 1/0)
+**JSON Data (Persistence):**
+- JSON fields: `snake_case` (e.g., `"created_at"`)
+- IDs: UUID v4 as string
+- Timestamps: ISO 8601 UTC (e.g., `"2026-05-22T15:00:00Z"`)
+- JSON Enums: `lowercase_snake` (e.g., `"project"`)
+- Booleans: `true`/`false` (never 1/0)
 
 **CLI:**
-- Comandos: `kebab-case` (ex: `umem host setup`)
-- Flags: `--kebab-case` (ex: `--format json`)
-- Variáveis de ambiente: `UPPER_SNAKE` com prefixo `UMEM_` (ex: `UMEM_CONFIG_PATH`)
+- Commands: `kebab-case` (e.g., `umem host setup`)
+- Flags: `--kebab-case` (e.g., `--format json`)
+- Environment variables: `UPPER_SNAKE` with `UMEM_` prefix (e.g., `UMEM_CONFIG_PATH`)
 
 ### Structure Patterns
 
-**Clean Architecture — Camadas e Regra de Dependência:**
+**Clean Architecture — Layers and Dependency Rule:**
 - `interfaces` → `application` → `domain` ← `infrastructure`
-- `domain` **não importa nada** de outras camadas.
-- `application` importa de `domain`, **nunca** de `infrastructure` ou `interfaces`.
-- `infrastructure` implementa os `ports` definidos em `domain`.
-- `interfaces` usa `application` (use cases), **nunca** acessa `infrastructure` diretamente.
+- `domain` **does not import anything** from other layers.
+- `application` imports from `domain`, **never** from `infrastructure` or `interfaces`.
+- `infrastructure` implements the `ports` defined in `domain`.
+- `interfaces` uses `application` (use cases), **never** accesses `infrastructure` directly.
 
-**Organização de Testes:**
-- Diretório `tests/` na raiz, espelhando a estrutura `src/`.
-- Nomenclatura: `test_<módulo>.py`.
-- Fixtures: `tests/conftest.py` na raiz e por subpasta.
+**Test Organization:**
+- `tests/` directory at the root, mirroring the `src/` structure.
+- Naming convention: `test_<module>.py`.
+- Fixtures: `tests/conftest.py` at the root and per subfolder.
 
 ### Format Patterns
 
-**Respostas CLI:**
-- Humano (default): Rich panels, tabelas, cores.
-- Máquina (`--format json`): JSON puro, uma linha por objeto.
+**CLI Responses:**
+- Human (default): Rich panels, tables, colors.
+- Machine (`--format json`): Pure JSON, one line per object.
 
-**Respostas MCP (JSON-RPC):**
-- Sucesso: `{"result": {"facts": [...], "summary": "..."}}`
-- Erro: `{"error": {"code": -32000, "message": "SecretDetectedError", "data": {"detail": "..."}}}`
+**MCP Responses (JSON-RPC):**
+- Success: `{"result": {"facts": [...], "summary": "..."}}`
+- Error: `{"error": {"code": -32000, "message": "SecretDetectedError", "data": {"detail": "..."}}}`
 
-**Estrutura de Fato Canônica:**
+**Canonical Fact Structure:**
 ```json
 {
   "id": "uuid-v4",
-  "content": "conteúdo",
+  "content": "content",
   "scope": "project",
   "source": "user_explicit",
   "created_at": "ISO-8601-UTC",
@@ -309,28 +301,28 @@ Rationale: zero deps, single-user local, logs simples são suficientes.
 ### Process Patterns
 
 **Error Handling:**
-- Exceção de domínio (`UniversalMemoryError` e derivadas) capturada pelo adapter.
-- CLI: Imprime erro com Rich e faz `sys.exit(1)`.
-- MCP: Levanta `McpError` formatado.
+- Domain exception (`UniversalMemoryError` and derivatives) caught by the adapter.
+- CLI: Prints error with Rich and performs `sys.exit(1)`.
+- MCP: Raises formatted `McpError`.
 
 **Logging:**
-- Módulo-level logger (`logger = logging.getLogger(__name__)`).
-- Níveis: DEBUG (interno), INFO (operações), WARNING (recuperáveis), ERROR (falhas críticas).
+- Module-level logger (`logger = logging.getLogger(__name__)`).
+- Levels: DEBUG (internal), INFO (operations), WARNING (recoverable), ERROR (critical failures).
 
-**Injeção de Dependência:**
-- Use Cases recebem ports via construtor (Constructor Injection).
+**Dependency Injection:**
+- Use Cases receive ports via constructor (Constructor Injection).
 
 ### Enforcement Guidelines
 
-**Todos os Agentes de IA DEVEM:**
-1. **NUNCA** importar de `infrastructure` ou `interfaces` dentro de `domain` ou `application`.
-2. **SEMPRE** usar a hierarquia de exceções de domínio — nunca levantar `ValueError`/`RuntimeError` genéricos.
-3. **SEMPRE** adicionar type hints em toda assinatura de função pública.
-4. **SEMPRE** escrever teste correspondente em `tests/` para qualquer novo use case ou adapter.
-5. **NUNCA** persistir dados sem passar pelo secret scanner.
-6. **SEMPRE** usar `snake_case` para campos JSON e nomes de arquivo.
-7. **SEMPRE** documentar use cases com docstring que descreve o que faz, não como faz.
-8. **NUNCA** colocar lógica de negócio nos adapters (CLI/MCP) — eles apenas formatam I/O.
+**All AI Agents MUST:**
+1. **NEVER** import from `infrastructure` or `interfaces` inside `domain` or `application`.
+2. **ALWAYS** use the domain exception hierarchy — never raise generic `ValueError`/`RuntimeError`.
+3. **ALWAYS** add type hints to every public function signature.
+4. **ALWAYS** write a corresponding test in `tests/` for any new use case or adapter.
+5. **NEVER** persist data without running it through the secret scanner.
+6. **ALWAYS** use `snake_case` for JSON fields and filenames.
+7. **ALWAYS** document use cases with a docstring describing what it does, not how it does it.
+8. **NEVER** place business logic in adapters (CLI/MCP) — they only format I/O.
 
 ## Project Structure & Boundaries
 
@@ -338,42 +330,42 @@ Rationale: zero deps, single-user local, logs simples são suficientes.
 
 ```text
 universal-memory/
-├── pyproject.toml              # Dependências (uv), metadados, scripts (entry points)
-├── uv.lock                     # Lockfile gerenciado pelo uv
-├── fastmcp.json                # Configuração declarativa do FastMCP (se aplicável)
+├── pyproject.toml              # Dependencies (uv), metadata, scripts (entry points)
+├── uv.lock                     # Lockfile managed by uv
+├── fastmcp.json                # Declarative FastMCP configuration (if applicable)
 ├── README.md
 ├── LICENSE
 ├── .github/
 │   └── workflows/
-│       └── ci.yml              # Roda ruff, pyright, pytest
+│       └── ci.yml              # Runs ruff, pyright, pytest
 ├── tests/
-│   ├── conftest.py             # Fixtures globais do pytest
-│   ├── contracts/              # Testes de contrato para ports de storage e interfaces
+│   ├── conftest.py             # Global pytest fixtures
+│   ├── contracts/              # Contract tests for storage ports and interfaces
 │   ├── domain/
 │   ├── application/
 │   ├── infrastructure/
 │   └── interfaces/
 ├── benchmarks/
-│   └── retrieval.py            # Benchmark textual vs candidato semântico local
+│   └── retrieval.py            # Textual vs local semantic candidate benchmark
 └── src/
     └── universal_memory/
         ├── __init__.py
-        ├── __main__.py         # Permite rodar `python -m universal_memory`
+        ├── __main__.py         # Allows running `python -m universal_memory`
         │
-        ├── domain/             # Sem dependências externas.
+        ├── domain/             # No external dependencies.
         │   ├── __init__.py
         │   ├── exceptions.py   # UniversalMemoryError, SecretDetectedError, etc.
         │   ├── entities/       # Pydantic models (Fact, Rule, Snapshot, AuditEvent)
         │   └── ports/          # ABCs: FactRepository, SecretScannerPort, SnapshotPort...
         │
-        ├── application/        # Use Cases. Depende apenas do domain/.
+        ├── application/        # Use Cases. Depends only on domain/.
         │   ├── __init__.py
         │   ├── memory/         # save_fact.py, get_context.py, purge_fact.py
         │   ├── adaptation/     # promote_rule.py, sync_agents_md.py
         │   ├── skills/         # track_latent_skill.py, generate_skill_scaffold.py
         │   └── onboarding/     # setup_project.py, configure_host.py
         │
-        ├── infrastructure/     # Implementações. Depende do domain/ (para os ports).
+        ├── infrastructure/     # Implementations. Depends on domain/ (for ports).
         │   ├── __init__.py
         │   ├── storage/        # local_json_repo.py, markdown_repo.py
         │   ├── search/         # text_search.py
@@ -381,34 +373,34 @@ universal-memory/
         │   ├── audit/          # jsonl_audit_logger.py
         │   └── config/         # toml_loader.py, env_config.py
         │
-        └── interfaces/         # Portas de entrada. Dependem do application/.
+        └── interfaces/         # Entry points. Depend on application/.
             ├── __init__.py
             ├── cli/            # Typer app
             │   ├── __init__.py
-            │   ├── main.py     # Setup do app Typer, configuração de logging
+            │   ├── main.py     # Typer app setup, logging configuration
             │   ├── commands/   # memory.py, host.py, rules.py, audit.py
-            │   └── presenters/ # Formatação com Rich
+            │   └── presenters/ # Formatting with Rich
             │
             └── mcp/            # FastMCP server
                 ├── __init__.py
-                ├── server.py   # Instanciação do FastMCP, registro de rotas
-                ├── tools/      # Funções @mcp.tool (chamam os use cases)
-                ├── resources/  # @mcp.resource (ex: ler contexto atual)
-                └── prompts/    # @mcp.prompt (templates de prompt)
+                ├── server.py   # FastMCP instantiation, route registration
+                ├── tools/      # @mcp.tool functions (call use cases)
+                ├── resources/  # @mcp.resource (e.g. read current context)
+                └── prompts/    # @mcp.prompt (prompt templates)
 ```
 
 ### Architectural Boundaries
 
 **API & Component Boundaries:**
-- **I/O Boundary (`interfaces/`):** Recebe input bruto (CLI/MCP), mapeia para DTOs/Entities, invoca Use Cases, e formata o output. Captura exceções de domínio e traduz para erros específicos do cliente (Rich UI ou JSON-RPC erro).
-- **Application Boundary (`application/`):** Contém os Use Cases (a lógica de negócio). Orquestra as regras, mas não sabe se foi chamado via CLI ou MCP, nem como os dados são salvos (fala com `infrastructure/` via `ports/`).
-- **Domain Boundary (`domain/`):** O núcleo do sistema. Pydantic models e ABCs puros. Zero dependências externas (apenas bibliotecas padrão Python e Pydantic).
-- **Infrastructure Boundary (`infrastructure/`):** Onde os side-effects acontecem. I/O de disco, chamadas de OS, Regex. Implementa os ABCs definidos em `domain/ports/`.
+- **I/O Boundary (`interfaces/`):** Receives raw input (CLI/MCP), maps to DTOs/Entities, invokes Use Cases, and formats output. Catches domain exceptions and translates them to client-specific errors (Rich UI or JSON-RPC error).
+- **Application Boundary (`application/`):** Contains the Use Cases (the business logic). Orchestrates rules but does not know if it was called via CLI or MCP, nor how the data is saved (communicates with `infrastructure/` via `ports/`).
+- **Domain Boundary (`domain/`):** The core of the system. Pure Pydantic models and ABCs. Zero external dependencies (only standard Python libraries and Pydantic).
+- **Infrastructure Boundary (`infrastructure/`):** Where side-effects happen. Disk I/O, OS calls, Regex. Implements ABCs defined in `domain/ports/`.
 
 **Cross-Cutting Concerns:**
-- **Security & Audit:** Os use cases em `application/` devem instanciar e invocar o `SecretScannerPort` e `SnapshotPort` antes de persistir, e o `AuditLoggerPort` após o sucesso/falha.
+- **Security & Audit:** Use cases in `application/` must instantiate and invoke `SecretScannerPort` and `SnapshotPort` before persisting, and `AuditLoggerPort` after success/failure.
 
-### Requirements to Structure Mapping
+**Requirements to Structure Mapping:**
 
 **Epic/Feature Mapping:**
 - **Core Memory Management:** `application/memory/`, `domain/entities/fact.py`, `infrastructure/storage/local_json_repo.py`
@@ -425,44 +417,44 @@ universal-memory/
 ### Coherence Validation ✅
 
 **Decision Compatibility:**
-Alta compatibilidade. `uv` gerencia perfeitamente o build backend do Hatchling exigido por padrões modernos. `Typer` e `FastMCP` compartilham o mesmo ecossistema mental (`Pydantic`), facilitando a passagem de modelos do domínio para as interfaces sem fricção.
+High compatibility. `uv` perfectly manages the Hatchling build backend required by modern standards. `Typer` and `FastMCP` share the same mental ecosystem (`Pydantic`), facilitating the transition of domain models to interfaces without friction.
 
 **Pattern Consistency:**
-A decisão de manter lógica de negócio estritamente em `application/` (Use Cases) garante que as diferenças de I/O (assíncrono no MCP vs síncrono no Typer CLI) sejam tratadas exclusivamente na camada de adaptadores, preservando os padrões.
+The decision to keep business logic strictly in `application/` (Use Cases) ensures that I/O differences (asynchronous in MCP vs. synchronous in Typer CLI) are handled exclusively in the adapter layer, preserving patterns.
 
 **Structure Alignment:**
-A estrutura `src/` com Clean Architecture reflete exatamente a separação de responsabilidades decidida no Passo 4, isolando side-effects de infraestrutura (arquivos, scanner) da lógica.
+The `src/` structure with Clean Architecture accurately reflects the separation of responsibilities decided in Step 4, isolating infrastructure side-effects (files, scanner) from logic.
 
 ### Requirements Coverage Validation ✅
 
 **Epic/Feature Coverage:**
-Todos os 8 domínios funcionais do PRD possuem mapeamento direto na árvore de diretórios (ex: Core Memory → `application/memory`; Security → `infrastructure/security`).
+All 8 functional domains of the PRD have direct mapping in the directory tree (e.g., Core Memory → `application/memory`; Security → `infrastructure/security`).
 
 **Functional Requirements Coverage:**
-FR1 a FR28 cobertos estruturalmente. Destaque para o Secret Scanner (FR22-23) e Snapshot Manager (FR25-28), que foram elevados a "Cross-Cutting Concerns" a serem injetados nos Use Cases, garantindo execução obrigatória.
+FR1 to FR28 structurally covered. Notably, the Secret Scanner (FR22-23) and Snapshot Manager (FR25-28) have been elevated to "Cross-Cutting Concerns" to be injected into Use Cases, ensuring mandatory execution.
 
 **Non-Functional Requirements Coverage:**
-- Performance (< 150ms): Suportada pela hipótese de busca textual e repositório JSON local sem network overhead; deve ser comprovada pelo benchmark de 30 consultas antes da estratégia final.
-- Offline-first: Adoção exclusiva de bibliotecas locais e persistência em FS.
+- Performance (< 150ms): Supported by the text search hypothesis and local JSON repository without network overhead; must be proven by the 30-query benchmark before the final strategy.
+- Offline-first: Exclusive adoption of local libraries and FS persistence.
 
 ### Implementation Readiness Validation ✅
 
 **Decision Completeness:**
-Tecnologias, pacotes e versões fixados. Regras de nomenclatura claras para Python e JSON. Estrutura de exceções definida.
+Technologies, packages, and versions fixed. Clear naming rules for Python and JSON. Exception structure defined.
 
 **Structure Completeness:**
-Árvore de diretórios completa, indo da raiz do repositório até a granularidade de arquivos de interfaces abstratas (`ports/`).
+Complete directory tree, ranging from the repository root to the granularity of abstract interface files (`ports/`).
 
 **Pattern Completeness:**
-Diretrizes explícitas sobre injeção de dependência e tratamento de erros (Rich vs JSON-RPC).
+Explicit guidelines on dependency injection and error handling (Rich vs. JSON-RPC).
 
 ### Gap Analysis Results
 
 **Important Gaps:**
-- **Modelo de concorrência (Typer sync vs FastMCP async):** Para evitar complexidade e dado que I/O local é rápido, Use Cases devem ser síncronos. FastMCP lidará com isso via threadpool automático.
+- **Concurrency model (Typer sync vs FastMCP async):** To avoid complexity and given that local I/O is fast, Use Cases must be synchronous. FastMCP will handle this via an automatic threadpool.
 
 **Nice-to-Have Gaps:**
-- **Versionamento de Schema:** Inserir `"schema_version": 1` nas entidades base Pydantic para prever migrações futuras sem quebrar a deserialização (Post-MVP portability).
+- **Schema Versioning:** Insert `"schema_version": 1` in base Pydantic entities to anticipate future migrations without breaking deserialization (Post-MVP portability).
 
 ### Architecture Completeness Checklist
 
@@ -494,17 +486,17 @@ Diretrizes explícitas sobre injeção de dependência e tratamento de erros (Ri
 
 **Overall Status:** SUPERSEDED BY REVALIDATION PATCH
 
-**Confidence Level:** HIGH - A estrutura é sólida, os pacotes são modernos (Python 3.12+, uv, FastMCP) e o escopo foi adequadamente delimitado para um MVP local.
+**Confidence Level:** HIGH - The structure is solid, the packages are modern (Python 3.12+, uv, FastMCP), and the scope was adequately defined for a local MVP.
 
 **Key Strengths:**
-- Adoção de Clean Architecture garante que a complexidade de ter duas interfaces (CLI e MCP) não corrompa a lógica de negócio.
-- Foco em offline-first real sem bancos de dados pesados.
-- Padrões rigorosos para garantir que agentes de IA possam ler e entender o código.
+- Clean Architecture adoption ensures that the complexity of having two interfaces (CLI and MCP) does not corrupt business logic.
+- Focus on real offline-first without heavy databases.
+- Strict standards to ensure that AI agents can read and understand the code.
 
 **Areas for Future Enhancement:**
-- Migração do motor de busca textual para busca semântica em base vetorial local.
-- Distribuição via Homebrew.
-- Sincronização multi-máquina nativa (fase 2).
+- Migration of the text search engine to semantic search in a local vector database.
+- Distribution via Homebrew.
+- Native multi-machine synchronization (phase 2).
 
 ### Implementation Handoff
 
@@ -515,64 +507,64 @@ Diretrizes explícitas sobre injeção de dependência e tratamento de erros (Ri
 - Refer to this document for all architectural questions
 
 **First Implementation Priority:**
-Inicializar o projeto base (`uv init --package universal-memory`), configurar o `.python-version` para `3.12`, instalar as dependências base versionadas (`typer`, `rich`, `fastmcp`, `pydantic`, `tomli-w`) e as deps de dev (`pytest`, `pytest-cov`, `ruff`, `pyright`), e montar o esqueleto básico de diretórios de acordo com a `Complete Project Directory Structure`.
+Initialize the base project (`uv init --package universal-memory`), configure `.python-version` to `3.12`, install versioned base dependencies (`typer`, `rich`, `fastmcp`, `pydantic`, `tomli-w`) and dev dependencies (`pytest`, `pytest-cov`, `ruff`, `pyright`), and build the basic directory skeleton according to the `Complete Project Directory Structure`.
 
 ## Architecture Revalidation Results
 
 ### Coherence Validation
 
 **Decision Compatibility:**
-Parcial. Clean Architecture + Typer + FastMCP + Pydantic v2 é coerente, mas há inconsistência operacional: o comando inicial instala `typer`, `rich` e `fastmcp`, enquanto a arquitetura depende também de `pydantic` e `tomli-w`.
+Partial. Clean Architecture + Typer + FastMCP + Pydantic v2 is coherent, but there is operational inconsistency: the initial command installs `typer`, `rich`, and `fastmcp`, whereas the architecture also depends on `pydantic` and `tomli-w`.
 
 **Pattern Consistency:**
-Boa, com ressalva. A regra CLI/MCP como adapters finos sobre use cases compartilhados é sólida. Falta, porém, uma matriz explícita de paridade CLI ↔ MCP para impedir drift entre interfaces.
+Good, with reservations. The CLI/MCP rule as thin adapters over shared use cases is solid. However, an explicit CLI ↔ MCP parity matrix is missing to prevent drift between interfaces.
 
 **Structure Alignment:**
-Parcial. A árvore suporta os domínios principais, mas ainda não define layout de dados em disco, política de merge de config global/projeto, nem contratos concretos de mutation pipeline.
+Partial. The tree supports the main domains but does not yet define disk data layout, global/project config merge policy, nor concrete mutation pipeline contracts.
 
 ### Requirements Coverage Validation
 
 **Epic/Feature Coverage:**
-Parcial. Os 8 domínios do PRD têm pastas mapeadas, mas alguns requisitos têm apenas cobertura nominal.
+Partial. The 8 domains of the PRD have mapped folders, but some requirements only have nominal coverage.
 
 **Functional Requirements Coverage:**
-Parcial. Gaps principais: FR3 benchmark obrigatório, FR6 context hygiene, FR7 seleção de hosts, FR16 evidência de última leitura/falhas, FR18-FR21 registry/validação de skills.
+Partial. Main gaps: FR3 mandatory benchmark, FR6 context hygiene, FR7 host selection, FR16 evidence of last read/failures, FR18-FR21 skill registry/validation.
 
 **Non-Functional Requirements Coverage:**
-Parcial. Performance e MCP compliance são objetivos declarados, mas faltam protocolo de benchmark, suíte de conformidade MCP e testes de contrato de storage.
+Partial. Performance and MCP compliance are stated goals, but benchmark protocol, MCP compliance suite, and storage contract tests are missing.
 
 ### Implementation Readiness Validation
 
 **Decision Completeness:**
-Parcial. Stack e camadas estão claras, mas versões/pacotes não estão totalmente fixados.
+Partial. Stack and layers are clear, but versions/packages are not fully fixed.
 
 **Structure Completeness:**
-Parcial. Falta layout canônico de arquivos de memória, snapshots, auditoria, config e skills geradas.
+Partial. Canonical layout of memory files, snapshots, audit, config, and generated skills is missing.
 
 **Pattern Completeness:**
-Parcial. Falta especificar fluxo transacional obrigatório: secret scan -> snapshot -> write -> audit -> rollback/failure event.
+Partial. Missing specification of mandatory transactional flow: secret scan -> snapshot -> write -> audit -> rollback/failure event.
 
 ### Gap Analysis Results
 
 **Critical Gaps:**
 
-- Benchmark textual vs semântico exigido pelo PRD ainda não foi definido nem executado antes da escolha final de recuperação textual.
-- Dependências iniciais incompletas: `pydantic` e `tomli-w` são decisões arquiteturais, mas não aparecem no comando base.
-- Layout persistente de dados não está especificado, apesar de ser central para edição manual, auditoria, rollback e portabilidade.
+- Textual vs semantic benchmark required by the PRD has not yet been defined or executed before the final choice of textual retrieval.
+- Incomplete initial dependencies: `pydantic` and `tomli-w` are architectural decisions, but do not appear in the base command.
+- Persistent data layout is not specified, despite being central to manual editing, auditing, rollback, and portability.
 
 **Important Gaps:**
 
-- Falta matriz CLI ↔ MCP por capacidade.
-- Falta contrato de storage com operações mínimas e testes de contrato.
-- Falta host support matrix arquitetural para `AGENTS.md`, `CLAUDE.md` e equivalentes.
-- Falta modelo de lifecycle para STM/context hygiene.
-- Falta schema/versionamento obrigatório nas entidades, não apenas como nice-to-have.
-- Falta política de error codes MCP/JSON-RPC por exceção de domínio.
+- Missing CLI ↔ MCP matrix per capability.
+- Missing storage contract with minimum operations and contract tests.
+- Missing architectural host support matrix for `AGENTS.md`, `CLAUDE.md` and equivalents.
+- Missing lifecycle model for STM/context hygiene.
+- Missing mandatory schema/versioning in entities, not just as a nice-to-have.
+- Missing MCP/JSON-RPC error codes policy per domain exception.
 
 **Nice-to-Have Gaps:**
 
-- Registrar decisão explícita sobre sync/async nos use cases e adapters.
-- Separar `snapshot_manager.py` de `security/` se o domínio de backup crescer.
+- Register explicit decision about sync/async in use cases and adapters.
+- Separate `snapshot_manager.py` from `security/` if the backup domain grows.
 
 ### Architecture Completeness Checklist
 
@@ -612,19 +604,19 @@ Parcial. Falta especificar fluxo transacional obrigatório: secret scan -> snaps
 
 **Key Strengths:**
 
-- Clean Architecture é a escolha correta para manter CLI e MCP consistentes.
-- Offline-first, arquivos locais e auditoria append-only combinam bem com o PRD.
-- Guardrails de secret scanning e snapshot foram corretamente tratados como cross-cutting concerns.
+- Clean Architecture is the correct choice to keep CLI and MCP consistent.
+- Offline-first, local files, and append-only auditing align well with the PRD.
+- Secret scanning and snapshot guardrails were correctly treated as cross-cutting concerns.
 
 **Areas for Future Enhancement:**
 
-- Adicionar um Architecture Patch antes de criar épicos/stories.
-- Transformar gaps críticos em decisões explícitas: data layout, benchmark protocol, dependency list, mutation pipeline e parity matrix.
+- Add an Architecture Patch before creating epics/stories.
+- Transform critical gaps into explicit decisions: data layout, benchmark protocol, dependency list, mutation pipeline, and parity matrix.
 
 ### Implementation Handoff
 
 **First Implementation Priority:**
-Atualizar este documento com um patch de arquitetura antes do scaffold inicial.
+Update this document with an architecture patch before the initial scaffold.
 
 ## Architecture Patch - Revalidation Fixes
 
@@ -833,27 +825,27 @@ This patch resolves the critical revalidation gaps. Architecture can return to `
 
 ### Corrections Applied
 
-As revisões do patch foram incorporadas às seções operacionais da arquitetura:
+The patch revisions have been incorporated into the operational sections of the architecture:
 
-- O comando de inicialização agora instala `pydantic` e `tomli-w` com versões compatíveis.
-- A decisão de recuperação textual foi rebaixada de escolha final para hipótese padrão condicionada ao benchmark obrigatório.
-- A estrutura de projeto agora inclui `tests/contracts/` e `benchmarks/retrieval.py`.
-- O handoff inicial agora exige dependências versionadas e o benchmark antes de congelar a estratégia de busca.
+- The initialization command now installs `pydantic` and `tomli-w` with compatible versions.
+- The text retrieval decision has been demoted from final choice to a default hypothesis conditioned on the mandatory benchmark.
+- The project structure now includes `tests/contracts/` and `benchmarks/retrieval.py`.
+- The initial handoff now requires versioned dependencies and the benchmark before freezing the search strategy.
 
 ### Residual Gap Analysis
 
-**Critical Gaps:** Nenhum gap crítico permanece aberto depois do patch.
+**Critical Gaps:** No critical gaps remain open after the patch.
 
 **Important Gaps:**
 
-- O benchmark textual vs candidato semântico ainda precisa ser implementado e registrado em `.umem/benchmarks/retrieval-results.json` durante as primeiras histórias.
-- A suíte de conformidade MCP precisa ser materializada como testes de integração quando os adapters MCP forem criados.
-- Os contratos de storage precisam ser validados em `tests/contracts/` assim que os ports forem implementados.
+- The text vs. semantic candidate benchmark still needs to be implemented and recorded in `.umem/benchmarks/retrieval-results.json` during the first stories.
+- The MCP compliance suite needs to be materialized as integration tests when the MCP adapters are created.
+- Storage contracts need to be validated in `tests/contracts/` as soon as the ports are implemented.
 
 **Nice-to-Have Gaps:**
 
-- Separar `snapshot_manager.py` de `infrastructure/security/` se backup/rollback crescer além de uma responsabilidade transversal simples.
-- Documentar um candidato semântico local específico após o primeiro benchmark, caso a busca textual não alcance qualidade suficiente.
+- Separate `snapshot_manager.py` from `infrastructure/security/` if backup/rollback grows beyond a simple cross-cutting responsibility.
+- Document a specific local semantic candidate after the first benchmark if text search does not achieve sufficient quality.
 
 ### Updated Architecture Completeness Checklist
 
@@ -892,29 +884,29 @@ As revisões do patch foram incorporadas às seções operacionais da arquitetur
 **Confidence Level:** high
 
 **Rationale:**
-As decisões bloqueantes estão documentadas com versões, layout persistente, pipeline de mutação, matriz CLI/MCP, contrato de storage, mapeamento de erros MCP e estratégia de ownership de arquivos de instrução. Os gaps restantes são itens de execução das histórias iniciais, não bloqueadores de arquitetura.
+Blocking decisions are documented with versions, persistent layout, mutation pipeline, CLI/MCP matrix, storage contract, MCP error mapping, and instruction file ownership strategy. The remaining gaps are execution items from the initial stories, not architectural blockers.
 
 ### Corrected Implementation Handoff
 
 **First Implementation Priority:**
-Inicializar o scaffold com `uv init --package universal-memory`, fixar Python 3.12+, instalar as dependências versionadas, criar os diretórios `src/`, `tests/contracts/`, `benchmarks/` e implementar primeiro os modelos/ports que sustentam storage, auditoria, snapshot, secret scanning e benchmark de recuperação.
+Initialize the scaffold with `uv init --package universal-memory`, pin Python 3.12+, install versioned dependencies, create `src/`, `tests/contracts/`, and `benchmarks/` directories, and implement first the models/ports that support storage, audit, snapshot, secret scanning, and retrieval benchmark.
 
 **Next Planning Step:**
-Prosseguir para criação ou atualização de épicos e histórias usando esta arquitetura corrigida como fonte de verdade.
+Proceed to create or update epics and stories using this corrected architecture as the source of truth.
 
 ## Architecture Patch 2 - Sprint Change Proposal (2026-05-31)
 
-Este patch integra as decisões arquiteturais requeridas pela Sprint Change Proposal de 31/05/2026, garantindo a compatibilidade internacional do produto, onboarding multi-runtime interativo, sincronização robusta com runtimes e mitigação de drifts manuais.
+This patch integrates the architectural decisions required by the Sprint Change Proposal of 05/31/2026, ensuring international compatibility of the product, interactive multi-runtime onboarding, robust synchronization with runtimes, and mitigation of manual drifts.
 
 ### 1. English-First & Localization Overlay (i18n) Architecture
 
-O sistema adota o inglês (`en`) como a linguagem canônica única e prioritária para todo o ecossistema.
+The system adopts English (`en`) as the single, high-priority canonical language for the entire ecosystem.
 
-*   **English as the Canonical Base:** Cada prompt, mensagem de erro, tela de ajuda do CLI, scaffold de skill, template de instrução (`AGENTS.md`, `CLAUDE.md`, etc.), logs internos e auditorias são **escritos nativamente em inglês** no código-fonte. Não existem chaves abstratas ou strings em português espalhadas pelo core do sistema.
-*   **Translation as a Low-Cost Overlay:** A localização para português do BR (`pt_BR`) é puramente uma camada de sobreposição (`interfaces/cli/presenters/message_catalog.py`). Se um locale diferente de `en` estiver ativo na configuração, o tradutor interceptará as **frases em inglês** e as mapeará para suas traduções.
-    *   *Exemplo:* O código faz `print("Select the runtimes to install:")`. Se a configuração estiver em `pt_BR`, o catálogo de sobreposição busca a chave literal `"Select the runtimes to install:"` e retorna `"Selecione os runtimes para instalar:"`.
-    *   *Vantagem:* Custo de desenvolvimento virtualmente zero no fluxo diário. O desenvolvedor escreve tudo em inglês sem se preocupar em criar chaves de tradução. O catálogo de tradução só é atualizado de forma incremental.
-*   **Immutable Machine Fields:** JSON keys, metadados persistidos (como `id`, `created_at`, `scope`, `status`), saídas formatadas com `--format json` e todas as payloads de ferramentas do servidor MCP permanecem estritamente em inglês e **são imunes a qualquer tradução**. Isso assegura automação determinística por scripts ou agentes de IA.
+*   **English as the Canonical Base:** Each prompt, error message, CLI help screen, skill scaffold, instruction template (`AGENTS.md`, `CLAUDE.md`, etc.), internal logs, and audits are **natively written in English** in the source code. There are no abstract keys or Portuguese strings scattered throughout the core of the system.
+*   **Translation as a Low-Cost Overlay:** Localization to Brazilian Portuguese (`pt_BR`) is purely an overlay layer (`interfaces/cli/presenters/message_catalog.py`). If a locale other than `en` is active in the configuration, the translator will intercept the **English phrases** and map them to their translations.
+    *   *Example:* The code executes `print("Select the runtimes to install:")`. If the configuration is set to `pt_BR`, the overlay catalog looks up the literal key `"Select the runtimes to install:"` and returns `"Selecione os runtimes para instalar:"`.
+    *   *Advantage:* Virtually zero development cost in the daily workflow. The developer writes everything in English without worrying about creating translation keys. The translation catalog is only updated incrementally.
+*   **Immutable Machine Fields:** JSON keys, persisted metadata (such as `id`, `created_at`, `scope`, `status`), outputs formatted with `--format json`, and all tool payloads from the MCP server remain strictly in English and **are immune to any translation**. This ensures deterministic automation by scripts or AI agents.
 
 ```mermaid
 graph TD
@@ -927,9 +919,9 @@ graph TD
 
 ### 2. Declarative Runtime Registry & Adapter Model
 
-Modelamos cada runtime/agente de IA suportado como uma entidade declarativa através do padrão **Runtime Adapter**, gerenciado por um **Runtime Registry** em `src/universal_memory/infrastructure/config/runtime_registry.py`.
+We model each supported runtime/AI agent as a declarative entity through the **Runtime Adapter** pattern, managed by a **Runtime Registry** in `src/universal_memory/infrastructure/config/runtime_registry.py`.
 
-Cada Runtime Adapter deve implementar o seguinte protocolo/classe base:
+Each Runtime Adapter must implement the following protocol/base class:
 
 ```python
 class RuntimeAdapter(ABC):
@@ -943,13 +935,13 @@ class RuntimeAdapter(ABC):
     
     @property
     @abstractmethod
-    def support_tier(self) -> int: ...  # Tier 1 (MVP completo), Tier 2 (basic)
+    def support_tier(self) -> int: ...  # Tier 1 (complete MVP), Tier 2 (basic)
     
     @abstractmethod
-    def get_default_paths(self) -> list[str]: ...  # Global e Project-specific
+    def get_default_paths(self) -> list[str]: ...  # Global and Project-specific
     
     @abstractmethod
-    def configure_runtime(self, project_path: Path, is_active: bool) -> list[str]: ... # Retorna ações tomadas
+    def configure_runtime(self, project_path: Path, is_active: bool) -> list[str]: ... # Returns actions taken
     
     @abstractmethod
     def install_skill(self, skill_id: str, canonical_content: str) -> Path: ...
@@ -958,24 +950,24 @@ class RuntimeAdapter(ABC):
     def check_drift(self, skill_id: str, canonical_content: str) -> tuple[bool, str]: ... # (has_drift, current_hash)
 ```
 
-#### Runtimes Suportados no MVP (Registry Declarativo):
+#### Supported Runtimes in MVP (Declarative Registry):
 
-*   **Claude Code (Tier 1):** Caminho global: `~/.claude/`; projeto: `.claude/`, `CLAUDE.md`. Suporta injeção de instruções e instalação nativa de skills em `.claude/tasks/` ou diretórios mapeados.
-*   **OpenCode (Tier 1):** Caminho global: `~/.config/opencode/`; projeto: `.opencode/`, `AGENTS.md`.
-*   **Codex/OpenAI-class (Tier 1):** Alvo principal: `AGENTS.md` na raiz do projeto.
-*   **Cursor (Tier 2):** Caminho projeto: `.cursor/rules/`.
-*   **Antigravity (Tier 2):** Caminho global: `~/.gemini/antigravity/` ou específico do host.
-*   **Gemini (Tier 2):** Caminho global: `~/.gemini/`; projeto: `GEMINI.md`.
+*   **Claude Code (Tier 1):** Global path: `~/.claude/`; project: `.claude/`, `CLAUDE.md`. Supports instruction injection and native installation of skills in `.claude/tasks/` or mapped directories.
+*   **OpenCode (Tier 1):** Global path: `~/.config/opencode/`; project: `.opencode/`, `AGENTS.md`.
+*   **Codex/OpenAI-class (Tier 1):** Main target: `AGENTS.md` at the project root.
+*   **Cursor (Tier 2):** Project path: `.cursor/rules/`.
+*   **Antigravity (Tier 2):** Global path: `~/.gemini/antigravity/` or host-specific.
+*   **Gemini (Tier 2):** Global path: `~/.gemini/`; project: `GEMINI.md`.
 
 ### 3. Canonical Skills vs Native Skill Targets
 
-*   **Canonical Store:** `.umem/skills/` (ou diretório global configurado) armazena a estrutura canônica da skill no padrão `Agent Skills` (contendo `SKILL.md`, `scripts/` e `references/`).
-*   **Native Targets:** Os diretórios nativos de cada runtime são meros alvos de instalação. O `RuntimeAdapter` correspondente traduz a skill canônica para o layout suportado pelo runtime.
-    *   Exemplo: Uma skill canônica `deploy-helper` com `SKILL.md` e `scripts/run.py` instalada para o runtime **Cursor** será gerada como uma regra unificada em `.cursor/rules/deploy-helper.mdc` contendo a especificação em markdown. Para o **Claude Code**, pode ser instalada como um script executável em `.claude/tasks/`.
+*   **Canonical Store:** `.umem/skills/` (or configured global directory) stores the canonical skill structure in the `Agent Skills` standard (containing `SKILL.md`, `scripts/` and `references/`).
+*   **Native Targets:** The native directories of each runtime are merely installation targets. The corresponding `RuntimeAdapter` translates the canonical skill into the layout supported by the runtime.
+    *   Example: A canonical skill `deploy-helper` with `SKILL.md` and `scripts/run.py` installed for the **Cursor** runtime will be generated as a unified rule in `.cursor/rules/deploy-helper.mdc` containing the markdown specification. For **Claude Code**, it can be installed as an executable script in `.claude/tasks/`.
 
 ### 4. Interactive Update & Synchronization Conflict Guardrails
 
-O fluxo de sincronização (`umem update --skills` or o onboarding interativo) protege alterações manuais feitas pelo usuário nos runtimes nativos através do seguinte algoritmo transacional:
+The synchronization flow (`umem update --skills` or interactive onboarding) protects manual changes made by the user in native runtimes through the following transactional algorithm:
 
 ```mermaid
 sequenceDiagram
@@ -1002,24 +994,24 @@ sequenceDiagram
     end
 ```
 
-O prompt de conflito interativo deve ser renderizado em inglês por padrão:
+The interactive conflict prompt must be rendered in English by default:
 `Warning: Native Cursor target sdd-rules.md has manual changes. Overwriting it might break your current agent workflow. Keep local Cursor version or Overwrite with canonical library version? [Keep/Overwrite]`
 
 ### 5. Multi-Runtime Onboarding & Terminal Visual Identity
 
-*   **ASCII/ANSI Terminal Branding Splash:** A interface do CLI interativa (`umem init`) exibe uma marca estilizada minimalista simulando a conexão de um pendrive no terminal.
-    *   *Regra de Execução:* O splash art deve usar sequências de escape ANSI estritamente nativas (sem dependências externas) e **deve ser desabilitado automaticamente** se a saída for direcionada para arquivo, for um ambiente CI (detecção via `CI=true`), flag de saída `--format json` estiver ativa, ou a variável `NO_COLOR` estiver presente.
+*   **ASCII/ANSI Terminal Branding Splash:** The interactive CLI interface (`umem init`) displays a minimal stylized brand simulating a USB flash drive connection in the terminal.
+    *   *Execution Rule:* The splash art must use strictly native ANSI escape sequences (no external dependencies) and **must be disabled automatically** if the output is directed to a file, is a CI environment (detected via `CI=true`), the `--format json` output flag is active, or the `NO_COLOR` variable is present.
 *   **Onboarding CLI Flow (`umem init`):**
-    1.  Exibe o branding splash minimalista.
-    2.  Prompt de seleção múltipla em inglês: `Which runtime(s) would you like to install for?`
-    3.  O usuário pode passar múltiplos índices separados por vírgula (ex: `1, 2, 4`).
-    4.  Cria o snapshot de segurança do estado atual do repositório para os runtimes selecionados.
-    5.  Inicializa a base local `.umem/` e atualiza as configurações/manifests canônicos e nativos de cada runtime.
-    6.  Retorna o resultado de sucesso e um log das ações aplicadas.
-*   **Non-Interactive Automation:** O comando suporta flags explícitas de runtimes para execução em CI ou scripts de agentes (ex: `umem init --project . --runtime claude-code --runtime opencode --format json`). O `--format json` desabilita todo e qualquer estilo ANSI, banners ou splash, gerando um JSON puro compatível com parse automatizado.
+    1.  Displays the minimal branding splash.
+    2.  Multiple-choice prompt in English: `Which runtime(s) would you like to install for?`
+    3.  The user can input multiple comma-separated indices (e.g., `1, 2, 4`).
+    4.  Creates a security snapshot of the current repository state for the selected runtimes.
+    5.  Initializes the local `.umem/` base and updates the canonical and native configurations/manifests of each runtime.
+    6.  Returns the success result and a log of the applied actions.
+*   **Non-Interactive Automation:** The command supports explicit runtime flags for execution in CI or agent scripts (e.g., `umem init --project . --runtime claude-code --runtime opencode --format json`). The `--format json` disables any and all ANSI styling, banners, or splash, producing pure JSON suitable for automated parsing.
 
 ### 6. Updated Implementation Readiness Status
 
-*   **Readiness Status:** `READY FOR IMPLEMENTATION` (todas as decisões, incluindo o novo patch e a revalidação de 31/05/2026, mitigam todos os gaps técnicos detectados na Sprint Change Proposal).
+*   **Readiness Status:** `READY FOR IMPLEMENTATION` (all decisions, including the new patch and the 05/31/2026 revalidation, mitigate all technical gaps detected in the Sprint Change Proposal).
 *   **Confidence Level:** `HIGH`.
-*   **Key Strengths:** O acoplamento com múltiplos runtimes de agentes de mercado é mitigado por um Registry declarativo, impedindo que o código de domínio seja poluído com regras de parsing específicas de cada agente de IA. A segurança contra perda de dados do usuário é robusta graças à integração do pipeline de mutação local e alertas interativos de drift. A internacionalização em inglês nativo garante menor consumo de tokens de contexto operacional.
+*   **Key Strengths:** Coupling with multiple market agent runtimes is mitigated by a declarative Registry, preventing the domain code from being polluted with parsing rules specific to each AI agent. Security against user data loss is robust due to the integration of the local mutation pipeline and interactive drift alerts. Internationalization in native English ensures lower consumption of operational context tokens.
