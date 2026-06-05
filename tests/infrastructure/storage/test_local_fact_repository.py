@@ -156,6 +156,17 @@ def test_list_returns_empty_when_file_is_missing_or_empty(tmp_path: Path) -> Non
     assert repository.list(scope=FactScope.project, status=FactStatus.active) == []
 
 
+def test_list_missing_global_storage_does_not_create_read_lock(tmp_path: Path) -> None:
+    global_home = tmp_path / "home"
+    repository = LocalFactRepository(project_root=tmp_path, global_home=global_home)
+    global_data_root = global_home / ".local" / "share" / "umem"
+
+    assert repository.list(scope=FactScope.global_) == []
+    assert repository.list() == []
+    assert not global_data_root.exists()
+    assert not (global_data_root / "memory" / "facts.jsonl.lock").exists()
+
+
 def test_corrupt_lines_are_skipped_individually(tmp_path: Path) -> None:
     repository = LocalFactRepository(project_root=tmp_path)
     fact = make_fact()

@@ -293,13 +293,7 @@ class LocalFactRepository(FactRepository):
             raise StorageError(f"Unsupported fact repository schema version: {target_version}")
 
     def _load_facts(self, scope: FactScope) -> list[Fact]:
-        try:
-            with self._lock(scope):
-                return self._load_facts_unlocked(scope, raise_on_corrupt=False)
-        except StorageError:
-            raise
-        except OSError as exc:
-            raise StorageError("Failed to read facts") from exc
+        return self._load_facts_unlocked(scope, raise_on_corrupt=False)
 
     def _load_facts_unlocked(self, scope: FactScope, raise_on_corrupt: bool = False) -> list[Fact]:
         facts_path = self.global_facts_path if scope == FactScope.global_ else self.facts_path

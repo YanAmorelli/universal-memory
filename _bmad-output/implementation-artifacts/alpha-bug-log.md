@@ -73,6 +73,58 @@ Suggested combined usage:
 
 ## Bugs
 
+## BUG-012 - Read-only bootstrap commands can fail with `storage_error` due to read locks
+
+- Status: verified
+- Severity: high
+- Surface: CLI | Global State | Storage
+- Found on: 2026-06-05
+- Context: mandatory UMEM bootstrap for agents can call `umem context --scope project --format json` and `umem skills list --format json`; these read-oriented commands were observed failing with `storage_error`.
+
+### Reproduction
+
+1. Use a project where UMEM bootstrap is required.
+2. Run `umem status --format json`.
+3. Run `umem context --scope project --format json`.
+4. Run `umem skills list --format json`.
+
+### Expected
+
+- Read-oriented bootstrap commands should not require creating storage lock files just to inspect missing global facts or latent skills.
+- Missing global JSONL files should be treated as empty storage.
+
+### Obtained
+
+- `umem context --scope project --format json` failed with `storage_error` / `Failed to read facts`.
+- `umem skills list --format json` failed with `storage_error` / `Failed to read latent skills`.
+
+### Evidence
+
+- `src/universal_memory/infrastructure/storage/local_fact_repository.py`
+- `src/universal_memory/infrastructure/storage/local_latent_skill_repository.py`
+- `_bmad-output/implementation-artifacts/spec-bug-012-storage-error-read-locks.md`
+
+### Hypothesis / Root Cause
+
+- Fact and latent skill repository read paths acquired the same JSONL lock used for mutations.
+- The lock path creation makes reads non-read-only: missing global storage can cause parent directory and lock creation under `~/.local/share/umem`, which is fragile in sandboxed bootstrap contexts.
+
+### Fix
+
+- Removed lock acquisition from read-only fact loading.
+- Removed lock acquisition from read-only latent skill loading.
+- Kept lock acquisition on write/delete/purge and batch mutation paths.
+- Added storage regression tests proving missing global storage reads return empty results and do not create global lock files.
+
+### Verification
+
+- `uv run pytest tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py` -> 27 passed
+- `uv run pytest tests/application/memory/test_assemble_context_summary_use_case.py tests/application/skills/test_list_skills.py tests/interfaces/cli/test_skills_list.py` -> 18 passed
+- `uv run pytest` -> 489 passed
+- Isolated sandbox smoke with `uv --project /private/tmp/umem-worktrees/umem-storage-bugfix run umem context --scope project --format json` -> `ok: true`
+- Isolated sandbox smoke with `uv --project /private/tmp/umem-worktrees/umem-storage-bugfix run umem skills list --format json` -> `ok: true`
+- `find <sandbox-home>/.local/share/umem -name '*.lock' -print` -> no UMEM lock files after read-only commands
+
 ## BUG-001 - Generated `CLAUDE.md` does not satisfy the validator of `claude_code` itself
 
 - Status: verified
