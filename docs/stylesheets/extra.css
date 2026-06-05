@@ -1,0 +1,211 @@
+/* Product-style landing page inspired by modern Material for MkDocs sites. */
+.md-header {
+  box-shadow: none;
+}
+
+.md-tabs {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-main__inner:has(.umem-hero) {
+  max-width: none;
+  margin-top: 0;
+}
+
+.md-content:has(.umem-hero) {
+  max-width: none;
+}
+
+.md-content:has(.umem-hero) .md-content__inner {
+  margin: 0;
+  padding-top: 0;
+}
+
+.md-content:has(.umem-hero) .md-content__inner::before {
+  display: none;
+}
+
+.umem-hero {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  background:
+    linear-gradient(135deg, rgba(63, 81, 181, 0.12), rgba(0, 150, 136, 0.08) 42%, transparent 72%),
+    var(--md-default-bg-color);
+}
+
+.umem-hero__inner,
+.umem-section {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 3.2rem 1.2rem;
+}
+
+.umem-hero__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+  gap: 2rem;
+  align-items: center;
+}
+
+.umem-kicker {
+  margin: 0 0 0.75rem;
+  color: var(--md-accent-fg-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.umem-hero h1 {
+  margin: 0;
+  color: var(--md-default-fg-color);
+  font-size: clamp(2.35rem, 6vw, 4.9rem);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.umem-lede {
+  max-width: 680px;
+  margin: 1.2rem 0 0;
+  color: var(--md-default-fg-color--light);
+  font-size: 1.06rem;
+  line-height: 1.65;
+}
+
+.umem-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.6rem;
+}
+
+.umem-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0.62rem 1rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color) !important;
+  font-weight: 700;
+}
+
+.umem-button--primary {
+  border-color: var(--md-accent-fg-color);
+  background: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color) !important;
+}
+
+.umem-terminal {
+  overflow: hidden;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.75rem;
+  background: #101624;
+  box-shadow: 0 22px 70px rgba(16, 22, 36, 0.22);
+}
+
+.umem-terminal__bar {
+  display: flex;
+  gap: 0.45rem;
+  padding: 0.7rem 0.85rem;
+  background: #182033;
+}
+
+.umem-terminal__bar span {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: #ff6b6b;
+}
+
+.umem-terminal__bar span:nth-child(2) {
+  background: #ffd166;
+}
+
+.umem-terminal__bar span:nth-child(3) {
+  background: #4ecdc4;
+}
+
+.umem-terminal pre {
+  margin: 0;
+  padding: 1rem 1.1rem 1.25rem;
+  color: #e8ecf7;
+  background: transparent;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.umem-section h2 {
+  margin-top: 0;
+  font-size: 1.85rem;
+  letter-spacing: 0;
+}
+
+.umem-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.umem-card {
+  display: block;
+  height: 100%;
+  padding: 1.05rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.65rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-default-fg-color) !important;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.umem-card:hover {
+  border-color: var(--md-accent-fg-color);
+  transform: translateY(-2px);
+}
+
+.umem-card h3 {
+  margin: 0 0 0.4rem;
+  color: var(--md-default-fg-color);
+  font-size: 1rem;
+}
+
+.umem-card p {
+  margin: 0;
+  color: var(--md-default-fg-color--light);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.umem-band {
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  background: var(--md-code-bg-color);
+}
+
+.umem-pillrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.umem-pill {
+  padding: 0.38rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color--light);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+@media (max-width: 920px) {
+  .umem-hero__inner,
+  .umem-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .umem-hero__inner,
+  .umem-section {
+    padding: 2.3rem 1rem;
+  }
+}
