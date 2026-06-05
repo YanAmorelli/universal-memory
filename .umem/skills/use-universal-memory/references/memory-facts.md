@@ -1,0 +1,56 @@
+# Memory Facts
+
+Use this reference for durable facts: storing useful knowledge, inspecting stored facts,
+and removing obsolete or incorrect memory.
+
+## Use Cases
+
+- Store a stable project decision, architecture note, workflow, bug fix, command, or
+  constraint.
+- Store a global user preference that should apply across repositories.
+- List facts to verify current memory before updating it.
+- Purge an outdated or incorrect fact by ID.
+- Avoid storing transient task progress, raw command output, secrets, credentials, or
+  unverified claims.
+
+## Canonical CLI
+
+```bash
+umem remember "Short verified fact." --scope project --tag architecture --format json
+umem remember "Durable user preference." --scope global --tag preference --format json
+umem facts list --scope project --format json
+umem facts list --scope global --format json
+umem facts purge --id <fact-id> --format json
+```
+
+If host instructions should reflect the change, sync after the mutation:
+
+```bash
+umem host sync --apply --yes --format json
+```
+
+## Parameters
+
+- `"Short verified fact."`: one concise sentence; prefer specific, reusable knowledge.
+- `--scope project|global`: project for repository-specific knowledge, global for
+  cross-project user preferences.
+- `--tag <tag>`: use curated tags such as `architecture`, `workflow`, `bug`, `testing`,
+  `docs`, `preference`, or `security`.
+- `--id <fact-id>`: exact fact ID returned by `facts list`.
+- `--format json`: canonical machine-readable output.
+
+## MCP Equivalents
+
+- `remember_fact(content="Short verified fact.", scope="project", tags=["architecture"])`
+- `remember_fact(content="Durable user preference.", scope="global", tags=["preference"])`
+- `list_facts(scope="project")`
+- `list_facts(scope="global")`
+- `purge_fact(id="<fact-id>", confirm=true)`
+- `sync_instructions(apply=true)`
+
+## Expected Behavior
+
+- Mutations should use the safe write pipeline: secret scan, snapshot, atomic write, and
+  audit event.
+- If a fact is uncertain, verify or ask before recording it.
+- If a fact is obsolete, purge the old fact instead of adding a contradictory one.

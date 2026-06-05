@@ -13,6 +13,9 @@ _bmad-output/**/review-prompt-*.md
 # Universal Memory Local Database & Benchmarks
 .umem/*
 !.umem/benchmarks/
+!.umem/skills/
+!.umem/skills/use-universal-memory/
+!.umem/skills/use-universal-memory/**
 
 
 # Byte-compiled / optimized / DLL files
