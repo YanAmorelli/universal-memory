@@ -761,3 +761,47 @@ Suggested combined usage:
 
 - Tests added in `test_sync_instructions.py` and `test_host_sync.py` validate support for size limits via `config.toml` and CLI.
 - Entire suite of 459 tests passing (`uv run pytest`).
+
+## BUG-014 - `umem host sync --host codex` rejects a supported host as if none was provided
+
+- Status: open
+- Severity: medium
+- Surface: CLI | Host Setup
+- Found on: 2026-06-05
+- Context: after recording a project memory fact, the required `umem host sync` follow-up could not be completed for the configured `codex` runtime because the CLI rejected the explicit host argument.
+
+### Reproduction
+
+1. in a project with `.umem/config.toml` containing `runtimes.enabled = ["opencode", "codex", "antigravity"]`
+2. run `umem host sync --host codex --apply --yes --format json`
+3. run `umem host sync --host=codex --apply --yes --format json`
+
+### Expected
+
+- the CLI should accept `codex` as a supported host/runtime for synchronization
+- the command should synchronize the `AGENTS.md` host instructions or return a specific validation error about the target file
+
+### Obtained
+
+- both command forms fail with `validation_failed`
+- error detail: `Nenhum host suportado informado para sincronizacao.`
+
+### Evidence
+
+- `.umem/config.toml`
+- `src/universal_memory/interfaces/cli/init_command.py`
+- `src/universal_memory/application/host/sync_instructions_use_case.py`
+- observed command output: `{"error": {"code": "validation_failed", "detail": "Nenhum host suportado informado para sincronizacao."}, "ok": false}`
+
+### Hypothesis / Root Cause
+
+- the CLI parser or command adapter may not be passing the `--host` option into `SyncInstructionsCommand.host_ids` as expected, despite `codex` being listed in `DEFAULT_SYNC_HOSTS`
+- another possibility is a mismatch between runtime-enabled values and sync-supported hosts that collapses the normalized host list to empty
+
+### Fix
+
+- pending
+
+### Verification
+
+- pending
