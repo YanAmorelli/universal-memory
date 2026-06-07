@@ -1,5 +1,6 @@
 site_name: Universal Memory
 site_description: Vendor-agnostic cognitive persistence for AI agents.
+site_url: https://yanamorelli.github.io/universal-memory/
 repo_url: https://github.com/YanAmorelli/universal-memory
 repo_name: YanAmorelli/universal-memory
 

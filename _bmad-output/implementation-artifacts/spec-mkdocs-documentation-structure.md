@@ -38,3 +38,4 @@ becomes the curated documentation surface.
 - [x] Keep existing assets and reuse README concepts without duplicating the README verbatim.
 - [x] Add a reproducible docs dependency group.
 - [x] Run a MkDocs build check.
+- [x] Add CI/CD workflow to validate MkDocs and deploy the site with GitHub Pages.
