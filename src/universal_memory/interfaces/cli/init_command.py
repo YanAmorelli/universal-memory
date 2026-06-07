@@ -3089,14 +3089,14 @@ def _format_human_update_check(result: UpdateCheckResult) -> str:
         for name, versions in sorted(result.memory_schema_versions.items())
     )
     lines = [
-        "Update check completed.",
+        "Local maintenance check completed.",
         "Scope: project",
-        f"Installed version: {result.installed_version}",
+        f"Running package version: {result.installed_version}",
         f"Target schema: {result.target_schema_version}",
         f"Config schema: {result.project_config_schema_version or 'legacy'}",
         f"Memory schemas: {memory or '(no files found)'}",
         f"Benchmarks: {result.benchmarks_status}",
-        f"Updates available: {result.updates_available}",
+        "Package upgrade check: not performed (offline command)",
         f"Migration required: {str(result.migration_required).lower()}",
     ]
     if result.warnings:
@@ -3105,7 +3105,7 @@ def _format_human_update_check(result: UpdateCheckResult) -> str:
     if result.migration_required:
         lines.append("Next action: umem update --yes")
     else:
-        lines.append("Next action: no local update action required.")
+        lines.append("Next action: no local maintenance action required.")
     return "\n".join(lines)
 
 
@@ -3114,11 +3114,11 @@ def _format_human_update_apply(
     migrate_result: UpdateMigrateResult | None,
 ) -> str:
     lines = [
-        "Update completed.",
+        "Local maintenance completed.",
         "Scope: project",
-        f"Installed version: {check_result.installed_version}",
+        f"Running package version: {check_result.installed_version}",
         f"Target schema: {check_result.target_schema_version}",
-        f"Updates available: {check_result.updates_available}",
+        "Package upgrade check: not performed (offline command)",
         f"Migration required: {str(check_result.migration_required).lower()}",
         f"Migration applied: {str(migrate_result is not None).lower()}",
     ]
@@ -3137,7 +3137,7 @@ def _format_human_update_apply(
             ]
         )
     else:
-        lines.append("No local update actions were required.")
+        lines.append("No local maintenance actions were required.")
     warnings = [*check_result.warnings]
     if migrate_result is not None:
         warnings.extend(migrate_result.warnings)

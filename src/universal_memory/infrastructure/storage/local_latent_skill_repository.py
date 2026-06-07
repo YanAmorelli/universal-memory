@@ -214,13 +214,7 @@ class LocalLatentSkillRepository(LatentSkillRepository):
             )
 
     def _load_latent_skills(self, scope: LatentSkillScope) -> list[LatentSkill]:
-        try:
-            with self._lock(scope):
-                return self._load_latent_skills_unlocked(scope, raise_on_corrupt=True)
-        except StorageError:
-            raise
-        except OSError as exc:
-            raise StorageError("Failed to read latent skills") from exc
+        return self._load_latent_skills_unlocked(scope, raise_on_corrupt=True)
 
     def _load_latent_skills_unlocked(
         self, scope: LatentSkillScope, raise_on_corrupt: bool = False

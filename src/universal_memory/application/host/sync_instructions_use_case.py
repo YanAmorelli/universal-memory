@@ -95,7 +95,10 @@ class SyncInstructionsUseCase:
         )
         command = replace(command, max_managed_lines=max_lines, max_managed_chars=max_chars)
 
-        host_ids, config_warnings = self._host_ids_for_command(command.host_ids)
+        host_ids, config_warnings = self._host_ids_for_command(
+            command.host_ids,
+            apply=command.apply,
+        )
         all_blocks = self._active_rule_blocks()
         plans = self._plan_commands(host_ids, all_blocks, command)
 
@@ -306,8 +309,6 @@ class SyncInstructionsUseCase:
                     should_write_agents,
                 )
             )
-        if not plans and host_ids:
-            raise ValidationFailedError("Nenhum host suportado informado para sincronizacao.")
         return plans
 
     def _active_rule_blocks(self) -> list[InstructionBlock]:
@@ -359,7 +360,9 @@ class SyncInstructionsUseCase:
             raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
         return normalized
 
-    def _host_ids_for_command(self, host_ids: list[str] | None) -> tuple[list[str], list[str]]:
+    def _host_ids_for_command(
+        self, host_ids: list[str] | None, *, apply: bool
+    ) -> tuple[list[str], list[str]]:
         normalized = self._normalized_host_ids(host_ids)
         enabled_hosts = self._enabled_hosts_from_config()
         if enabled_hosts is None:
@@ -371,14 +374,14 @@ class SyncInstructionsUseCase:
         warnings = []
         to_enable = []
         for host_id in normalized:
-            if host_id not in enabled_hosts:
+            if host_id not in enabled_hosts and apply:
                 warnings.append(
                     f"Host '{host_id}' nao esta habilitado em .umem/config.toml; "
                     "ativando automaticamente."
                 )
                 to_enable.append(host_id)
 
-        if to_enable:
+        if to_enable and apply:
             new_enabled = list(enabled_hosts)
             for h in to_enable:
                 if h not in new_enabled:

@@ -73,6 +73,66 @@ Suggested combined usage:
 
 ## Bugs
 
+## BUG-012 - Read-only bootstrap commands can fail with `storage_error` due to read locks
+
+- Status: verified
+- Severity: high
+- Surface: CLI | Global State | Storage
+- Found on: 2026-06-05
+- Context: mandatory UMEM bootstrap for agents can call `umem context --scope project --format json` and `umem skills list --format json`; these read-oriented commands were observed failing with `storage_error`.
+
+### Reproduction
+
+1. Use a project where UMEM bootstrap is required.
+2. Run `umem status --format json`.
+3. Run `umem context --scope project --format json`.
+4. Run `umem skills list --format json`.
+
+### Expected
+
+- Read-oriented bootstrap commands should not require creating storage lock files just to inspect missing global facts, latent skills, or rules.
+- Missing global JSONL files should be treated as empty storage.
+
+### Obtained
+
+- `umem context --scope project --format json` failed with `storage_error` / `Failed to read facts`.
+- `umem skills list --format json` failed with `storage_error` / `Failed to read latent skills`.
+- After the first fix, a Codex preflight using `umem 0.1.3` still failed with `storage_error` / `Failed to read rules` until the same read-only behavior was applied to rules.
+
+### Evidence
+
+- `src/universal_memory/infrastructure/storage/local_fact_repository.py`
+- `src/universal_memory/infrastructure/storage/local_latent_skill_repository.py`
+- `src/universal_memory/infrastructure/storage/local_rule_repository.py`
+- `_bmad-output/implementation-artifacts/spec-bug-012-storage-error-read-locks.md`
+
+### Hypothesis / Root Cause
+
+- Fact, latent skill, and rule repository read paths acquired the same JSONL lock used for mutations.
+- The lock path creation makes reads non-read-only: missing global storage can cause parent directory and lock creation under `~/.local/share/umem`, which is fragile in sandboxed bootstrap contexts.
+
+### Fix
+
+- Removed lock acquisition from read-only fact loading.
+- Removed lock acquisition from read-only latent skill loading.
+- Removed lock acquisition from read-only rule loading.
+- Kept lock acquisition on write/delete/purge and batch mutation paths.
+- Added storage regression tests proving missing global storage reads return empty results and do not create global lock files.
+
+### Verification
+
+- `uv run pytest tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py` -> 27 passed
+- `uv run pytest tests/infrastructure/storage/test_local_rule_repository.py tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py` -> 32 passed
+- `umem --version` -> `umem 0.1.3`
+- `umem status --format json` -> `ok: true`
+- `umem context --scope project --format json` -> `ok: true`
+- `umem skills list --format json` -> `ok: true`
+- `uv run pytest tests/application/memory/test_assemble_context_summary_use_case.py tests/application/skills/test_list_skills.py tests/interfaces/cli/test_skills_list.py` -> 18 passed
+- `uv run pytest` -> 489 passed
+- Isolated sandbox smoke with `uv --project /private/tmp/umem-worktrees/umem-storage-bugfix run umem context --scope project --format json` -> `ok: true`
+- Isolated sandbox smoke with `uv --project /private/tmp/umem-worktrees/umem-storage-bugfix run umem skills list --format json` -> `ok: true`
+- `find <sandbox-home>/.local/share/umem -name '*.lock' -print` -> no UMEM lock files after read-only commands
+
 ## BUG-001 - Generated `CLAUDE.md` does not satisfy the validator of `claude_code` itself
 
 - Status: verified
@@ -609,7 +669,7 @@ Suggested combined usage:
 
 - pending
 
-## BUG-012 - UMEM bootstrap can be ignored when a skill workflow takes priority
+## BUG-015 - UMEM bootstrap can be ignored when a skill workflow takes priority
 
 - Status: verified
 - Severity: medium
@@ -709,3 +769,136 @@ Suggested combined usage:
 
 - Tests added in `test_sync_instructions.py` and `test_host_sync.py` validate support for size limits via `config.toml` and CLI.
 - Entire suite of 459 tests passing (`uv run pytest`).
+
+## BUG-014 - `umem host sync` errors on no-op previews and mutates config during `--no-apply`
+
+- Status: verified
+- Severity: medium
+- Surface: CLI | Host Setup
+- Found on: 2026-06-05
+- Context: after validating the storage read-lock fix, the host synchronization path still failed in the current project. The project config enables `opencode`, `codex`, and `antigravity`; `host sync` currently supports only `codex` and `claude_code`. With no active rules, a `codex`-only sync becomes a no-op but is reported as a validation failure. A separate preview path also mutates `.umem/config.toml` even when `--no-apply` is used.
+
+### Reproduction
+
+1. In a project with `.umem/config.toml` containing `runtimes.enabled = ["opencode", "codex", "antigravity"]` and no active rules, run `umem host sync --no-apply --format json`.
+2. Run `umem host sync --no-apply --host codex --format json`.
+3. Run `umem host sync --no-apply --host=claude_code --format json`.
+4. Inspect `.umem/config.toml` after the preview command.
+
+### Expected
+
+- `--no-apply` should never mutate `.umem/config.toml` or any host file.
+- A supported host with no active rules to synchronize should return `ok: true` with an empty/no-op preview, not a validation failure.
+- Explicit `--host` values should be parsed consistently in both `--host codex` and `--host=codex` forms.
+- If configured runtimes include unsupported hosts, they should be ignored for sync or reported with a specific warning without collapsing supported hosts.
+
+### Obtained
+
+- `umem host sync --no-apply --format json` fails with `validation_failed`.
+- `umem host sync --no-apply --host codex --format json` fails with `validation_failed`.
+- `umem host sync --no-apply --host=claude_code --format json` returns `ok: true`, but mutates `.umem/config.toml` by adding `claude_code` and dropping unsupported configured runtimes.
+- Error detail: `Nenhum host suportado informado para sincronizacao.`
+
+### Evidence
+
+- `.umem/config.toml`
+- `src/universal_memory/interfaces/cli/init_command.py`
+- `src/universal_memory/application/host/sync_instructions_use_case.py`
+- `tests/application/host/test_sync_instructions.py`
+- `tests/interfaces/cli/test_host_sync.py`
+- Observed command output: `{"error": {"code": "validation_failed", "detail": "Nenhum host suportado informado para sincronizacao."}, "ok": false}`
+
+### Hypothesis / Root Cause
+
+- `_plan_commands()` raises `ValidationFailedError` when the resolved host list is non-empty but no plan is generated. That conflates an invalid host with a legitimate no-op, especially for `codex` when there are no active rule blocks.
+- `_host_ids_for_command()` updates `.umem/config.toml` for explicit disabled hosts before checking `command.apply`, so preview mode can mutate configuration.
+- CLI tests cover `--host` forwarding in an injected command, but the real command path still needs regression coverage for both `--host value` and `--host=value` against the actual Typer app.
+
+### Fix
+
+- `SyncInstructionsUseCase` now treats an empty sync plan as a valid no-op preview/result instead of raising `validation_failed` when supported hosts resolve but there are no active rules to write.
+- Host auto-enable config updates and the corresponding warning now only run when `apply=True`; `--no-apply` does not mutate `.umem/config.toml` or promise automatic activation.
+- Regression coverage was added for no active rules, unsupported configured runtimes, explicit disabled hosts in preview, the apply-only config mutation path, and real CLI parsing of both `--host codex` and `--host=claude_code` forms.
+
+### Verification
+
+- `uv run pytest tests/application/host/test_sync_instructions.py tests/interfaces/cli/test_host_sync.py` -> 17 passed
+- Real preview smoke in this project: `uv run umem host sync --no-apply --format json` -> `ok: true`, empty planned changes.
+- Real preview smoke in this project: `uv run umem host sync --no-apply --host codex --format json` -> `ok: true`, empty planned changes.
+- Real preview smoke in this project: `uv run umem host sync --no-apply --host=claude_code --format json` -> `ok: true`, empty planned changes.
+- `.umem/config.toml` checksum before and after the preview smoke remained identical: `52f3a204ab39400b80ef04028ad4ca4089415d19`.
+
+## BUG-016 - Package-installed `umem init` omits guide-skill reference files
+
+- Status: verified
+- Severity: high
+- Surface: Packaging | Onboarding | Skills
+- Found on: 2026-06-07
+- Context: while validating `_bmad-output/implementation-artifacts/spec-umem-skill-references.md`, the repository-owned `.umem/skills/use-universal-memory/` tree looked correct, but a clean wheel build and forced install exposed that new projects initialized from the installed package did not receive the `references/` files required by the guide-skill design.
+
+### Reproduction
+
+1. Run `uv cache clean universal-memory --force`.
+2. Build a fresh wheel with `uv build --wheel --no-cache --clear --out-dir <tmp-dist>`.
+3. Create a clean virtual environment.
+4. Install the wheel with `uv pip install --no-cache --force-reinstall <tmp-dist>/universal_memory-0.1.3-py3-none-any.whl`.
+5. In a temporary project, run `<venv>/bin/umem init --yes --format json`.
+6. Inspect `.umem/skills/use-universal-memory/`.
+
+### Expected
+
+- `umem init` from an installed package should materialize `.umem/skills/use-universal-memory/SKILL.md`.
+- It should also materialize all guide-skill reference files:
+  - `.umem/skills/use-universal-memory/references/startup-and-context.md`
+  - `.umem/skills/use-universal-memory/references/memory-facts.md`
+  - `.umem/skills/use-universal-memory/references/skills-lifecycle.md`
+  - `.umem/skills/use-universal-memory/references/host-instructions-sync.md`
+  - `.umem/skills/use-universal-memory/references/cli-mcp-parity.md`
+  - `.umem/skills/use-universal-memory/references/guardrails-and-recording.md`
+- `umem skills detail use-universal-memory --format json` should remain lightweight with `references_loaded=false`.
+
+### Obtained
+
+- The installed wheel initialized the project and registered `use-universal-memory` as active.
+- Only `.umem/skills/use-universal-memory/SKILL.md` was created.
+- No files under `.umem/skills/use-universal-memory/references/` were created.
+- The guide could not route to topic-specific references in a newly initialized package-installed project.
+
+### Evidence
+
+- `src/universal_memory/application/onboarding/setup_project.py`
+- `tests/application/test_setup_project.py`
+- Build/install simulation in `/private/tmp/umem-skill-sim-*`
+- Initial simulation result: `route_*_reference_exists` checks failed for all six reference files.
+
+### Hypothesis / Root Cause
+
+- `umem init` used the embedded `DEFAULT_UMEM_SKILL_MARKDOWN` constant in `setup_project.py`.
+- The new guide-skill files were versioned under `.umem/skills/use-universal-memory/`, but the installed package did not include or copy those project-owned files.
+- The onboarding path only wrote `SKILL.md`, so repository inspection passed while package-installed initialization missed the new progressive-reference structure.
+
+### Fix
+
+- Updated the embedded default skill markdown in `setup_project.py` to match the new guide-style `SKILL.md`.
+- Added embedded `DEFAULT_UMEM_SKILL_REFERENCES` content for each required reference file.
+- Updated `_ensure_default_umem_skill()` to create missing reference files during `umem init`.
+- Updated latent skill metadata to match the new guide-skill description and triggers.
+- Added regression coverage requiring `setup_project()` to create the full guide-skill tree.
+- Added a template-drift test comparing the embedded onboarding templates against the repository-owned `.umem/skills/use-universal-memory/` files.
+
+### Verification
+
+- `uv run pytest tests/application/test_setup_project.py` -> 8 passed
+- `uv run ruff check` -> all checks passed
+- `uv run pyright` -> 0 errors
+- `uv run pytest` -> 497 passed
+- `git diff --check` -> no whitespace errors
+- Clean build and forced install from wheel succeeded.
+- Final package-installed simulation in a temporary project returned `all_passed: true`, confirming:
+  - installed version `umem 0.1.3`
+  - `umem init` success
+  - initialized status
+  - active `use-universal-memory` skill
+  - lightweight detail with `references_loaded=false`
+  - all six `references/` files exist
+  - the guide `SKILL.md` mentions each reference route
