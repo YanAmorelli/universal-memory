@@ -3,6 +3,17 @@
   box-shadow: none;
 }
 
+.md-header__button.md-logo {
+  margin: 0;
+  padding: 0.2rem 0.4rem 0.2rem 0;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  width: 5.8rem;
+  height: auto;
+}
+
 .md-tabs {
   border-bottom: 1px solid var(--md-default-fg-color--lightest);
 }

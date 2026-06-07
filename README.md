@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/umem-logo.png" alt="Universal Memory logo" width="720">
+  <img src="assets/umem-logo-transparent.png" alt="Universal Memory logo" width="720">
 </p>
 
 # Universal Memory (umem)
