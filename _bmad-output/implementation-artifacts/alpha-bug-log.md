@@ -90,35 +90,43 @@ Suggested combined usage:
 
 ### Expected
 
-- Read-oriented bootstrap commands should not require creating storage lock files just to inspect missing global facts or latent skills.
+- Read-oriented bootstrap commands should not require creating storage lock files just to inspect missing global facts, latent skills, or rules.
 - Missing global JSONL files should be treated as empty storage.
 
 ### Obtained
 
 - `umem context --scope project --format json` failed with `storage_error` / `Failed to read facts`.
 - `umem skills list --format json` failed with `storage_error` / `Failed to read latent skills`.
+- After the first fix, a Codex preflight using `umem 0.1.3` still failed with `storage_error` / `Failed to read rules` until the same read-only behavior was applied to rules.
 
 ### Evidence
 
 - `src/universal_memory/infrastructure/storage/local_fact_repository.py`
 - `src/universal_memory/infrastructure/storage/local_latent_skill_repository.py`
+- `src/universal_memory/infrastructure/storage/local_rule_repository.py`
 - `_bmad-output/implementation-artifacts/spec-bug-012-storage-error-read-locks.md`
 
 ### Hypothesis / Root Cause
 
-- Fact and latent skill repository read paths acquired the same JSONL lock used for mutations.
+- Fact, latent skill, and rule repository read paths acquired the same JSONL lock used for mutations.
 - The lock path creation makes reads non-read-only: missing global storage can cause parent directory and lock creation under `~/.local/share/umem`, which is fragile in sandboxed bootstrap contexts.
 
 ### Fix
 
 - Removed lock acquisition from read-only fact loading.
 - Removed lock acquisition from read-only latent skill loading.
+- Removed lock acquisition from read-only rule loading.
 - Kept lock acquisition on write/delete/purge and batch mutation paths.
 - Added storage regression tests proving missing global storage reads return empty results and do not create global lock files.
 
 ### Verification
 
 - `uv run pytest tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py` -> 27 passed
+- `uv run pytest tests/infrastructure/storage/test_local_rule_repository.py tests/infrastructure/storage/test_local_fact_repository.py tests/infrastructure/storage/test_local_latent_skill_repository.py` -> 32 passed
+- `umem --version` -> `umem 0.1.3`
+- `umem status --format json` -> `ok: true`
+- `umem context --scope project --format json` -> `ok: true`
+- `umem skills list --format json` -> `ok: true`
 - `uv run pytest tests/application/memory/test_assemble_context_summary_use_case.py tests/application/skills/test_list_skills.py tests/interfaces/cli/test_skills_list.py` -> 18 passed
 - `uv run pytest` -> 489 passed
 - Isolated sandbox smoke with `uv --project /private/tmp/umem-worktrees/umem-storage-bugfix run umem context --scope project --format json` -> `ok: true`
@@ -661,7 +669,7 @@ Suggested combined usage:
 
 - pending
 
-## BUG-012 - UMEM bootstrap can be ignored when a skill workflow takes priority
+## BUG-015 - UMEM bootstrap can be ignored when a skill workflow takes priority
 
 - Status: verified
 - Severity: medium
@@ -762,46 +770,60 @@ Suggested combined usage:
 - Tests added in `test_sync_instructions.py` and `test_host_sync.py` validate support for size limits via `config.toml` and CLI.
 - Entire suite of 459 tests passing (`uv run pytest`).
 
-## BUG-014 - `umem host sync --host codex` rejects a supported host as if none was provided
+## BUG-014 - `umem host sync` errors on no-op previews and mutates config during `--no-apply`
 
-- Status: open
+- Status: verified
 - Severity: medium
 - Surface: CLI | Host Setup
 - Found on: 2026-06-05
-- Context: after recording a project memory fact, the required `umem host sync` follow-up could not be completed for the configured `codex` runtime because the CLI rejected the explicit host argument.
+- Context: after validating the storage read-lock fix, the host synchronization path still failed in the current project. The project config enables `opencode`, `codex`, and `antigravity`; `host sync` currently supports only `codex` and `claude_code`. With no active rules, a `codex`-only sync becomes a no-op but is reported as a validation failure. A separate preview path also mutates `.umem/config.toml` even when `--no-apply` is used.
 
 ### Reproduction
 
-1. in a project with `.umem/config.toml` containing `runtimes.enabled = ["opencode", "codex", "antigravity"]`
-2. run `umem host sync --host codex --apply --yes --format json`
-3. run `umem host sync --host=codex --apply --yes --format json`
+1. In a project with `.umem/config.toml` containing `runtimes.enabled = ["opencode", "codex", "antigravity"]` and no active rules, run `umem host sync --no-apply --format json`.
+2. Run `umem host sync --no-apply --host codex --format json`.
+3. Run `umem host sync --no-apply --host=claude_code --format json`.
+4. Inspect `.umem/config.toml` after the preview command.
 
 ### Expected
 
-- the CLI should accept `codex` as a supported host/runtime for synchronization
-- the command should synchronize the `AGENTS.md` host instructions or return a specific validation error about the target file
+- `--no-apply` should never mutate `.umem/config.toml` or any host file.
+- A supported host with no active rules to synchronize should return `ok: true` with an empty/no-op preview, not a validation failure.
+- Explicit `--host` values should be parsed consistently in both `--host codex` and `--host=codex` forms.
+- If configured runtimes include unsupported hosts, they should be ignored for sync or reported with a specific warning without collapsing supported hosts.
 
 ### Obtained
 
-- both command forms fail with `validation_failed`
-- error detail: `Nenhum host suportado informado para sincronizacao.`
+- `umem host sync --no-apply --format json` fails with `validation_failed`.
+- `umem host sync --no-apply --host codex --format json` fails with `validation_failed`.
+- `umem host sync --no-apply --host=claude_code --format json` returns `ok: true`, but mutates `.umem/config.toml` by adding `claude_code` and dropping unsupported configured runtimes.
+- Error detail: `Nenhum host suportado informado para sincronizacao.`
 
 ### Evidence
 
 - `.umem/config.toml`
 - `src/universal_memory/interfaces/cli/init_command.py`
 - `src/universal_memory/application/host/sync_instructions_use_case.py`
-- observed command output: `{"error": {"code": "validation_failed", "detail": "Nenhum host suportado informado para sincronizacao."}, "ok": false}`
+- `tests/application/host/test_sync_instructions.py`
+- `tests/interfaces/cli/test_host_sync.py`
+- Observed command output: `{"error": {"code": "validation_failed", "detail": "Nenhum host suportado informado para sincronizacao."}, "ok": false}`
 
 ### Hypothesis / Root Cause
 
-- the CLI parser or command adapter may not be passing the `--host` option into `SyncInstructionsCommand.host_ids` as expected, despite `codex` being listed in `DEFAULT_SYNC_HOSTS`
-- another possibility is a mismatch between runtime-enabled values and sync-supported hosts that collapses the normalized host list to empty
+- `_plan_commands()` raises `ValidationFailedError` when the resolved host list is non-empty but no plan is generated. That conflates an invalid host with a legitimate no-op, especially for `codex` when there are no active rule blocks.
+- `_host_ids_for_command()` updates `.umem/config.toml` for explicit disabled hosts before checking `command.apply`, so preview mode can mutate configuration.
+- CLI tests cover `--host` forwarding in an injected command, but the real command path still needs regression coverage for both `--host value` and `--host=value` against the actual Typer app.
 
 ### Fix
 
-- pending
+- `SyncInstructionsUseCase` now treats an empty sync plan as a valid no-op preview/result instead of raising `validation_failed` when supported hosts resolve but there are no active rules to write.
+- Host auto-enable config updates and the corresponding warning now only run when `apply=True`; `--no-apply` does not mutate `.umem/config.toml` or promise automatic activation.
+- Regression coverage was added for no active rules, unsupported configured runtimes, explicit disabled hosts in preview, the apply-only config mutation path, and real CLI parsing of both `--host codex` and `--host=claude_code` forms.
 
 ### Verification
 
-- pending
+- `uv run pytest tests/application/host/test_sync_instructions.py tests/interfaces/cli/test_host_sync.py` -> 17 passed
+- Real preview smoke in this project: `uv run umem host sync --no-apply --format json` -> `ok: true`, empty planned changes.
+- Real preview smoke in this project: `uv run umem host sync --no-apply --host codex --format json` -> `ok: true`, empty planned changes.
+- Real preview smoke in this project: `uv run umem host sync --no-apply --host=claude_code --format json` -> `ok: true`, empty planned changes.
+- `.umem/config.toml` checksum before and after the preview smoke remained identical: `52f3a204ab39400b80ef04028ad4ca4089415d19`.

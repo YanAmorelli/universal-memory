@@ -318,7 +318,31 @@ def test_sync_noops_when_config_has_only_unsupported_runtime_targets(
     assert not (tmp_path / "CLAUDE.md").exists()
 
 
-def test_sync_explicit_disabled_host_is_allowed_with_warning(
+def test_sync_preview_noops_with_supported_runtime_and_no_active_rules(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    original_config = '[runtimes]\nenabled = ["opencode", "codex", "antigravity"]\n'
+    config_path.write_text(original_config, encoding="utf-8")
+    use_case = _use_case(tmp_path, [], repositories)
+
+    result = use_case.execute(SyncInstructionsCommand(apply=False))
+
+    assert result.host_ids == ["codex"]
+    assert result.validation_status == "planned"
+    assert result.planned_changes == []
+    assert result.instruction_targets == []
+    assert result.audit_reference == "not-applied"
+    assert result.snapshot_reference == "planned"
+    assert result.manual_steps == ["Revise os caminhos afetados antes de aplicar."]
+    assert config_path.read_text(encoding="utf-8") == original_config
+    assert not (tmp_path / "AGENTS.md").exists()
+    assert not (tmp_path / "CLAUDE.md").exists()
+
+
+def test_sync_preview_explicit_disabled_host_is_allowed_without_config_warning(
     tmp_path: Path,
     repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
 ) -> None:
@@ -334,9 +358,51 @@ def test_sync_explicit_disabled_host_is_allowed_with_warning(
     result = use_case.execute(SyncInstructionsCommand(host_ids=["claude_code"], apply=False))
 
     assert result.host_ids == ["claude_code"]
+    assert result.warnings == []
+
+
+def test_sync_preview_explicit_disabled_host_does_not_mutate_project_config(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    original_config = '[runtimes]\nenabled = ["opencode", "codex", "antigravity"]\n'
+    config_path.write_text(original_config, encoding="utf-8")
+    use_case = _use_case(tmp_path, [], repositories)
+
+    result = use_case.execute(SyncInstructionsCommand(host_ids=["claude_code"], apply=False))
+
+    assert result.host_ids == ["claude_code"]
+    assert result.validation_status == "planned"
+    assert result.audit_reference == "not-applied"
+    assert result.snapshot_reference == "planned"
+    assert config_path.read_text(encoding="utf-8") == original_config
+    assert result.warnings == []
+
+
+def test_sync_apply_explicit_disabled_host_mutates_project_config(
+    tmp_path: Path,
+    repositories: tuple[InMemorySnapshotRepository, InMemoryAuditLogRepository],
+) -> None:
+    config_path = tmp_path / ".umem" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        '[runtimes]\nenabled = ["opencode", "codex", "antigravity"]\n',
+        encoding="utf-8",
+    )
+    use_case = _use_case(tmp_path, [], repositories)
+
+    result = use_case.execute(SyncInstructionsCommand(host_ids=["claude_code"], apply=True))
+
+    assert result.host_ids == ["claude_code"]
+    assert result.validation_status == "success"
     assert result.warnings == [
         "Host 'claude_code' nao esta habilitado em .umem/config.toml; ativando automaticamente."
     ]
+    updated_config = config_path.read_text(encoding="utf-8")
+    assert '"codex"' in updated_config
+    assert '"claude_code"' in updated_config
 
 
 def test_sync_respects_limits_from_project_config(

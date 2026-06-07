@@ -189,8 +189,7 @@ class LocalRuleRepository(RuleRepository):
 
     def _load_rules(self, scope: RuleScope) -> list[Rule]:
         try:
-            with self._lock(scope):
-                return self._load_rules_unlocked(scope, raise_on_corrupt=False)
+            return self._load_rules_unlocked(scope, raise_on_corrupt=False)
         except StorageError:
             raise
         except OSError as exc:
