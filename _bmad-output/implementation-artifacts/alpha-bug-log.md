@@ -827,3 +827,78 @@ Suggested combined usage:
 - Real preview smoke in this project: `uv run umem host sync --no-apply --host codex --format json` -> `ok: true`, empty planned changes.
 - Real preview smoke in this project: `uv run umem host sync --no-apply --host=claude_code --format json` -> `ok: true`, empty planned changes.
 - `.umem/config.toml` checksum before and after the preview smoke remained identical: `52f3a204ab39400b80ef04028ad4ca4089415d19`.
+
+## BUG-016 - Package-installed `umem init` omits guide-skill reference files
+
+- Status: verified
+- Severity: high
+- Surface: Packaging | Onboarding | Skills
+- Found on: 2026-06-07
+- Context: while validating `_bmad-output/implementation-artifacts/spec-umem-skill-references.md`, the repository-owned `.umem/skills/use-universal-memory/` tree looked correct, but a clean wheel build and forced install exposed that new projects initialized from the installed package did not receive the `references/` files required by the guide-skill design.
+
+### Reproduction
+
+1. Run `uv cache clean universal-memory --force`.
+2. Build a fresh wheel with `uv build --wheel --no-cache --clear --out-dir <tmp-dist>`.
+3. Create a clean virtual environment.
+4. Install the wheel with `uv pip install --no-cache --force-reinstall <tmp-dist>/universal_memory-0.1.3-py3-none-any.whl`.
+5. In a temporary project, run `<venv>/bin/umem init --yes --format json`.
+6. Inspect `.umem/skills/use-universal-memory/`.
+
+### Expected
+
+- `umem init` from an installed package should materialize `.umem/skills/use-universal-memory/SKILL.md`.
+- It should also materialize all guide-skill reference files:
+  - `.umem/skills/use-universal-memory/references/startup-and-context.md`
+  - `.umem/skills/use-universal-memory/references/memory-facts.md`
+  - `.umem/skills/use-universal-memory/references/skills-lifecycle.md`
+  - `.umem/skills/use-universal-memory/references/host-instructions-sync.md`
+  - `.umem/skills/use-universal-memory/references/cli-mcp-parity.md`
+  - `.umem/skills/use-universal-memory/references/guardrails-and-recording.md`
+- `umem skills detail use-universal-memory --format json` should remain lightweight with `references_loaded=false`.
+
+### Obtained
+
+- The installed wheel initialized the project and registered `use-universal-memory` as active.
+- Only `.umem/skills/use-universal-memory/SKILL.md` was created.
+- No files under `.umem/skills/use-universal-memory/references/` were created.
+- The guide could not route to topic-specific references in a newly initialized package-installed project.
+
+### Evidence
+
+- `src/universal_memory/application/onboarding/setup_project.py`
+- `tests/application/test_setup_project.py`
+- Build/install simulation in `/private/tmp/umem-skill-sim-*`
+- Initial simulation result: `route_*_reference_exists` checks failed for all six reference files.
+
+### Hypothesis / Root Cause
+
+- `umem init` used the embedded `DEFAULT_UMEM_SKILL_MARKDOWN` constant in `setup_project.py`.
+- The new guide-skill files were versioned under `.umem/skills/use-universal-memory/`, but the installed package did not include or copy those project-owned files.
+- The onboarding path only wrote `SKILL.md`, so repository inspection passed while package-installed initialization missed the new progressive-reference structure.
+
+### Fix
+
+- Updated the embedded default skill markdown in `setup_project.py` to match the new guide-style `SKILL.md`.
+- Added embedded `DEFAULT_UMEM_SKILL_REFERENCES` content for each required reference file.
+- Updated `_ensure_default_umem_skill()` to create missing reference files during `umem init`.
+- Updated latent skill metadata to match the new guide-skill description and triggers.
+- Added regression coverage requiring `setup_project()` to create the full guide-skill tree.
+- Added a template-drift test comparing the embedded onboarding templates against the repository-owned `.umem/skills/use-universal-memory/` files.
+
+### Verification
+
+- `uv run pytest tests/application/test_setup_project.py` -> 8 passed
+- `uv run ruff check` -> all checks passed
+- `uv run pyright` -> 0 errors
+- `uv run pytest` -> 497 passed
+- `git diff --check` -> no whitespace errors
+- Clean build and forced install from wheel succeeded.
+- Final package-installed simulation in a temporary project returned `all_passed: true`, confirming:
+  - installed version `umem 0.1.3`
+  - `umem init` success
+  - initialized status
+  - active `use-universal-memory` skill
+  - lightweight detail with `references_loaded=false`
+  - all six `references/` files exist
+  - the guide `SKILL.md` mentions each reference route

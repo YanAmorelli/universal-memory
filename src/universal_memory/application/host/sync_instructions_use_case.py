@@ -95,7 +95,10 @@ class SyncInstructionsUseCase:
         )
         command = replace(command, max_managed_lines=max_lines, max_managed_chars=max_chars)
 
-        host_ids, config_warnings = self._host_ids_for_command(command.host_ids, apply=command.apply)
+        host_ids, config_warnings = self._host_ids_for_command(
+            command.host_ids,
+            apply=command.apply,
+        )
         all_blocks = self._active_rule_blocks()
         plans = self._plan_commands(host_ids, all_blocks, command)
 

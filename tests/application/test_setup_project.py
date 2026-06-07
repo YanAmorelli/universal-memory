@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from universal_memory.application.onboarding.setup_project import setup_project
+from universal_memory.application.onboarding.setup_project import (
+    DEFAULT_UMEM_SKILL_MARKDOWN,
+    DEFAULT_UMEM_SKILL_REFERENCES,
+    setup_project,
+)
 from universal_memory.infrastructure.config import (
     LocalConfigValidationPort,
     LocalProjectLayoutPort,
@@ -38,6 +42,12 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
         ".umem/skills/use-universal-memory/SKILL.md",
+        ".umem/skills/use-universal-memory/references/startup-and-context.md",
+        ".umem/skills/use-universal-memory/references/memory-facts.md",
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md",
+        ".umem/skills/use-universal-memory/references/host-instructions-sync.md",
+        ".umem/skills/use-universal-memory/references/cli-mcp-parity.md",
+        ".umem/skills/use-universal-memory/references/guardrails-and-recording.md",
         ".umem/memory/latent_skills.jsonl",
     ]
     default_skill = tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md"
@@ -49,27 +59,42 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "umem status --format json" in skill_content
     assert "umem skills list --format json" in skill_content
     assert "umem skills detail <skill-id-or-name> --format json" in skill_content
-    assert "Codex, Claude Code, and other agents" in skill_content
-    assert "Required Startup / Session Procedure" in skill_content
-    assert "Command Reference" in skill_content
-    assert "--scope global" in skill_content
-    assert "--scope project" in skill_content
-    assert "--tag preference" in skill_content
-    assert "--tag architecture" in skill_content
+    assert "Reference Routing" in skill_content
+    assert "references/startup-and-context.md" in skill_content
+    assert "references/memory-facts.md" in skill_content
+    assert "references/skills-lifecycle.md" in skill_content
+    assert "references/host-instructions-sync.md" in skill_content
+    assert "references/cli-mcp-parity.md" in skill_content
+    assert "references/guardrails-and-recording.md" in skill_content
     assert "secrets" in skill_content
     assert "credentials" in skill_content
-    assert "sensitive personal data" in skill_content
-    assert "Record only stable facts" in skill_content
-    assert "Do not skip steps 1-3" in skill_content
-    assert "mandatory preflight" in skill_content
+    assert "Record only curated, durable facts" in skill_content
+    assert "References are loaded only on demand" in skill_content
+    assert "Mandatory Startup" in skill_content
     assert "at the start of a work session or conversation" in skill_content
-    assert "If `umem` is unavailable or not initialized" in skill_content
-    assert "Do not repeat the full bootstrap on every interaction" in skill_content
+    assert "UMEM unavailable or uninitialized" in skill_content
+    assert "Do not repeat the full startup sequence" in skill_content
+    for relative_path in DEFAULT_UMEM_SKILL_REFERENCES:
+        reference_file = tmp_path / relative_path
+        assert reference_file.is_file()
+        assert reference_file.read_text(encoding="utf-8").startswith("# ")
     latent_skill_line = (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").read_text(
         encoding="utf-8"
     )
     latent_skill = json.loads(latent_skill_line)
     assert latent_skill["name"] == "use-universal-memory"
+    assert latent_skill["description"] == (
+        "Operational hub for using Universal Memory context, facts, host sync, "
+        "and skills lifecycle."
+    )
+    assert latent_skill["metadata"]["triggers"] == [
+        "at the start of a work session or conversation",
+        "before implementing, investigating, reviewing, or planning in a repository with .umem",
+        "when the user mentions memory, facts, context, skills, AGENTS.md, CLAUDE.md, "
+        "host sync, or learned preferences",
+        "before recording durable project or global knowledge",
+        "before creating, updating, activating, or deactivating a UMEM skill",
+    ]
     config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
     assert config["project"] == {"name": "", "created_by": "universal-memory"}
     assert config["preferences"] == {"locale": "en"}
@@ -191,6 +216,12 @@ def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path)
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
         ".umem/skills/use-universal-memory/SKILL.md",
+        ".umem/skills/use-universal-memory/references/startup-and-context.md",
+        ".umem/skills/use-universal-memory/references/memory-facts.md",
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md",
+        ".umem/skills/use-universal-memory/references/host-instructions-sync.md",
+        ".umem/skills/use-universal-memory/references/cli-mcp-parity.md",
+        ".umem/skills/use-universal-memory/references/guardrails-and-recording.md",
         ".umem/memory/latent_skills.jsonl",
     ]
 
@@ -215,6 +246,22 @@ def test_setup_project_repairs_partial_layout_state(tmp_path: Path) -> None:
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
         ".umem/skills/use-universal-memory/SKILL.md",
+        ".umem/skills/use-universal-memory/references/startup-and-context.md",
+        ".umem/skills/use-universal-memory/references/memory-facts.md",
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md",
+        ".umem/skills/use-universal-memory/references/host-instructions-sync.md",
+        ".umem/skills/use-universal-memory/references/cli-mcp-parity.md",
+        ".umem/skills/use-universal-memory/references/guardrails-and-recording.md",
         ".umem/memory/latent_skills.jsonl",
     ]
     assert result.existing_paths == [".umem/memory"]
+
+
+def test_default_umem_skill_templates_match_project_owned_skill_files() -> None:
+    skill_root = Path(".umem") / "skills" / "use-universal-memory"
+
+    assert DEFAULT_UMEM_SKILL_MARKDOWN == (skill_root / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    for relative_path, expected_content in DEFAULT_UMEM_SKILL_REFERENCES.items():
+        assert expected_content == Path(relative_path).read_text(encoding="utf-8")
