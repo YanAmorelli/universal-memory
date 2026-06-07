@@ -260,8 +260,6 @@ def test_setup_project_repairs_partial_layout_state(tmp_path: Path) -> None:
 def test_default_umem_skill_templates_match_project_owned_skill_files() -> None:
     skill_root = Path(".umem") / "skills" / "use-universal-memory"
 
-    assert DEFAULT_UMEM_SKILL_MARKDOWN == (skill_root / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
+    assert DEFAULT_UMEM_SKILL_MARKDOWN == (skill_root / "SKILL.md").read_text(encoding="utf-8")
     for relative_path, expected_content in DEFAULT_UMEM_SKILL_REFERENCES.items():
         assert expected_content == Path(relative_path).read_text(encoding="utf-8")
