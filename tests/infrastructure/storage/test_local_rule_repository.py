@@ -62,3 +62,15 @@ def test_write_global_rule_uses_xdg_umem_data_path(tmp_path: Path) -> None:
     assert (global_data_root / "snapshots" / "manifest.json").is_file()
     assert not (global_home / ".umem" / "memory" / "rules.jsonl").exists()
     assert not (data_root / "audit" / "events.jsonl").exists()
+
+
+def test_list_missing_global_storage_does_not_create_read_lock(tmp_path: Path) -> None:
+    global_home = tmp_path / "home"
+    global_home.write_text("not a directory", encoding="utf-8")
+    repository = LocalRuleRepository(project_root=tmp_path, global_home=global_home)
+    global_data_root = global_home / ".local" / "share" / "umem"
+
+    assert repository.list(scope=RuleScope.global_) == []
+    assert repository.list() == []
+    assert not global_data_root.exists()
+    assert not (global_data_root / "memory" / "rules.jsonl.lock").exists()

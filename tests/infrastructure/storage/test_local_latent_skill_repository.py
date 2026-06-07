@@ -209,6 +209,22 @@ def test_corrupt_lines_raise_error_on_read_and_write(tmp_path: Path) -> None:
         repository.write(make_skill(name="Nova skill"))
 
 
+def test_list_missing_global_storage_does_not_create_read_lock(tmp_path: Path) -> None:
+    safe_write, _, _ = build_safe_write(tmp_path)
+    global_home = tmp_path / "home"
+    repository = LocalLatentSkillRepository(
+        project_root=tmp_path,
+        global_home=global_home,
+        safe_write_use_case=safe_write,
+    )
+    global_data_root = global_home / ".local" / "share" / "umem"
+
+    assert repository.list(scope=LatentSkillScope.global_) == []
+    assert repository.list() == []
+    assert not global_data_root.exists()
+    assert not (global_data_root / "memory" / "latent_skills.jsonl.lock").exists()
+
+
 def test_lock_file_blocks_concurrent_project_writes(tmp_path: Path) -> None:
     safe_write, _, _ = build_safe_write(tmp_path)
     repository = LocalLatentSkillRepository(project_root=tmp_path, safe_write_use_case=safe_write)

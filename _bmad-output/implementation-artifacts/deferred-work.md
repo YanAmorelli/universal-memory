@@ -7,6 +7,10 @@
 - Risk of concurrent collisions if write operations exceed the fixed limit of `STALE_LOCK_SECONDS = 10.0` in `local_audit_log_repository.py` and `local_snapshot_repository.py`.
 - Concurrent reading of the audit log (`LocalAuditLogRepository.list`) is performed without acquiring a lock, which could raise a JSON decoding error or a `ValidationError` if it reads a truncated line during a concurrent write.
 
+## Deferred from: Codex sandbox UMEM bootstrap investigation (2026-06-05)
+
+- `umem status`, `umem context`, and `umem skills list` can fail with `storage_error` inside sandboxed agent environments even when the same CLI command succeeds in a normal local shell. Confirmed trigger: read paths acquire exclusive `.jsonl.lock` files for global scope under `~/.local/share/umem`, which is outside the writable workspace roots in Codex sandboxed execution. Product direction: separate read-only operations from write locks where safe, support shared/read locks or a no-write global read path, and improve the error payload so permission/sandbox lock failures identify the affected storage path and scope instead of only suggesting `umem init`.
+
 ## Deferred from: code review of 3-2-query-local-context-with-text-search.md (2026-05-27)
 
 - Weak Domain Port Typing for `write()` and Abundant `cast(Any, ...)` Workarounds: Dynamic dynamic type checking and casts (`cast(Any, ...)`) due to domain port returning `object | None` instead of typed structures or split ports, indicating leaky design. [src/universal_memory/domain/ports/fact_repository.py:50]

@@ -50,7 +50,7 @@ route: 'one-shot'
 ## Verification
 
 **Commands:**
-- `uv run umem --version` -- expected: prints `umem 0.1.2`.
+- `uv run umem --version` -- expected: prints `umem 0.1.3`.
 - `uv run umem status --format json` -- expected: `data.installed_version` is present.
 - `uv run pyright` -- expected: `0 errors`.
 - `uv run pytest` -- expected: all tests pass.
