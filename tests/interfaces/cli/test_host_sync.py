@@ -202,3 +202,46 @@ def test_host_sync_cli_passes_max_lines_and_max_chars(
     assert len(calls) == 1
     assert calls[0].max_managed_lines == EXPECTED_MAX_MANAGED_LINES
     assert calls[0].max_managed_chars == EXPECTED_MAX_MANAGED_CHARS
+
+
+def test_host_sync_cli_parses_host_option_space_and_equals_forms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = []
+
+    def host_sync(command: SyncInstructionsCommand) -> SyncInstructionsResult:
+        calls.append(command)
+        return SyncInstructionsResult(
+            host_ids=command.host_ids,
+            instruction_targets=[],
+            planned_changes=[],
+            manual_steps=["Revise os caminhos afetados antes de aplicar."],
+            validation_status="planned",
+            audit_reference="not-applied",
+            snapshot_reference="planned",
+            timestamp="2026-05-29T12:00:00Z",
+        )
+
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = cli_main(
+        [
+            "host",
+            "sync",
+            "--no-apply",
+            "--host",
+            "codex",
+            "--host=claude_code",
+            "--format=json",
+        ],
+        setup_project_command=lambda _project_root: None,  # type: ignore[arg-type,return-value]
+        host_sync_command=host_sync,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+    assert len(calls) == 1
+    assert calls[0].host_ids == ["codex", "claude_code"]
+    assert calls[0].apply is False
+    assert json.loads(captured.out)["data"]["host_ids"] == ["codex", "claude_code"]

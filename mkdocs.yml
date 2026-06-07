@@ -1,0 +1,76 @@
+site_name: Universal Memory
+site_description: Vendor-agnostic cognitive persistence for AI agents.
+site_url: https://yanamorelli.github.io/universal-memory/
+repo_url: https://github.com/YanAmorelli/universal-memory
+repo_name: YanAmorelli/universal-memory
+
+theme:
+  name: material
+  language: en
+  logo: assets/umem-logo-transparent.png
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - announce.dismiss
+    - content.code.copy
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+nav:
+  - Home: index.md
+  - Users:
+      - Getting Started: users/getting-started.md
+      - CLI Guide: users/cli.md
+      - Safety And Recovery: users/safety-and-recovery.md
+  - Contributors:
+      - Architecture: contributors/architecture.md
+      - Development Guide: contributors/development.md
+      - Release And Alpha Testing: contributors/release-and-alpha.md
+      - Alpha Sandbox Test Plan: contributors/alpha-sandbox-test-plan.md
+  - Agents And LLMs:
+      - Operating Protocol: agents/operating-protocol.md
+      - MCP And Skills: agents/mcp-and-skills.md
+      - Instruction Files: agents/instruction-files.md
+  - Reference:
+      - CLI And MCP Parity: reference/cli-mcp-parity.md
+      - Skill Lifecycle: reference/skill-lifecycle.md
+      - Documentation Sources: reference/documentation-sources.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - stylesheets/extra.css

@@ -147,6 +147,25 @@ def test_update_default_reports_no_action_when_current(
     assert payload["data"]["migrated_files"] == []
 
 
+def test_update_human_output_distinguishes_local_maintenance_from_package_upgrade(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["init", "--yes", "--format", "json"]) == 0
+    capsys.readouterr()
+
+    exit_code = main(["update", "--yes"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Local maintenance completed." in captured.out
+    assert "Running package version:" in captured.out
+    assert "Package upgrade check: not performed (offline command)" in captured.out
+    assert "Updates available:" not in captured.out
+
+
 def _active_skill() -> LatentSkill:
     now = datetime(2026, 6, 1, tzinfo=UTC)
     return LatentSkill(
