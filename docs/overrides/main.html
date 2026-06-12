@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  <!-- Open Graph / Facebook -->
+  <meta property="og:site_name" content="Universal Memory">
+  {% if page.is_homepage %}
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://docs.universal-memory.com/">
+    <meta property="og:title" content="Universal Memory — Portable context for every coding agent.">
+    <meta property="og:description" content="Vendor-agnostic cognitive persistence for AI agents. Eliminate the repetition tax by transporting your context, preferences, guidelines, and history seamlessly across sessions, IDEs, and LLM models.">
+    <meta property="og:image" content="https://docs.universal-memory.com/UNIVERSAL-MEMORY-MVP-PROPOSAL.png">
+    <meta property="og:image:alt" content="Universal Memory MVP Design and System Architecture">
+  {% else %}
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="{{ page.canonical_url }}">
+    <meta property="og:title" content="{{ page.title }} - Universal Memory">
+    <meta property="og:description" content="{% if page.meta and page.meta.description %}{{ page.meta.description }}{% else %}{{ config.site_description }}{% endif %}">
+    <meta property="og:image" content="https://docs.universal-memory.com/UNIVERSAL-MEMORY-MVP-PROPOSAL.png">
+    <meta property="og:image:alt" content="Universal Memory MVP Design and System Architecture">
+  {% endif %}
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  {% if page.is_homepage %}
+    <meta name="twitter:title" content="Universal Memory — Portable context for every coding agent.">
+    <meta name="twitter:description" content="Vendor-agnostic cognitive persistence for AI agents. Eliminate the repetition tax by transporting your context, preferences, guidelines, and history seamlessly across sessions, IDEs, and LLM models.">
+    <meta name="twitter:image" content="https://docs.universal-memory.com/UNIVERSAL-MEMORY-MVP-PROPOSAL.png">
+  {% else %}
+    <meta name="twitter:title" content="{{ page.title }} - Universal Memory">
+    <meta name="twitter:description" content="{% if page.meta and page.meta.description %}{{ page.meta.description }}{% else %}{{ config.site_description }}{% endif %}">
+    <meta name="twitter:image" content="https://docs.universal-memory.com/UNIVERSAL-MEMORY-MVP-PROPOSAL.png">
+  {% endif %}
+
+  <!-- JSON-LD Structured Data for Search Engine Disambiguation -->
+  {% if page.is_homepage %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Universal Memory",
+    "alternateName": "umem",
+    "description": "Vendor-agnostic cognitive persistence layer for AI agents. Eliminate the repetition tax by transporting context, preferences, guidelines, and history seamlessly across sessions, IDEs, and LLM models.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "softwareVersion": "0.1.0",
+    "url": "https://docs.universal-memory.com/",
+    "downloadUrl": "https://pypi.org/project/universal-memory/",
+    "requirements": "Python 3.12+",
+    "screenshot": "https://docs.universal-memory.com/UNIVERSAL-MEMORY-MVP-PROPOSAL.png",
+    "author": {
+      "@type": "Person",
+      "name": "Yan Liao Amorelli",
+      "url": "https://github.com/YanAmorelli"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0.00",
+      "priceCurrency": "USD",
+      "category": "Free"
+    },
+    "softwareHelp": {
+      "@type": "CreativeWork",
+      "name": "Universal Memory Documentation",
+      "url": "https://docs.universal-memory.com/"
+    }
+  }
+  </script>
+  {% endif %}
+{% endblock %}
