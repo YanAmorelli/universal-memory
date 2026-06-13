@@ -70,6 +70,13 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "credentials" in skill_content
     assert "Record only curated, durable facts" in skill_content
     assert "References are loaded only on demand" in skill_content
+    for expected_skill_guidance in (
+        "Latent Skill Decision Loop",
+        "track_latent_skill",
+        "umem skills create",
+        "do not call `track_latent_skill` just to",
+    ):
+        assert expected_skill_guidance in skill_content
     assert "Mandatory Startup" in skill_content
     assert "at the start of a work session or conversation" in skill_content
     assert "UMEM unavailable or uninitialized" in skill_content
@@ -102,6 +109,26 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
         "enabled": ["claude_code", "opencode", "codex", "cursor", "antigravity"]
     }
     assert "hosts" not in config
+
+
+def test_setup_project_skills_lifecycle_documents_valid_create_command(tmp_path: Path) -> None:
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+
+    skills_lifecycle_content = (
+        tmp_path
+        / ".umem"
+        / "skills"
+        / "use-universal-memory"
+        / "references"
+        / "skills-lifecycle.md"
+    ).read_text(encoding="utf-8")
+
+    assert '--trigger "when to use it"' in skills_lifecycle_content
+    assert "--file path/to/SKILL.md" not in skills_lifecycle_content
 
 
 def test_setup_project_persists_selected_runtimes(tmp_path: Path) -> None:

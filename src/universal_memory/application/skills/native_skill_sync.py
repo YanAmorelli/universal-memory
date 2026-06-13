@@ -50,7 +50,7 @@ class NativeSkillSync:
         self.safe_write_use_case = safe_write_use_case
         self.runtime_registry = runtime_registry or default_runtime_registry()
 
-    def sync(
+    def sync(  # noqa: PLR0913
         self,
         *,
         skill: LatentSkill,
@@ -58,8 +58,11 @@ class NativeSkillSync:
         canonical_skill_file: str,
         origin: str,
         drift_decision: NativeDriftDecision | None,
+        canonical_base_path: Path | None = None,
+        targets: list[str] | None = None,
+        allow_unmanaged_overwrite: bool = True,
     ) -> NativeSkillSyncResult:
-        canonical_path = self.project_root / canonical_skill_file
+        canonical_path = (canonical_base_path or self.project_root) / canonical_skill_file
         canonical_dir = canonical_path.parent
         canonical_files = _directory_files(canonical_dir)
         canonical_hash = _hash_tree(canonical_files)
@@ -71,7 +74,7 @@ class NativeSkillSync:
         installations: list[dict[str, Any]] = []
         warnings: list[str] = []
 
-        for runtime in self._enabled_runtimes():
+        for runtime in self._enabled_runtimes(targets=targets):
             for target in runtime.native_skill_targets:
                 relative_path = self._native_skill_dir_path(
                     target_base=target.relative_path,
@@ -85,6 +88,31 @@ class NativeSkillSync:
                     and current_hash is not None
                     and current_hash != previous.get("target_hash")
                 )
+                has_unmanaged_target = previous is None and current_hash is not None
+                if has_unmanaged_target and (
+                    not allow_unmanaged_overwrite or drift_decision != "overwrite"
+                ):
+                    warnings.append(
+                        "Warning: Native target already exists and is not managed by UMEM: "
+                        f"{relative_path}"
+                    )
+                    installations.append(
+                        {
+                            "source_skill_id": skill.id,
+                            "runtime": runtime.runtime_id.value,
+                            "path": relative_path,
+                            "canonical_hash": canonical_hash,
+                            "target_hash": current_hash,
+                            "manifest": [],
+                            "timestamp": datetime.now(UTC).isoformat(),
+                            "audit_reference": "",
+                            "snapshot_reference": "",
+                            "drift_detected": True,
+                            "managed": False,
+                            "status": "unmanaged_native",
+                        }
+                    )
+                    continue
                 if has_drift and drift_decision != "overwrite":
                     warnings.append(DRIFT_WARNING)
                     previous_installation = cast(dict[str, Any], previous)
@@ -124,6 +152,11 @@ class NativeSkillSync:
                         "audit_reference": ", ".join(
                             result.audit_reference for result in write_results
                         ),
+                        "snapshot_reference": ", ".join(
+                            result.snapshot_reference for result in write_results
+                        ),
+                        "drift_detected": False,
+                        "status": "overwritten" if has_drift else "synced",
                     }
                 )
 
@@ -179,7 +212,21 @@ class NativeSkillSync:
             snapshot_references=snapshot_refs,
         )
 
-    def _enabled_runtimes(self) -> list[RuntimeAdapter]:
+    def _enabled_runtimes(self, *, targets: list[str] | None = None) -> list[RuntimeAdapter]:
+        if targets is not None:
+            unsupported = [
+                runtime_id
+                for runtime_id in targets
+                if runtime_id not in {item.value for item in RuntimeId}
+            ]
+            if unsupported:
+                raise ValidationFailedError(f"Runtimes nao suportados: {', '.join(unsupported)}")
+            target_set = set(targets)
+            return [
+                runtime
+                for runtime in self.runtime_registry.runtimes
+                if runtime.runtime_id.value in target_set and runtime.native_skill_targets
+            ]
         enabled = self._enabled_runtime_ids_from_config()
         runtimes = self.runtime_registry.runtimes
         if enabled is None:

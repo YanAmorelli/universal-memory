@@ -187,10 +187,18 @@ def test_sync_routes_rules_writes_agents_once_and_keeps_canonical_docs_compact(
     ]
     assert "Use relative paths in specs, code and docs." in agents_content
     assert "Use CLAUDE.md only for Claude-specific deltas." in agents_content
+    assert "consider latent skill tracking via the UMEM guide" in agents_content
+    assert "do not track one-off work, raw evidence, secrets, or private data" in agents_content
+    assert "run `umem skills track` with sanitized evidence" in agents_content
+    assert "run `umem skills propose` if recurring patterns exist" not in agents_content
     assert "[docs/long-guide.md](file:///docs/long-guide.md)" in agents_content
     assert "Long guidance" not in agents_content
+    assert "evidence_summary" not in agents_content
+    assert "latent_skills" not in agents_content
     assert "Use relative paths in specs, code and docs." not in claude_content
     assert "Use CLAUDE.md only for Claude-specific deltas." in claude_content
+    assert "consider latent skill tracking via the UMEM guide" in claude_content
+    assert "run `umem skills propose` if recurring patterns exist" not in claude_content
     assert "Apply host sync only inside the project root." in claude_content
     assert "Long guidance" in guide_content
     snapshot_paths = [snapshot.relative_path for snapshot in snapshot_repository.snapshots]
@@ -268,6 +276,9 @@ def test_sync_claude_without_agents_md_keeps_shared_policy_in_claude_md(
     assert "Claude-only note." in claude_content
     assert "Claude Code Universal Memory Instructions" in claude_content
     assert "mandatory preflight at the start of a conversation" in claude_content
+    assert "consider latent skill tracking via the UMEM guide" in claude_content
+    assert "run `umem skills track` with sanitized evidence" in claude_content
+    assert "run `umem skills propose` if recurring patterns exist" not in claude_content
     assert "If `umem` is unavailable or not initialized" in claude_content
 
 

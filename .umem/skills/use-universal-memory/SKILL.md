@@ -75,6 +75,20 @@ references as the canonical behavior contract.
   query only the specific UMEM state needed after the initial preflight.
 - Preserve relative paths in specs, docs, code, and reports.
 
+## Latent Skill Decision Loop
+
+- During substantial work and before the final response, consider whether you observed a
+  repeated, durable workflow that would help future agents.
+- If a reusable methodology, checklist, transformation, review pattern, or domain workflow
+  recurs, call `track_latent_skill` or `umem skills track` with a short name,
+  description, tags, and a sanitized evidence summary.
+- If the user explicitly asks to create a skill, use direct `create_skill` or
+  `umem skills create`; do not create a latent candidate first.
+- If no durable repeated workflow was observed, do not call `track_latent_skill` just to
+  satisfy a checklist.
+- Never track secrets, raw logs, raw prompts, private customer data, uncertain patterns, or
+  one-off preferences as latent skill evidence. Route durable preferences to memory facts.
+
 ## Reference Routing
 
 - For startup, health, context loading, and active-skill discovery, read

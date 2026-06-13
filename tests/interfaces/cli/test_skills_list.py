@@ -66,9 +66,9 @@ def test_skills_list_empty_human_output_suggests_actionable_next_step(capsys) ->
         return ListSkillsResult(
             skills=[],
             recommended_action=(
-                "Latent skills aparecem quando o universal-memory registra padroes recorrentes. "
-                'Continue usando `umem remember "..."` para registrar memoria; quando uma '
-                "candidata aparecer, rode `umem skills list` novamente para acompanhar as skills."
+                "Latent skills aparecem quando o universal-memory registra evidencias recorrentes. "
+                "Use `umem skills track --name ... --description ... --evidence-summary ...` "
+                "para capturar evidencia explicita; depois rode `umem skills recommend`."
             ),
         )
 
@@ -77,8 +77,9 @@ def test_skills_list_empty_human_output_suggests_actionable_next_step(capsys) ->
 
     assert exit_code == 0
     assert "No skills registered" in output
-    assert "umem remember" in output
-    assert "umem skills list" in output
+    assert "umem skills track" in output
+    assert "umem skills recommend" in output
+    assert "umem remember" not in output
     assert "umem skills propose" not in output
 
 

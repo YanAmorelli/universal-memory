@@ -771,6 +771,8 @@ class ConfigureHostUseCase:
             "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a relevant "
             "active skill exists, inspect it with "
             "`umem skills detail <skill-id-or-name> --format json` before acting.",
+            "> For repeated durable workflows, consider latent skill tracking via the UMEM guide; "
+            "do not track one-off work, raw evidence, secrets, or private data.",
             "> If `umem` is unavailable or not initialized, report that explicitly before "
             "continuing without external memory.",
             "> CRITICAL: proactively capture new memory or clean up outdated ones only when a "
@@ -800,7 +802,7 @@ class ConfigureHostUseCase:
             "fix, or decision was made. If so:",
             '1. Record: Proactively run `umem remember "Short fact." --scope project/global --tag <tag>` '
             "or `umem facts purge --id <id>` to remove outdated facts.",
-            "2. Propose Skills: Check `umem skills list` and run `umem skills propose` if recurring patterns exist.",
+            "2. Track Skills: For newly observed repeated workflows, run `umem skills track` with sanitized evidence; use `umem skills propose` only for existing latent candidates after approval.",
             "3. Sync: If you ran any mutation (remember or purge), run `umem host sync --apply` to bake it.",
             '4. Report: Append the UMEM status line `[UMEM: Remembered "..."]` or `[UMEM: No new facts/skills to record]` to your final output.',
             "",
@@ -848,6 +850,10 @@ class ConfigureHostUseCase:
                 "relevant active skill exists, inspect it with "
                 "`umem skills detail <skill-id-or-name> --format json` before acting."
             )
+            latent_skill_line = (
+                "> For repeated durable workflows, consider latent skill tracking via the UMEM guide; "
+                "do not track one-off work, raw evidence, secrets, or private data."
+            )
             unavailable_line = (
                 "> If `umem` is unavailable or not initialized, report that explicitly before "
                 "continuing without external memory."
@@ -885,6 +891,10 @@ class ConfigureHostUseCase:
                 "relevant active skill exists, inspect it with "
                 "`umem skills detail <skill-id-or-name> --format json` before acting."
             )
+            latent_skill_line = (
+                "> For repeated durable workflows, consider latent skill tracking via the UMEM guide; "
+                "do not track one-off work, raw evidence, secrets, or private data."
+            )
             unavailable_line = (
                 "> If `umem` is unavailable or not initialized, report that explicitly before "
                 "continuing without external memory."
@@ -912,6 +922,7 @@ class ConfigureHostUseCase:
             scope_line,
             memory_line,
             policy_line,
+            latent_skill_line,
             unavailable_line,
             recording_line,
             report_line,
@@ -940,7 +951,7 @@ class ConfigureHostUseCase:
                     "fix, or decision was made. If so:",
                     '1. Record: Proactively run `umem remember "Short fact." --scope project/global --tag <tag>` '
                     "or `umem facts purge --id <id>` to remove outdated facts.",
-                    "2. Propose Skills: Check `umem skills list` and run `umem skills propose` if recurring patterns exist.",
+                    "2. Track Skills: For newly observed repeated workflows, run `umem skills track` with sanitized evidence; use `umem skills propose` only for existing latent candidates after approval.",
                     "3. Sync: If you ran any mutation (remember or purge), run `umem host sync --apply` to bake it.",
                     '4. Report: Append the UMEM status line `[UMEM: Remembered "..."]` or `[UMEM: No new facts/skills to record]` to your final output.',
                     "",

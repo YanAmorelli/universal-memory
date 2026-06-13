@@ -29,11 +29,23 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
+    CreateSkillCommand,
+    CreateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
+    ImportSkillCommand,
+    ImportSkillResult,
+    PromoteSkillRecommendationCommand,
+    PromoteSkillRecommendationResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    RecommendSkillsCommand,
+    RecommendSkillsResult,
+    SkillRecommendationItem,
+    SyncSkillResult,
+    SyncSkillsCommand,
+    SyncSkillsResult,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
     UpdateSkillCommand,
@@ -41,6 +53,8 @@ from universal_memory.application.skills import (
 )
 from universal_memory.domain import SecretDetectedError
 from universal_memory.domain.entities import (
+    AgentSkill,
+    AgentSkillStatus,
     ContextSummary,
     ContextSummaryScope,
     Fact,
@@ -86,7 +100,12 @@ PARITY_MATRIX = {
     "host.setup_check": "check_host",
     "skills.propose": "propose_skill",
     "skills.track": "track_latent_skill",
+    "skills.create": "create_skill",
+    "skills.promote": "promote_skill_recommendation",
+    "skills.sync": "sync_skills",
+    "skills.import": "import_skill",
     "skills.list": "list_skills",
+    "skills.recommend": "recommend_skills",
     "skills.activate": "activate_skill",
     "skills.deactivate": "deactivate_skill",
     "skills.update": "update_skill",
@@ -242,6 +261,47 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
         (
             [
                 "skills",
+                "create",
+                "--name",
+                "TDD recorrente",
+                "--description",
+                "Usuario pede ciclo red green refactor",
+                "--scope",
+                "project",
+                "--trigger",
+                "red green refactor",
+                "--format",
+                "json",
+            ],
+            "create_skill",
+            {
+                "name": "TDD recorrente",
+                "description": "Usuario pede ciclo red green refactor",
+                "scope": "project",
+                "triggers": ["red green refactor"],
+            },
+        ),
+        (
+            [
+                "skills",
+                "import",
+                "native/review-helper/SKILL.md",
+                "--scope",
+                "project",
+                "--replace-native",
+                "--format",
+                "json",
+            ],
+            "import_skill",
+            {
+                "path": "native/review-helper/SKILL.md",
+                "scope": "project",
+                "replace_native": True,
+            },
+        ),
+        (
+            [
+                "skills",
                 "propose",
                 "11111111-1111-4111-8111-111111111111",
                 "--yes",
@@ -250,6 +310,31 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
             ],
             "propose_skill",
             {"latent_skill_id": "11111111-1111-4111-8111-111111111111", "decision": "yes"},
+        ),
+        (
+            [
+                "skills",
+                "promote",
+                "11111111-1111-4111-8111-111111111111",
+                "--yes",
+                "--name",
+                "TDD recorrente",
+                "--description",
+                "Usuario pede ciclo red green refactor",
+                "--trigger",
+                "red green refactor",
+                "--format",
+                "json",
+            ],
+            "promote_skill_recommendation",
+            {
+                "recommendation_id": "11111111-1111-4111-8111-111111111111",
+                "edits": {
+                    "name": "TDD recorrente",
+                    "description": "Usuario pede ciclo red green refactor",
+                    "triggers": ["red green refactor"],
+                },
+            },
         ),
         (
             [
@@ -298,6 +383,28 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
         (
             [
                 "skills",
+                "sync",
+                "TDD recorrente",
+                "--target",
+                "opencode",
+                "--format",
+                "json",
+            ],
+            "sync_skills",
+            {
+                "skill_id_or_name": "TDD recorrente",
+                "targets": ["opencode"],
+                "drift_decision": "keep",
+            },
+        ),
+        (
+            ["skills", "recommend", "--scope", "project", "--format", "json"],
+            "recommend_skills",
+            {"scope": "project", "dry_run": True},
+        ),
+        (
+            [
+                "skills",
                 "track",
                 "--name",
                 "TDD recorrente",
@@ -338,6 +445,54 @@ async def test_cli_and_mcp_json_data_keys_match_for_public_capabilities(  # noqa
     assert exit_code == 0
     assert mcp_payload is not None
     assert_contract_data_equivalent(cli_payload["data"], mcp_payload["data"], capability=mcp_tool)
+
+
+@pytest.mark.anyio
+async def test_import_cli_and_mcp_json_data_keys_match_without_other_skill_capabilities(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    cli_exit_code = cli_main(
+        [
+            "skills",
+            "import",
+            "native/review-helper/SKILL.md",
+            "--scope",
+            "project",
+            "--replace-native",
+            "--format",
+            "json",
+        ],
+        import_skill_command=import_skill_result,
+    )
+    cli_payload = json.loads(capsys.readouterr().out)
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: status_result(),
+            context=lambda _command: context_result(),
+            import_skill=import_skill_result,
+        ),
+        project_root=tmp_path,
+    )
+    mcp_payload = (
+        await server.call_tool(
+            "import_skill",
+            {
+                "path": "native/review-helper/SKILL.md",
+                "scope": "project",
+                "replace_native": True,
+            },
+        )
+    ).structured_content
+
+    assert cli_exit_code == 0
+    assert mcp_payload is not None
+    assert_contract_data_equivalent(
+        cli_payload["data"], mcp_payload["data"], capability="import_skill"
+    )
 
 
 @pytest.mark.anyio
@@ -385,6 +540,11 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
         "rollback_preview_command": lambda _scope: object(),
         "propose_skill_command": propose_skill_result,
         "track_latent_skill_command": track_latent_skill_result,
+        "create_skill_command": create_skill_result,
+        "promote_skill_recommendation_command": promote_skill_recommendation_result,
+        "sync_skills_command": sync_skills_result,
+        "import_skill_command": import_skill_result,
+        "recommend_skills_command": recommend_skills_result,
         "activate_skill_command": activate_skill_result,
         "deactivate_skill_command": deactivate_skill_result,
         "update_skill_command": update_skill_result,
@@ -415,6 +575,11 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         ),
         propose_skill=propose_skill_result,
         track_latent_skill=track_latent_skill_result,
+        create_skill=create_skill_result,
+        promote_skill_recommendation=promote_skill_recommendation_result,
+        sync_skills=sync_skills_result,
+        import_skill=import_skill_result,
+        recommend_skills=recommend_skills_result,
         activate_skill=activate_skill_result,
         deactivate_skill=deactivate_skill_result,
         update_skill=update_skill_result,
@@ -469,6 +634,182 @@ def propose_skill_result(command: ProposeSkillCommand) -> ProposeSkillResult:
         auto_approval_recorded=command.decision == ProposeSkillDecision.sempre,
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
+    )
+
+
+def create_skill_result(command: CreateSkillCommand) -> CreateSkillResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    skill = AgentSkill(
+        id="11111111-1111-4111-8111-111111111111",
+        created_at=now,
+        updated_at=now,
+        name=command.name,
+        slug="tdd-recorrente",
+        description=command.description,
+        scope=command.scope,
+        status=AgentSkillStatus.active,
+        canonical_path=".umem/skills/tdd-recorrente/SKILL.md",
+        origin="test",
+        audit_reference="audit-1",
+        content_hash="hash-1",
+        native_installations=[],
+        metadata={"triggers": command.triggers or [], "creation_flow": "direct"},
+    )
+    return CreateSkillResult(
+        agent_skill=skill,
+        slug="tdd-recorrente",
+        skill_dir=".umem/skills/tdd-recorrente",
+        skill_file=".umem/skills/tdd-recorrente/SKILL.md",
+        created_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
+        affected_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def promote_skill_recommendation_result(
+    command: PromoteSkillRecommendationCommand,
+) -> PromoteSkillRecommendationResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    source = LatentSkill(
+        id=command.recommendation_id,
+        created_at=now,
+        updated_at=now,
+        name=command.name or "TDD recorrente",
+        description=command.description or "Usuario pede ciclo red green refactor",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.proposed,
+        recurrence_count=3,
+        metadata={"triggers": command.triggers or ["red green refactor"]},
+    )
+    create = create_skill_result(
+        CreateSkillCommand(
+            name=source.name,
+            description=source.description,
+            scope=source.scope,
+            origin=command.origin,
+            triggers=command.triggers,
+            targets=command.targets,
+            source_recommendation_id=command.recommendation_id,
+        )
+    )
+    create = CreateSkillResult(
+        agent_skill=create.agent_skill.model_copy(
+            update={"source_recommendation_id": command.recommendation_id}
+        ),
+        slug=create.slug,
+        skill_dir=create.skill_dir,
+        skill_file=create.skill_file,
+        created_paths=create.created_paths,
+        affected_paths=create.affected_paths,
+        audit_reference=create.audit_reference,
+        snapshot_reference=create.snapshot_reference,
+        native_installations=create.native_installations,
+        warnings=create.warnings,
+    )
+    promoted = source.model_copy(
+        update={
+            "status": LatentSkillStatus.active,
+            "metadata": {
+                "promotion": {
+                    "promoted_skill_id": create.agent_skill.id,
+                    "promoted_at": "2026-05-28T12:00:00Z",
+                }
+            },
+        }
+    )
+    return PromoteSkillRecommendationResult(
+        create_result=create,
+        source_recommendation=source,
+        promoted_recommendation=promoted,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def sync_skills_result(command: SyncSkillsCommand) -> SyncSkillsResult:
+    return SyncSkillsResult(
+        skills=[
+            SyncSkillResult(
+                skill_id="11111111-1111-4111-8111-111111111111",
+                name=command.skill_id_or_name or "TDD recorrente",
+                scope="project",
+                status="active",
+                canonical_path=".umem/skills/tdd-recorrente/SKILL.md",
+                affected_paths=[".opencode/skills/tdd-recorrente/SKILL.md"],
+                targets=[
+                    {
+                        "runtime": "opencode",
+                        "path": ".opencode/skills/tdd-recorrente",
+                        "status": "synced",
+                        "drift_detected": False,
+                        "canonical_hash": "canonical",
+                        "target_hash": "target",
+                        "audit_reference": "audit-1",
+                        "snapshot_reference": "snapshot-1",
+                        "affected_paths": ["SKILL.md"],
+                    }
+                ],
+                audit_reference="audit-1",
+                snapshot_reference="snapshot-1",
+            )
+        ],
+        affected_paths=[".opencode/skills/tdd-recorrente/SKILL.md"],
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def import_skill_result(command: ImportSkillCommand) -> ImportSkillResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    skill = AgentSkill(
+        id="11111111-1111-4111-8111-111111111111",
+        created_at=now,
+        updated_at=now,
+        name="Imported Skill",
+        slug="imported-skill",
+        description="Imported from native skill directory.",
+        scope=command.scope,
+        status=AgentSkillStatus.active,
+        canonical_path=".umem/skills/imported-skill/SKILL.md",
+        origin="test",
+        audit_reference="audit-1",
+        content_hash="hash-1",
+        native_installations=[],
+        metadata={"triggers": [], "creation_flow": "import"},
+    )
+    return ImportSkillResult(
+        agent_skill=skill,
+        slug="imported-skill",
+        skill_dir=".umem/skills/imported-skill",
+        skill_file=".umem/skills/imported-skill/SKILL.md",
+        created_paths=[".umem/skills/imported-skill/SKILL.md"],
+        affected_paths=[".umem/skills/imported-skill/SKILL.md"],
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def recommend_skills_result(_command: RecommendSkillsCommand) -> RecommendSkillsResult:
+    return RecommendSkillsResult(
+        recommendations=[
+            SkillRecommendationItem(
+                id=FACT_ID,
+                name="TDD recorrente",
+                description="Usuario pede ciclo red green refactor",
+                scope="project",
+                status="proposed",
+                recurrence_count=2,
+                evidence_summaries=["first", "second"],
+                tags=["tdd"],
+                confidence=0.77,
+                reasons=["recurrence_count 2 meets minimum recurrence threshold 2"],
+                recommended_action=f"umem skills promote {FACT_ID}",
+            )
+        ],
+        thresholds={"min_recurrence": 2, "min_evidence_summaries": 2},
+        evidence_sources=[{"source": "latent_skills", "description": "Tracked latent records."}],
+        limitations=["First implementation only evaluates explicit `skills track` latent records."],
     )
 
 

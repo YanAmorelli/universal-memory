@@ -180,6 +180,7 @@ class GenerateSkillUseCase:
             canonical_skill_file=skill_file,
             origin=validated.origin,
             drift_decision=validated.native_drift_decision,
+            canonical_base_path=write.project_root,
         )
         affected_paths.extend(native_result.affected_paths)
         if native_result.installations:
@@ -269,6 +270,10 @@ class GenerateSkillUseCase:
         return paths
 
     def _render_skill_markdown(self, skill: LatentSkill) -> str:
+        raw_markdown = (skill.metadata or {}).get("raw_markdown")
+        if isinstance(raw_markdown, str):
+            return self._strip_absolute_project_paths(raw_markdown)
+
         triggers = self._triggers_for(skill)
         instructions = self._instructions_for(skill)
         lines = [

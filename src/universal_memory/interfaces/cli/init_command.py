@@ -57,23 +57,33 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
+    CreateSkillCommand,
+    CreateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
     GenerateSkillCommand,
     GenerateSkillResult,
     GetSkillDetailCommand,
     GetSkillDetailResult,
+    ImportSkillCommand,
+    ImportSkillResult,
     ListSkillsCommand,
     ListSkillsResult,
+    PromoteSkillRecommendationCommand,
+    PromoteSkillRecommendationResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    RecommendSkillsCommand,
+    RecommendSkillsResult,
+    SyncSkillsCommand,
+    SyncSkillsResult,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
-from universal_memory.application.skills.native_skill_sync import NativeDriftDecision
+from universal_memory.application.skills.native_skill_sync import DRIFT_WARNING, NativeDriftDecision
 from universal_memory.application.update import (
     UpdateBenchmarksCommand,
     UpdateBenchmarksResult,
@@ -162,6 +172,13 @@ SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstruc
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 TrackLatentSkillCommandHandler = Callable[[TrackLatentSkillCommand], TrackLatentSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
+CreateSkillCommandHandler = Callable[[CreateSkillCommand], CreateSkillResult]
+PromoteSkillRecommendationCommandHandler = Callable[
+    [PromoteSkillRecommendationCommand], PromoteSkillRecommendationResult
+]
+ImportSkillCommandHandler = Callable[[ImportSkillCommand], ImportSkillResult]
+RecommendSkillsCommandHandler = Callable[[RecommendSkillsCommand], RecommendSkillsResult]
+SyncSkillsCommandHandler = Callable[[SyncSkillsCommand], SyncSkillsResult]
 ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
 GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
 ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResult]
@@ -217,6 +234,11 @@ def main(  # noqa: PLR0913
     propose_skill_command: ProposeSkillCommandHandler | None = None,
     track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
+    create_skill_command: CreateSkillCommandHandler | None = None,
+    promote_skill_recommendation_command: PromoteSkillRecommendationCommandHandler | None = None,
+    import_skill_command: ImportSkillCommandHandler | None = None,
+    recommend_skills_command: RecommendSkillsCommandHandler | None = None,
+    sync_skills_command: SyncSkillsCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
     activate_skill_command: ActivateSkillCommandHandler | None = None,
@@ -246,6 +268,11 @@ def main(  # noqa: PLR0913
         propose_skill_command=propose_skill_command,
         track_latent_skill_command=track_latent_skill_command,
         generate_skill_command=generate_skill_command,
+        create_skill_command=create_skill_command,
+        promote_skill_recommendation_command=promote_skill_recommendation_command,
+        import_skill_command=import_skill_command,
+        recommend_skills_command=recommend_skills_command,
+        sync_skills_command=sync_skills_command,
         list_skills_command=list_skills_command,
         get_skill_detail_command=get_skill_detail_command,
         activate_skill_command=activate_skill_command,
@@ -321,6 +348,11 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     propose_skill_command: ProposeSkillCommandHandler | None = None,
     track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
+    create_skill_command: CreateSkillCommandHandler | None = None,
+    promote_skill_recommendation_command: PromoteSkillRecommendationCommandHandler | None = None,
+    import_skill_command: ImportSkillCommandHandler | None = None,
+    recommend_skills_command: RecommendSkillsCommandHandler | None = None,
+    sync_skills_command: SyncSkillsCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
     activate_skill_command: ActivateSkillCommandHandler | None = None,
@@ -818,6 +850,35 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
+    @skills_app.command("recommend")
+    def skills_recommend(
+        ctx: typer.Context,
+        scope: Annotated[
+            str,
+            typer.Option(
+                "--scope",
+                help="Recommendation scope.",
+                click_type=click.Choice(["project", "global", "all"], case_sensitive=False),
+            ),
+        ] = "project",
+        min_recurrence: Annotated[
+            int | None,
+            typer.Option("--min-recurrence", min=1, help="Minimum recurrence threshold."),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if recommend_skills_command is None:
+            msg = "CLI recommend_skills_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_recommend(
+                recommend_skills_command,
+                output_format=_effective_format(ctx, output_format),
+                scope=_latent_skill_scope_optional_all(scope),
+                min_recurrence=min_recurrence,
+            )
+        )
+
     @skills_app.command("detail")
     def skills_detail(
         ctx: typer.Context,
@@ -873,6 +934,130 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 scope=scope,
                 evidence_summary=evidence_summary,
                 tags=tag or [],
+            )
+        )
+
+    @skills_app.command("create")
+    def skills_create(  # noqa: PLR0913
+        ctx: typer.Context,
+        name: Annotated[str, typer.Option("--name", help="Skill name.")],
+        description: Annotated[str, typer.Option("--description", help="Skill description.")],
+        trigger: Annotated[
+            list[str] | None,
+            typer.Option("--trigger", help="Skill trigger. May be used multiple times."),
+        ] = None,
+        scope: Annotated[
+            LatentSkillScope,
+            typer.Option("--scope", help="Skill scope (project or global)."),
+        ] = LatentSkillScope.project,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if create_skill_command is None:
+            msg = "CLI create_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_create(
+                create_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                name=name,
+                description=description,
+                triggers=trigger,
+                scope=scope,
+            )
+        )
+
+    @skills_app.command("promote")
+    def skills_promote(  # noqa: PLR0913
+        ctx: typer.Context,
+        recommendation_id: Annotated[str, typer.Argument(help="Latent skill recommendation ID.")],
+        name: Annotated[str | None, typer.Option("--name", help="Approved skill name.")] = None,
+        description: Annotated[
+            str | None,
+            typer.Option("--description", help="Approved skill description."),
+        ] = None,
+        trigger: Annotated[
+            list[str] | None,
+            typer.Option("--trigger", help="Approved trigger. May be used multiple times."),
+        ] = None,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if promote_skill_recommendation_command is None:
+            msg = "CLI promote_skill_recommendation_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_promote(
+                promote_skill_recommendation_command,
+                output_format=_effective_format(ctx, output_format),
+                recommendation_id=recommendation_id,
+                name=name,
+                description=description,
+                triggers=trigger,
+                yes=yes,
+            )
+        )
+
+    @skills_app.command("import")
+    def skills_import(
+        ctx: typer.Context,
+        path: Annotated[Path, typer.Argument(help="Existing skill directory or SKILL.md file.")],
+        scope: Annotated[
+            LatentSkillScope,
+            typer.Option("--scope", help="Skill scope (project or global)."),
+        ] = LatentSkillScope.project,
+        replace_native: Annotated[
+            bool,
+            typer.Option(
+                "--replace-native",
+                help="Rewrite the matching native source target from the canonical copy.",
+            ),
+        ] = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if import_skill_command is None:
+            msg = "CLI import_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_import(
+                import_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                path=path,
+                scope=scope,
+                replace_native=replace_native,
+            )
+        )
+
+    @skills_app.command("sync")
+    def skills_sync(
+        ctx: typer.Context,
+        skill_id_or_name: Annotated[
+            str | None,
+            typer.Argument(help="Optional canonical skill ID or exact name."),
+        ] = None,
+        target: Annotated[
+            list[str] | None,
+            typer.Option("--target", help="Native runtime ID. May be used multiple times."),
+        ] = None,
+        drift_decision: Annotated[
+            str,
+            typer.Option(
+                "--drift-decision",
+                help="How to handle managed native drift.",
+                click_type=click.Choice(["keep", "overwrite"], case_sensitive=False),
+            ),
+        ] = "keep",
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if sync_skills_command is None:
+            msg = "CLI sync_skills_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_sync(
+                sync_skills_command,
+                output_format=_effective_format(ctx, output_format),
+                skill_id_or_name=skill_id_or_name,
+                targets=target,
+                drift_decision=drift_decision,
             )
         )
 
@@ -996,6 +1181,11 @@ def build_main(  # noqa: PLR0913
     propose_skill_command: ProposeSkillCommandHandler | None = None,
     track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
+    create_skill_command: CreateSkillCommandHandler | None = None,
+    promote_skill_recommendation_command: PromoteSkillRecommendationCommandHandler | None = None,
+    import_skill_command: ImportSkillCommandHandler | None = None,
+    recommend_skills_command: RecommendSkillsCommandHandler | None = None,
+    sync_skills_command: SyncSkillsCommandHandler | None = None,
     list_skills_command: ListSkillsCommandHandler | None = None,
     get_skill_detail_command: GetSkillDetailCommandHandler | None = None,
     activate_skill_command: ActivateSkillCommandHandler | None = None,
@@ -1032,6 +1222,11 @@ def build_main(  # noqa: PLR0913
             propose_skill_command=propose_skill_command,
             track_latent_skill_command=track_latent_skill_command,
             generate_skill_command=generate_skill_command,
+            create_skill_command=create_skill_command,
+            promote_skill_recommendation_command=promote_skill_recommendation_command,
+            import_skill_command=import_skill_command,
+            recommend_skills_command=recommend_skills_command,
+            sync_skills_command=sync_skills_command,
             list_skills_command=list_skills_command,
             get_skill_detail_command=get_skill_detail_command,
             activate_skill_command=activate_skill_command,
@@ -2023,6 +2218,26 @@ def _run_skills_list(
     return 0
 
 
+def _run_skills_recommend(
+    command: RecommendSkillsCommandHandler,
+    *,
+    output_format: str,
+    scope: LatentSkillScope | None,
+    min_recurrence: int | None,
+) -> int:
+    try:
+        result = command(RecommendSkillsCommand(scope=scope, min_recurrence=min_recurrence))
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_read_error(error), output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_recommend_success_envelope(result, scope=scope), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_recommend(result))
+    return 0
+
+
 def _run_skills_detail(
     command: GetSkillDetailCommandHandler,
     *,
@@ -2194,6 +2409,166 @@ def _run_skills_track(  # noqa: PLR0913
         print(json.dumps(_skill_track_success_envelope(result), sort_keys=True))
     else:
         _stdout_console().print(_format_human_skill_track(result))
+    return 0
+
+
+def _run_skills_create(  # noqa: PLR0913
+    command: CreateSkillCommandHandler,
+    *,
+    output_format: str,
+    name: str,
+    description: str,
+    triggers: list[str] | None,
+    scope: LatentSkillScope,
+) -> int:
+    try:
+        result = command(
+            CreateSkillCommand(
+                name=name.strip(),
+                description=description.strip(),
+                scope=scope,
+                origin="cli",
+                triggers=[trigger.strip() for trigger in triggers or [] if trigger.strip()],
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, name), output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_create_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_create_success(result))
+    return 0
+
+
+def _run_skills_promote(  # noqa: PLR0913
+    command: PromoteSkillRecommendationCommandHandler,
+    *,
+    output_format: str,
+    recommendation_id: str,
+    name: str | None,
+    description: str | None,
+    triggers: list[str] | None,
+    yes: bool,
+) -> int:
+    try:
+        if output_format == "json" and not yes:
+            raise ValidationFailedError(
+                "The --yes / -y flag is required to promote a skill with JSON output."
+            )
+        if output_format != "json" and not yes:
+            if not (sys.stdin.isatty() and sys.stdout.isatty()):
+                raise ValidationFailedError(
+                    "Non-TTY environment requires --yes to promote a skill."
+                )
+            _stdout_console().print(
+                f"Promote latent skill recommendation '{recommendation_id}' into a canonical Agent Skill."
+            )
+            if not _confirm("Promote skill recommendation? [y/N]: ", default=False):
+                _stdout_console().print("Skill promotion cancelled.")
+                return 1
+        result = command(
+            PromoteSkillRecommendationCommand(
+                recommendation_id=recommendation_id,
+                origin="cli",
+                name=name.strip() if name is not None else None,
+                description=description.strip() if description is not None else None,
+                triggers=[trigger.strip() for trigger in triggers or [] if trigger.strip()]
+                if triggers is not None
+                else None,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, recommendation_id), output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_promote_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_promote_success(result))
+    return 0
+
+
+def _run_skills_sync(
+    command: SyncSkillsCommandHandler,
+    *,
+    output_format: str,
+    skill_id_or_name: str | None,
+    targets: list[str] | None,
+    drift_decision: str,
+) -> int:
+    try:
+        resolved_decision: NativeDriftDecision = (
+            "overwrite" if drift_decision == "overwrite" else "keep"
+        )
+        result = command(
+            SyncSkillsCommand(
+                skill_id_or_name=skill_id_or_name.strip() if skill_id_or_name else None,
+                targets=targets,
+                drift_decision=resolved_decision,
+                origin="cli",
+            )
+        )
+        if (
+            output_format != "json"
+            and resolved_decision == "keep"
+            and sys.stdin.isatty()
+            and _sync_result_has_managed_drift(result)
+            and _confirm(f"{DRIFT_WARNING} ", default=False)
+        ):
+            result = command(
+                SyncSkillsCommand(
+                    skill_id_or_name=skill_id_or_name.strip() if skill_id_or_name else None,
+                    targets=targets,
+                    drift_decision="overwrite",
+                    origin="cli",
+                )
+            )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(
+            _map_skill_mutation_error(error, skill_id_or_name or "skills"), output_format
+        )
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_sync_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_sync_success(result))
+    return 0
+
+
+def _sync_result_has_managed_drift(result: SyncSkillsResult) -> bool:
+    return any(
+        target.get("status") == "drift_kept" for skill in result.skills for target in skill.targets
+    )
+
+
+def _run_skills_import(
+    command: ImportSkillCommandHandler,
+    *,
+    output_format: str,
+    path: Path,
+    scope: LatentSkillScope,
+    replace_native: bool,
+) -> int:
+    try:
+        result = command(
+            ImportSkillCommand(
+                path=path,
+                scope=scope,
+                origin="cli",
+                replace_native=replace_native,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_import_error(error), output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_skill_import_success_envelope(result), sort_keys=True))
+    else:
+        _stdout_console().print(_format_human_skill_import_success(result))
     return 0
 
 
@@ -2547,6 +2922,14 @@ def _map_generate_error(error: Exception, latent_skill_id: str) -> Exception:
     return error
 
 
+def _map_import_error(error: Exception) -> Exception:
+    if isinstance(error, (ValidationError, ValueError)):
+        return ValidationFailedError(str(error))
+    if isinstance(error, OSError) and not isinstance(error, DOMAIN_ERROR_TYPES):
+        return StorageError(str(error))
+    return error
+
+
 def _success_envelope(result: SetupProjectResult) -> dict[str, Any]:
     return {
         "ok": True,
@@ -2616,11 +2999,67 @@ def _skill_generate_success_envelope(result: GenerateSkillResult) -> dict[str, A
     }
 
 
+def _skill_create_success_envelope(result: CreateSkillResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.create",
+        "scope": result.latent_skill.scope.value,
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
+def _skill_promote_success_envelope(
+    result: PromoteSkillRecommendationResult,
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.promote",
+        "scope": result.promoted_recommendation.scope.value,
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
+def _skill_import_success_envelope(result: ImportSkillResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.import",
+        "scope": result.latent_skill.scope.value,
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
+def _skill_sync_success_envelope(result: SyncSkillsResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.sync",
+        "scope": "all",
+        "data": result.to_payload(),
+        "warnings": result.warnings,
+    }
+
+
 def _skill_list_success_envelope(result: ListSkillsResult) -> dict[str, Any]:
     return {
         "ok": True,
         "operation": "skills.list",
         "scope": "all",
+        "data": result.to_payload(),
+        "warnings": [],
+    }
+
+
+def _skill_recommend_success_envelope(
+    result: RecommendSkillsResult,
+    *,
+    scope: LatentSkillScope | None,
+) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "skills.recommend",
+        "scope": scope.value if scope is not None else "all",
         "data": result.to_payload(),
         "warnings": [],
     }
@@ -3416,6 +3855,36 @@ def _format_human_skill_list(result: ListSkillsResult) -> Table | str:
     return table
 
 
+def _format_human_skill_recommend(result: RecommendSkillsResult) -> str:
+    threshold = result.thresholds["min_recurrence"]
+    lines = [
+        "Operation: skills.recommend",
+        f"Minimum recurrence: {threshold}",
+        "Evidence sources:",
+    ]
+    lines.extend(
+        f"  - {source['source']}: {source['description']}" for source in result.evidence_sources
+    )
+    lines.append("Limitations:")
+    lines.extend(f"  - {limitation}" for limitation in result.limitations)
+    if not result.recommendations:
+        lines.append("No actionable latent skill recommendations found.")
+        return "\n".join(lines)
+
+    lines.append("Recommendations:")
+    for item in result.recommendations:
+        lines.extend(
+            [
+                f"  - {item.name} ({item.id})",
+                f"    Scope: {item.scope}",
+                f"    Recurrence: {item.recurrence_count}",
+                f"    Confidence: {item.confidence}",
+                f"    Next action: {item.recommended_action}",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def _format_human_skill_detail(result: GetSkillDetailResult) -> str:
     lines = [
         "Operation: skills.detail",
@@ -3475,6 +3944,87 @@ def _format_human_skill_generate_success(result: GenerateSkillResult) -> str:
     )
     if result.collision_detected and result.suggested_slug and result.suggested_slug != result.slug:
         lines.append(f"Collision: alternate slug used ({result.suggested_slug}).")
+    return "\n".join(lines)
+
+
+def _format_human_skill_create_success(result: CreateSkillResult) -> str:
+    lines = [
+        "Operation: skills.create",
+        f"Scope: {result.latent_skill.scope.value}",
+        f"Name: {result.latent_skill.name}",
+        f"Slug: {result.slug}",
+        "Affected relative paths:",
+    ]
+    lines.extend(f"  - {path}" for path in result.affected_paths)
+    lines.extend(
+        [
+            f"Snapshot: {result.snapshot_reference}",
+            f"Audit: {result.audit_reference}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _format_human_skill_sync_success(result: SyncSkillsResult) -> str:
+    lines = [
+        "Operation: skills.sync",
+        f"Skills synced: {len(result.skills)}",
+        "Affected relative paths:",
+    ]
+    lines.extend(f"  - {path}" for path in result.affected_paths)
+    lines.extend(
+        [
+            f"Snapshot: {result.snapshot_reference}",
+            f"Audit: {result.audit_reference}",
+        ]
+    )
+    if result.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"  - {warning}" for warning in result.warnings)
+    return "\n".join(lines)
+
+
+def _format_human_skill_promote_success(result: PromoteSkillRecommendationResult) -> str:
+    create_result = result.create_result
+    lines = [
+        "Operation: skills.promote",
+        f"Scope: {result.promoted_recommendation.scope.value}",
+        f"Source recommendation: {result.source_recommendation.id}",
+        f"Canonical skill: {create_result.agent_skill.id}",
+        f"Name: {create_result.agent_skill.name}",
+        f"Slug: {create_result.slug}",
+        f"Canonical path: {create_result.skill_file}",
+        "Affected relative paths:",
+    ]
+    lines.extend(f"  - {path}" for path in create_result.affected_paths)
+    lines.append(f"  - {_latent_skill_store_path(result.promoted_recommendation.scope)}")
+    lines.extend(
+        [
+            f"Snapshot: {result.snapshot_reference}",
+            f"Audit: {result.audit_reference}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _format_human_skill_import_success(result: ImportSkillResult) -> str:
+    lines = [
+        "Operation: skills.import",
+        f"Scope: {result.latent_skill.scope.value}",
+        f"Name: {result.latent_skill.name}",
+        f"Slug: {result.slug}",
+        "Affected relative paths:",
+    ]
+    lines.extend(f"  - {path}" for path in result.affected_paths)
+    lines.extend(
+        [
+            f"Snapshot: {result.snapshot_reference}",
+            f"Audit: {result.audit_reference}",
+        ]
+    )
+    if result.warnings:
+        lines.append("Warnings:")
+        lines.extend(f"  - {warning}" for warning in result.warnings)
     return "\n".join(lines)
 
 
@@ -3698,6 +4248,16 @@ def _fact_scope(value: str | None) -> FactScope | None:
     if value is None:
         return None
     return FactScope.global_ if value == "global" else FactScope.project
+
+
+def _latent_skill_scope_optional_all(value: str | None) -> LatentSkillScope | None:
+    if value is None or value == "project":
+        return LatentSkillScope.project
+    if value == "global":
+        return LatentSkillScope.global_
+    if value == "all":
+        return None
+    raise ValidationFailedError("scope must be 'project', 'global', or 'all'.")
 
 
 def _context_scope(value: str) -> ContextSummaryScope:

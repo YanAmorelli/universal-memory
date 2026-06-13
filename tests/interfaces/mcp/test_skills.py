@@ -10,15 +10,33 @@ from universal_memory.application.memory import GetMemoryStatusResult
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
+    CreateSkillCommand,
+    CreateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
+    ImportSkillCommand,
+    ImportSkillResult,
+    PromoteSkillRecommendationCommand,
+    PromoteSkillRecommendationResult,
+    RecommendSkillsCommand,
+    RecommendSkillsResult,
+    SkillRecommendationItem,
+    SyncSkillResult,
+    SyncSkillsCommand,
+    SyncSkillsResult,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
 from universal_memory.domain import SecretDetectedError, StorageError, ValidationFailedError
-from universal_memory.domain.entities import LatentSkill, LatentSkillScope, LatentSkillStatus
+from universal_memory.domain.entities import (
+    AgentSkill,
+    AgentSkillStatus,
+    LatentSkill,
+    LatentSkillScope,
+    LatentSkillStatus,
+)
 from universal_memory.interfaces.mcp.server import (
     JSON_RPC_SECRET_DETECTED,
     JSON_RPC_STORAGE_ERROR,
@@ -74,6 +92,168 @@ def update_result() -> UpdateSkillResult:
     )
 
 
+def create_result() -> CreateSkillResult:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    skill = AgentSkill(
+        id=SKILL_ID,
+        created_at=now,
+        updated_at=now,
+        name="Launch Funnel Operator",
+        slug="launch-funnel-operator",
+        description="Operate launch funnel: CTAs and UTMs.",
+        scope=LatentSkillScope.project,
+        status=AgentSkillStatus.active,
+        canonical_path=".umem/skills/launch-funnel-operator/SKILL.md",
+        origin="mcp",
+        audit_reference="audit-create",
+        content_hash="hash-1",
+        native_installations=[],
+        metadata={"triggers": ["when creating launch schedules"], "creation_flow": "direct"},
+    )
+    return CreateSkillResult(
+        agent_skill=skill,
+        slug="launch-funnel-operator",
+        skill_dir=".umem/skills/launch-funnel-operator",
+        skill_file=".umem/skills/launch-funnel-operator/SKILL.md",
+        created_paths=[".umem/skills/launch-funnel-operator/SKILL.md"],
+        affected_paths=[".umem/skills/launch-funnel-operator/SKILL.md"],
+        audit_reference="audit-create",
+        snapshot_reference="snapshot-create",
+    )
+
+
+def promote_result() -> PromoteSkillRecommendationResult:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    source = LatentSkill(
+        id=SKILL_ID,
+        created_at=now,
+        updated_at=now,
+        name="Launch Funnel Operator",
+        description="Operate launch funnel: CTAs and UTMs.",
+        scope=LatentSkillScope.project,
+        status=LatentSkillStatus.proposed,
+        recurrence_count=3,
+        metadata={"triggers": ["when creating launch schedules"]},
+    )
+    promoted = source.model_copy(
+        update={
+            "status": LatentSkillStatus.active,
+            "metadata": {
+                "promotion": {
+                    "promoted_skill_id": SKILL_ID,
+                    "promoted_at": "2026-05-29T12:00:00Z",
+                }
+            },
+        }
+    )
+    create = create_result()
+    create = CreateSkillResult(
+        agent_skill=create.agent_skill.model_copy(update={"source_recommendation_id": SKILL_ID}),
+        slug=create.slug,
+        skill_dir=create.skill_dir,
+        skill_file=create.skill_file,
+        created_paths=create.created_paths,
+        affected_paths=create.affected_paths,
+        audit_reference=create.audit_reference,
+        snapshot_reference=create.snapshot_reference,
+        native_installations=create.native_installations,
+        warnings=create.warnings,
+    )
+    return PromoteSkillRecommendationResult(
+        create_result=create,
+        source_recommendation=source,
+        promoted_recommendation=promoted,
+        audit_reference="audit-promote",
+        snapshot_reference="snapshot-promote",
+    )
+
+
+def sync_result() -> SyncSkillsResult:
+    return SyncSkillsResult(
+        skills=[
+            SyncSkillResult(
+                skill_id=SKILL_ID,
+                name="Launch Funnel Operator",
+                scope="project",
+                status="active",
+                canonical_path=".umem/skills/launch-funnel-operator/SKILL.md",
+                affected_paths=[".opencode/skills/launch-funnel-operator/SKILL.md"],
+                targets=[
+                    {
+                        "runtime": "opencode",
+                        "path": ".opencode/skills/launch-funnel-operator",
+                        "status": "synced",
+                        "drift_detected": False,
+                        "canonical_hash": "canonical",
+                        "target_hash": "target",
+                        "audit_reference": "audit-sync",
+                        "snapshot_reference": "snapshot-sync",
+                        "affected_paths": ["SKILL.md"],
+                    }
+                ],
+                audit_reference="audit-sync",
+                snapshot_reference="snapshot-sync",
+            )
+        ],
+        affected_paths=[".opencode/skills/launch-funnel-operator/SKILL.md"],
+        audit_reference="audit-sync",
+        snapshot_reference="snapshot-sync",
+    )
+
+
+def import_result() -> ImportSkillResult:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    skill = AgentSkill(
+        id=SKILL_ID,
+        created_at=now,
+        updated_at=now,
+        name="Review Helper",
+        slug="review-helper",
+        description="Review code with focused checks.",
+        scope=LatentSkillScope.project,
+        status=AgentSkillStatus.active,
+        canonical_path=".umem/skills/review-helper/SKILL.md",
+        origin="mcp",
+        audit_reference="audit-import",
+        content_hash="hash-1",
+        native_installations=[],
+        metadata={"triggers": ["when reviewing code"], "creation_flow": "import"},
+    )
+    return ImportSkillResult(
+        agent_skill=skill,
+        slug="review-helper",
+        skill_dir=".umem/skills/review-helper",
+        skill_file=".umem/skills/review-helper/SKILL.md",
+        created_paths=[".umem/skills/review-helper/SKILL.md"],
+        affected_paths=[".umem/skills/review-helper/SKILL.md"],
+        audit_reference="audit-import",
+        snapshot_reference="snapshot-import",
+    )
+
+
+def recommend_result() -> RecommendSkillsResult:
+    return RecommendSkillsResult(
+        recommendations=[
+            SkillRecommendationItem(
+                id=SKILL_ID,
+                name="TDD Recorrente",
+                description="Executa red green refactor",
+                scope="project",
+                status="proposed",
+                recurrence_count=2,
+                evidence_summaries=["first", "second"],
+                tags=["tdd"],
+                confidence=0.77,
+                reasons=["recurrence_count 2 meets minimum recurrence threshold 2"],
+                recommended_action=f"umem skills promote {SKILL_ID}",
+            )
+        ],
+        thresholds={"min_recurrence": 2, "min_evidence_summaries": 2},
+        evidence_sources=[{"source": "latent_skills", "description": "Tracked latent records."}],
+        limitations=["First implementation only evaluates explicit `skills track` latent records."],
+    )
+
+
 def initialized_status() -> GetMemoryStatusResult:
     return GetMemoryStatusResult(
         initialized=True,
@@ -85,6 +265,20 @@ def initialized_status() -> GetMemoryStatusResult:
         last_health_check=None,
         host_validation={},
         recommended_action=None,
+    )
+
+
+def uninitialized_status() -> GetMemoryStatusResult:
+    return GetMemoryStatusResult(
+        initialized=False,
+        project_path=".",
+        fact_counts={},
+        active_rules_count=0,
+        registered_skills_count=0,
+        approximate_size_bytes=0,
+        last_health_check=None,
+        host_validation={},
+        recommended_action="Run initialize_project first.",
     )
 
 
@@ -363,6 +557,263 @@ async def test_track_latent_skill_tool_uses_mcp_origin_and_success_envelope(tmp_
 
 
 @pytest.mark.anyio
+async def test_create_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: Path) -> None:
+    seen: list[CreateSkillCommand] = []
+
+    def create(command: CreateSkillCommand) -> CreateSkillResult:
+        seen.append(command)
+        return create_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(create_skill=create),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool(
+        "create_skill",
+        {
+            "name": " Launch Funnel Operator ",
+            "description": " Operate launch funnel: CTAs and UTMs. ",
+            "scope": "project",
+            "triggers": [" when creating launch schedules ", ""],
+        },
+    )
+    payload = result.structured_content
+    assert payload is not None
+    success_payload = payload.get("structuredContent", payload)
+
+    assert "create_skill" in tool_names
+    assert seen == [
+        CreateSkillCommand(
+            name="Launch Funnel Operator",
+            description="Operate launch funnel: CTAs and UTMs.",
+            scope=LatentSkillScope.project,
+            origin="mcp",
+            triggers=["when creating launch schedules"],
+            raw_markdown=None,
+        )
+    ]
+    assert success_payload["ok"] is True
+    assert success_payload["operation"] == "skills.create"
+    assert success_payload["data"]["skill_file"] == ".umem/skills/launch-funnel-operator/SKILL.md"
+
+
+@pytest.mark.anyio
+async def test_promote_skill_recommendation_tool_passes_edits_and_targets(
+    tmp_path: Path,
+) -> None:
+    seen: list[PromoteSkillRecommendationCommand] = []
+
+    def promote(command: PromoteSkillRecommendationCommand) -> PromoteSkillRecommendationResult:
+        seen.append(command)
+        return promote_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(promote_skill_recommendation=promote),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool(
+        "promote_skill_recommendation",
+        {
+            "recommendation_id": SKILL_ID,
+            "edits": {
+                "name": " Edited Review Operator ",
+                "description": " Edited description. ",
+                "triggers": [" edited trigger ", ""],
+            },
+            "targets": [],
+        },
+    )
+    payload = result.structured_content
+    assert payload is not None
+    success_payload = payload.get("structuredContent", payload)
+
+    assert "promote_skill_recommendation" in tool_names
+    assert seen == [
+        PromoteSkillRecommendationCommand(
+            recommendation_id=SKILL_ID,
+            origin="mcp",
+            name="Edited Review Operator",
+            description="Edited description.",
+            triggers=["edited trigger"],
+            targets=[],
+            project_initialized=True,
+        )
+    ]
+    assert success_payload["ok"] is True
+    assert success_payload["operation"] == "skills.promote"
+    assert success_payload["data"]["source_recommendation_id"] == SKILL_ID
+
+
+@pytest.mark.anyio
+async def test_promote_skill_recommendation_tool_maps_missing_to_validation(
+    tmp_path: Path,
+) -> None:
+    def promote(_command: PromoteSkillRecommendationCommand) -> PromoteSkillRecommendationResult:
+        raise StorageError(f"Latent skill not found: {SKILL_ID}")
+
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(promote_skill_recommendation=promote),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("promote_skill_recommendation", {"recommendation_id": SKILL_ID})
+    payload = result.structured_content
+    assert payload is not None
+    error_payload = payload.get("structuredContent", payload)
+    assert error_payload["ok"] is False
+    assert error_payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
+
+
+@pytest.mark.anyio
+async def test_promote_global_skill_recommendation_does_not_require_project_initialized(
+    tmp_path: Path,
+) -> None:
+    seen: list[PromoteSkillRecommendationCommand] = []
+
+    def promote(command: PromoteSkillRecommendationCommand) -> PromoteSkillRecommendationResult:
+        seen.append(command)
+        result = promote_result()
+        return PromoteSkillRecommendationResult(
+            create_result=CreateSkillResult(
+                agent_skill=result.create_result.agent_skill.model_copy(
+                    update={"scope": LatentSkillScope.global_}
+                ),
+                slug=result.create_result.slug,
+                skill_dir="skills/launch-funnel-operator",
+                skill_file="skills/launch-funnel-operator/SKILL.md",
+                created_paths=["skills/launch-funnel-operator/SKILL.md"],
+                affected_paths=["skills/launch-funnel-operator/SKILL.md"],
+                audit_reference=result.create_result.audit_reference,
+                snapshot_reference=result.create_result.snapshot_reference,
+                native_installations=result.create_result.native_installations,
+                warnings=result.create_result.warnings,
+            ),
+            source_recommendation=result.source_recommendation.model_copy(
+                update={"scope": LatentSkillScope.global_}
+            ),
+            promoted_recommendation=result.promoted_recommendation.model_copy(
+                update={"scope": LatentSkillScope.global_}
+            ),
+            audit_reference=result.audit_reference,
+            snapshot_reference=result.snapshot_reference,
+        )
+
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: uninitialized_status(),
+            context=cast(Any, lambda _command: None),
+            promote_skill_recommendation=promote,
+        ),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("promote_skill_recommendation", {"recommendation_id": SKILL_ID})
+    payload = result.structured_content
+    assert payload is not None
+    success_payload = payload.get("structuredContent", payload)
+
+    assert success_payload["ok"] is True
+    assert success_payload["scope"] == "global"
+    assert seen == [
+        PromoteSkillRecommendationCommand(
+            recommendation_id=SKILL_ID,
+            origin="mcp",
+            project_initialized=False,
+        )
+    ]
+
+
+@pytest.mark.anyio
+async def test_sync_skills_tool_uses_mcp_origin_and_success_envelope(tmp_path: Path) -> None:
+    seen: list[SyncSkillsCommand] = []
+
+    def sync(command: SyncSkillsCommand) -> SyncSkillsResult:
+        seen.append(command)
+        return sync_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(sync_skills=sync),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool(
+        "sync_skills",
+        {
+            "skill_id_or_name": "Launch Funnel Operator",
+            "targets": ["opencode"],
+            "drift_decision": "keep",
+        },
+    )
+    payload = result.structured_content
+    assert payload is not None
+    success_payload = payload.get("structuredContent", payload)
+
+    assert "sync_skills" in tool_names
+    assert seen == [
+        SyncSkillsCommand(
+            skill_id_or_name="Launch Funnel Operator",
+            targets=["opencode"],
+            drift_decision="keep",
+            origin="mcp",
+        )
+    ]
+    assert success_payload["ok"] is True
+    assert success_payload["operation"] == "skills.sync"
+    assert success_payload["data"]["skills"][0]["targets"][0]["status"] == "synced"
+
+
+@pytest.mark.anyio
+async def test_import_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: Path) -> None:
+    seen: list[ImportSkillCommand] = []
+
+    def import_skill(command: ImportSkillCommand) -> ImportSkillResult:
+        seen.append(command)
+        return import_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(import_skill=import_skill),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool(
+        "import_skill",
+        {
+            "path": "native/review-helper/SKILL.md",
+            "scope": "project",
+            "replace_native": True,
+        },
+    )
+    payload = result.structured_content
+    assert payload is not None
+    success_payload = payload.get("structuredContent", payload)
+
+    assert "import_skill" in tool_names
+    assert seen == [
+        ImportSkillCommand(
+            path="native/review-helper/SKILL.md",
+            scope=LatentSkillScope.project,
+            origin="mcp",
+            replace_native=True,
+        )
+    ]
+    assert success_payload["ok"] is True
+    assert success_payload["operation"] == "skills.import"
+    assert success_payload["data"]["skill_file"] == ".umem/skills/review-helper/SKILL.md"
+
+
+@pytest.mark.anyio
 async def test_track_latent_skill_tool_surfaces_existing_match(tmp_path: Path) -> None:
     server = configure_server(
         create_mcp_server(),
@@ -385,6 +836,63 @@ async def test_track_latent_skill_tool_surfaces_existing_match(tmp_path: Path) -
     assert (
         success_payload["data"]["latent_skill"]["recurrence_count"] == EXPECTED_MATCHED_RECURRENCE
     )
+
+
+@pytest.mark.anyio
+async def test_recommend_skills_tool_delegates_to_use_case(tmp_path: Path) -> None:
+    seen: list[RecommendSkillsCommand] = []
+
+    def recommend(command: RecommendSkillsCommand) -> RecommendSkillsResult:
+        seen.append(command)
+        return recommend_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(recommend_skills=recommend),
+        project_root=tmp_path,
+    )
+
+    tool_names = {tool.name for tool in await server.list_tools()}
+    result = await server.call_tool(
+        "recommend_skills",
+        {"scope": "project", "min_recurrence": 1, "dry_run": True},
+    )
+    payload = result.structured_content
+    assert payload is not None
+    success_payload = payload.get("structuredContent", payload)
+
+    assert "recommend_skills" in tool_names
+    assert seen == [RecommendSkillsCommand(scope=LatentSkillScope.project, min_recurrence=1)]
+    assert success_payload["operation"] == "skills.recommend"
+    assert success_payload["scope"] == "project"
+    assert success_payload["data"] == recommend_result().to_payload()
+
+
+@pytest.mark.anyio
+async def test_recommend_skills_tool_supports_all_scope_and_validation_errors(
+    tmp_path: Path,
+) -> None:
+    seen: list[RecommendSkillsCommand] = []
+
+    def recommend(command: RecommendSkillsCommand) -> RecommendSkillsResult:
+        seen.append(command)
+        raise ValidationFailedError("min_recurrence must be at least 1.")
+
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(recommend_skills=recommend),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool("recommend_skills", {"scope": "all", "min_recurrence": 0})
+    payload = result.structured_content
+    assert payload is not None
+    error_payload = payload.get("structuredContent", payload)
+
+    assert seen == [RecommendSkillsCommand(scope=None, min_recurrence=0)]
+    assert error_payload["ok"] is False
+    assert error_payload["operation"] == "skills.recommend"
+    assert error_payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
 
 
 @pytest.mark.anyio
