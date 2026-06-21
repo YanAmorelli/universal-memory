@@ -72,6 +72,40 @@ def test_skills_sync_json_uses_cli_origin_targets_and_success_envelope(capsys) -
     assert payload["data"]["skills"][0]["targets"][0]["status"] == "synced"
 
 
+def test_skills_sync_human_outputs_native_targets_and_worktree_note(capsys) -> None:
+    def sync(command: SyncSkillsCommand) -> SyncSkillsResult:
+        return SyncSkillsResult(
+            skills=[
+                SyncSkillResult(
+                    skill_id="skill-1",
+                    name="Repair Skill",
+                    scope="project",
+                    status="active",
+                    canonical_path=".umem/skills/repair-skill/SKILL.md",
+                    affected_paths=[".opencode/skills/repair-skill/SKILL.md"],
+                    targets=[
+                        {
+                            "runtime": "opencode",
+                            "path": ".opencode/skills/repair-skill",
+                            "status": "synced",
+                        }
+                    ],
+                )
+            ],
+            affected_paths=[".opencode/skills/repair-skill/SKILL.md"],
+            audit_reference="audit-1",
+            snapshot_reference="snapshot-1",
+        )
+
+    exit_code = cli_main(["skills", "sync", "Repair Skill"], sync_skills_command=sync)
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Native runtime targets:" in output
+    assert ".opencode/skills/repair-skill (synced)" in output
+    assert "Review git status and ignore rules intentionally" in output
+
+
 def test_skills_sync_human_prompts_overwrite_only_after_managed_drift(
     capsys,
     monkeypatch,

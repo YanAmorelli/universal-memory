@@ -39,6 +39,7 @@ from universal_memory.application.skills import (
 from universal_memory.application.update import (
     UpdateBenchmarksUseCase,
     UpdateCheckUseCase,
+    UpdateManagedSkillsUseCase,
     UpdateMigrateUseCase,
 )
 from universal_memory.domain import SnapshotFailedError
@@ -162,6 +163,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         fact_repository=fact_repository,
         rule_repository=rule_repository,
         latent_skill_repository=latent_skill_repository,
+        agent_skill_repository=agent_skill_repository,
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
         data_root=data_root,
@@ -268,6 +270,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         agent_skill_repository=agent_skill_repository,
     )
     update_check_use_case = UpdateCheckUseCase()
+    update_managed_skills_use_case = UpdateManagedSkillsUseCase(
+        safe_write_use_case=safe_write_use_case
+    )
     update_migrate_use_case = UpdateMigrateUseCase(safe_write_use_case=safe_write_use_case)
     update_benchmarks_use_case = UpdateBenchmarksUseCase(
         safe_write_use_case=safe_write_use_case,
@@ -329,6 +334,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         deactivate_skill_command=_deactivate_skill_use_case.execute,
         update_skill_command=_update_skill_use_case.execute,
         update_check_command=update_check_use_case.execute,
+        update_managed_skills_command=update_managed_skills_use_case.execute,
         update_migrate_command=update_migrate_use_case.execute,
         update_benchmarks_command=update_benchmarks_use_case.execute,
         locale_resolver=locale_resolver,

@@ -3,7 +3,7 @@ import os
 import sys
 import traceback
 from collections.abc import Callable, Sequence
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from inspect import signature
 from pathlib import Path
 from typing import Annotated, Any
@@ -43,6 +43,7 @@ from universal_memory.application.memory import (
 )
 from universal_memory.application.onboarding.setup_project import (
     DEFAULT_ENABLED_RUNTIME_IDS,
+    DEFAULT_UMEM_SKILL_ID,
     SetupProjectResult,
     setup_project,
 )
@@ -83,12 +84,15 @@ from universal_memory.application.skills import (
     UpdateSkillCommand,
     UpdateSkillResult,
 )
+from universal_memory.application.skills.import_skill import NO_NATIVE_INSTALLATIONS_NOTE
 from universal_memory.application.skills.native_skill_sync import DRIFT_WARNING, NativeDriftDecision
 from universal_memory.application.update import (
     UpdateBenchmarksCommand,
     UpdateBenchmarksResult,
     UpdateCheckCommand,
     UpdateCheckResult,
+    UpdateManagedSkillsCommand,
+    UpdateManagedSkillTemplateResult,
     UpdateMigrateCommand,
     UpdateMigrateResult,
 )
@@ -185,8 +189,22 @@ ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResu
 DeactivateSkillCommandHandler = Callable[[DeactivateSkillCommand], DeactivateSkillResult]
 UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
 UpdateCheckCommandHandler = Callable[[UpdateCheckCommand], UpdateCheckResult]
+UpdateManagedSkillsCommandHandler = Callable[
+    [UpdateManagedSkillsCommand], list[UpdateManagedSkillTemplateResult]
+]
 UpdateMigrateCommandHandler = Callable[[UpdateMigrateCommand], UpdateMigrateResult]
 UpdateBenchmarksCommandHandler = Callable[[UpdateBenchmarksCommand], UpdateBenchmarksResult]
+UpdateSkillsItem = UpdateSkillResult | UpdateManagedSkillTemplateResult
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateSkillsRunResult:
+    skills: list[UpdateSkillsItem]
+    updated_count: int
+    preserved_count: int
+    warnings: list[str]
+
+
 LocaleResolver = Callable[[], str]
 OutputFormatOption = Annotated[
     str | None,
@@ -245,6 +263,7 @@ def main(  # noqa: PLR0913
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
     update_check_command: UpdateCheckCommandHandler | None = None,
+    update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
@@ -279,6 +298,7 @@ def main(  # noqa: PLR0913
         deactivate_skill_command=deactivate_skill_command,
         update_skill_command=update_skill_command,
         update_check_command=update_check_command,
+        update_managed_skills_command=update_managed_skills_command,
         update_migrate_command=update_migrate_command,
         update_benchmarks_command=update_benchmarks_command,
         locale_resolver=locale_resolver,
@@ -359,6 +379,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
     update_check_command: UpdateCheckCommandHandler | None = None,
+    update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
@@ -368,7 +389,13 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     audit_app = typer.Typer(help="Inspect audit events")
     snapshots_app = typer.Typer(help="Inspect snapshots")
     host_app = typer.Typer(help="Configure agent hosts")
-    skills_app = typer.Typer(help="Manage skills")
+    skills_app = typer.Typer(
+        help=(
+            "Manage skills. Use create for new canonical skills, import for existing "
+            "native/local skills, track/recommend/promote for recurring workflows, and "
+            "sync to materialize canonical skills into native runtime copies."
+        )
+    )
 
     app.add_typer(facts_app, name="facts")
     app.add_typer(audit_app, name="audit")
@@ -464,7 +491,13 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         ] = False,
         skills: Annotated[
             bool,
-            typer.Option("--skills", help="Synchronize active skills into native runtime targets."),
+            typer.Option(
+                "--skills",
+                help=(
+                    "Update managed UMEM skill templates and synchronize active skills into "
+                    "native runtime targets."
+                ),
+            ),
         ] = False,
         yes: YesOption = False,
         output_format: OutputFormatOption = None,
@@ -479,6 +512,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 benchmarks_command=update_benchmarks_command,
                 list_skills_command=list_skills_command,
                 update_skill_command=update_skill_command,
+                update_managed_skills_command=update_managed_skills_command,
                 output_format=_effective_format(ctx, output_format),
                 check=check,
                 migrate=migrate,
@@ -998,9 +1032,17 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         )
 
     @skills_app.command("import")
-    def skills_import(
+    def skills_import(  # noqa: PLR0913
         ctx: typer.Context,
-        path: Annotated[Path, typer.Argument(help="Existing skill directory or SKILL.md file.")],
+        path: Annotated[
+            Path,
+            typer.Argument(
+                help=(
+                    "Existing Agent Skills directory or its SKILL.md file, for example "
+                    ".agents/skills/review-helper or .agents/skills/review-helper/SKILL.md."
+                )
+            ),
+        ],
         scope: Annotated[
             LatentSkillScope,
             typer.Option("--scope", help="Skill scope (project or global)."),
@@ -1009,7 +1051,20 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             bool,
             typer.Option(
                 "--replace-native",
-                help="Rewrite the matching native source target from the canonical copy.",
+                help=(
+                    "After import, rewrite the matching managed native source target from "
+                    "the canonical copy. Omit to adopt without rewriting."
+                ),
+            ),
+        ] = False,
+        sync_after_import: Annotated[
+            bool,
+            typer.Option(
+                "--sync",
+                help=(
+                    "After importing into .umem/skills, synchronize complete copies to "
+                    "configured native runtime targets."
+                ),
             ),
         ] = False,
         output_format: OutputFormatOption = None,
@@ -1024,6 +1079,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 path=path,
                 scope=scope,
                 replace_native=replace_native,
+                sync_after_import=sync_after_import,
             )
         )
 
@@ -1192,6 +1248,7 @@ def build_main(  # noqa: PLR0913
     deactivate_skill_command: DeactivateSkillCommandHandler | None = None,
     update_skill_command: UpdateSkillCommandHandler | None = None,
     update_check_command: UpdateCheckCommandHandler | None = None,
+    update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
@@ -1233,6 +1290,7 @@ def build_main(  # noqa: PLR0913
             deactivate_skill_command=deactivate_skill_command,
             update_skill_command=update_skill_command,
             update_check_command=update_check_command,
+            update_managed_skills_command=update_managed_skills_command,
             update_migrate_command=update_migrate_command,
             update_benchmarks_command=update_benchmarks_command,
             locale_resolver=locale_resolver,
@@ -1791,7 +1849,7 @@ def _run_facts_hygiene(
         if output_format == "json":
             result = command(ContextHygieneCommand(scope=scope))
         else:
-            with _stderr_console().status("Executando higiene de contexto...", spinner="dots"):
+            with _stderr_console().status("Running context hygiene...", spinner="dots"):
                 result = command(ContextHygieneCommand(scope=scope))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
@@ -2026,6 +2084,11 @@ def _run_host_sync(  # noqa: PLR0913
             )
             _stdout_console().print(_format_human_sync_plan(preview))
             if not yes:
+                if not (sys.stdin.isatty() and sys.stdout.isatty()):
+                    raise ValidationFailedError(
+                        "Non-TTY environment requires --yes to apply host sync. "
+                        "Use `umem host sync --apply --yes --format json` for automation."
+                    )
                 if not _confirm("Apply instruction synchronization? [y/N]: ", default=False):
                     _stdout_console().print("Instruction synchronization cancelled.")
                     return 1
@@ -2069,6 +2132,7 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
     benchmarks_command: UpdateBenchmarksCommandHandler | None,
     list_skills_command: ListSkillsCommandHandler | None,
     update_skill_command: UpdateSkillCommandHandler | None,
+    update_managed_skills_command: UpdateManagedSkillsCommandHandler | None,
     output_format: str,
     check: bool,
     migrate: bool,
@@ -2179,6 +2243,7 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
             result = _sync_active_skills_for_update(
                 list_skills_command,
                 update_skill_command,
+                update_managed_skills_command,
                 output_format=output_format,
                 yes=yes,
             )
@@ -2311,7 +2376,7 @@ def _run_skills_propose(
     yes: bool,
 ) -> int:
     try:
-        resolved_decision = ProposeSkillDecision.sim if yes and decision is None else decision
+        resolved_decision = ProposeSkillDecision.yes if yes and decision is None else decision
         if resolved_decision is None and not sys.stdin.isatty():
             raise ValidationFailedError("Non-TTY environment requires --decision or --yes.")
         if output_format == "json" and resolved_decision is None:
@@ -2544,13 +2609,14 @@ def _sync_result_has_managed_drift(result: SyncSkillsResult) -> bool:
     )
 
 
-def _run_skills_import(
+def _run_skills_import(  # noqa: PLR0913
     command: ImportSkillCommandHandler,
     *,
     output_format: str,
     path: Path,
     scope: LatentSkillScope,
     replace_native: bool,
+    sync_after_import: bool,
 ) -> int:
     try:
         result = command(
@@ -2559,6 +2625,7 @@ def _run_skills_import(
                 scope=scope,
                 origin="cli",
                 replace_native=replace_native,
+                sync_after_import=sync_after_import,
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -2838,13 +2905,19 @@ def _should_prompt_native_drift(
 def _sync_active_skills_for_update(
     list_command: ListSkillsCommandHandler,
     update_command: UpdateSkillCommandHandler,
+    update_managed_command: UpdateManagedSkillsCommandHandler | None,
     *,
     output_format: str,
     yes: bool,
-) -> list[UpdateSkillResult]:
+) -> UpdateSkillsRunResult:
     list_command(ListSkillsCommand(status=LatentSkillStatus.active))
+    managed_results = (
+        update_managed_command(UpdateManagedSkillsCommand(project_root=Path.cwd()))
+        if update_managed_command is not None
+        else []
+    )
     skill_ids = _active_project_skill_ids(Path.cwd())
-    results: list[UpdateSkillResult] = []
+    results: list[UpdateSkillsItem] = [*managed_results]
     for skill_id in skill_ids:
         result = update_command(
             UpdateSkillCommand(
@@ -2864,7 +2937,19 @@ def _sync_active_skills_for_update(
                     )
                 )
         results.append(result)
-    return results
+    return UpdateSkillsRunResult(
+        skills=results,
+        updated_count=sum(1 for result in results if _update_skills_item_updated(result)),
+        preserved_count=sum(1 for result in results if not _update_skills_item_updated(result)),
+        warnings=[warning for result in results for warning in result.warnings],
+    )
+
+
+def _update_skills_item_updated(result: UpdateSkillsItem) -> bool:
+    updated_paths = getattr(result, "updated_paths", None)
+    if isinstance(updated_paths, list):
+        return bool(updated_paths)
+    return True
 
 
 def _active_project_skill_ids(project_root: Path) -> list[str]:
@@ -2885,6 +2970,8 @@ def _active_project_skill_ids(project_root: Path) -> list[str]:
             raise ValidationFailedError(
                 f"Invalid latent skills store: {path.as_posix()}"
             ) from error
+        if payload.get("id") == DEFAULT_UMEM_SKILL_ID:
+            continue
         if payload.get("status") == LatentSkillStatus.active.value and isinstance(
             payload.get("id"), str
         ):
@@ -2895,13 +2982,19 @@ def _active_project_skill_ids(project_root: Path) -> list[str]:
 def _map_skill_mutation_error(error: Exception, latent_skill_id: str) -> Exception:
     if isinstance(error, KeyError):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' not found in the repository."
+            f"Latent skill '{latent_skill_id}' not found in the repository. "
+            "If this is an imported canonical Agent Skill from `skills list` or "
+            "`skills detail`, edit `.umem/skills/<slug>/SKILL.md` and run "
+            "`umem skills sync <slug> --format json` instead of `skills update`."
         )
     if isinstance(error, StorageError) and str(error) == (
         f"Latent skill not found: {latent_skill_id}"
     ):
         return ValidationFailedError(
-            f"Latent skill '{latent_skill_id}' not found in the repository."
+            f"Latent skill '{latent_skill_id}' not found in the repository. "
+            "If this is an imported canonical Agent Skill from `skills list` or "
+            "`skills detail`, edit `.umem/skills/<slug>/SKILL.md` and run "
+            "`umem skills sync <slug> --format json` instead of `skills update`."
         )
     if isinstance(error, (ValidationError, ValueError)):
         return ValidationFailedError(str(error))
@@ -3105,17 +3198,24 @@ def _skill_update_success_envelope(result: UpdateSkillResult) -> dict[str, Any]:
     }
 
 
-def _update_skills_success_envelope(results: list[UpdateSkillResult]) -> dict[str, Any]:
+def _update_skills_success_envelope(result: UpdateSkillsRunResult) -> dict[str, Any]:
     return {
         "ok": True,
         "operation": "update.skills",
         "scope": "project",
         "data": {
-            "updated_count": len(results),
-            "skills": [_skill_mutation_payload(result) for result in results],
+            "updated_count": result.updated_count,
+            "preserved_count": result.preserved_count,
+            "skills": [_update_skills_item_payload(item) for item in result.skills],
         },
-        "warnings": [warning for result in results for warning in result.warnings],
+        "warnings": result.warnings,
     }
+
+
+def _update_skills_item_payload(result: UpdateSkillsItem) -> dict[str, Any]:
+    if isinstance(result, UpdateManagedSkillTemplateResult):
+        return {"managed": True, **result.to_payload()}
+    return {"managed": False, **_skill_mutation_payload(result)}
 
 
 def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
@@ -3459,7 +3559,7 @@ def _format_human_status_output(result: GetMemoryStatusResult) -> str:
         f"Approximate size: {result.approximate_size_bytes} bytes",
         f"Last health check: {result.last_health_check}",
         f"Active rules: {result.active_rules_count}",
-        f"Registered skills: {result.registered_skills_count}",
+        f"Registered canonical skills: {result.registered_skills_count}",
         "Hosts:",
     ]
     for host, validation in result.host_validation.items():
@@ -3958,8 +4058,12 @@ def _format_human_skill_create_success(result: CreateSkillResult) -> str:
     lines.extend(f"  - {path}" for path in result.affected_paths)
     lines.extend(
         [
+            f"Canonical path: {result.skill_file}",
             f"Snapshot: {result.snapshot_reference}",
             f"Audit: {result.audit_reference}",
+            "Next action: run `umem skills sync "
+            f"{result.slug} --format json` to materialize the canonical skill into "
+            "configured native runtimes when needed.",
         ]
     )
     return "\n".join(lines)
@@ -3972,6 +4076,14 @@ def _format_human_skill_sync_success(result: SyncSkillsResult) -> str:
         "Affected relative paths:",
     ]
     lines.extend(f"  - {path}" for path in result.affected_paths)
+    target_lines = _skill_sync_target_lines(result)
+    if target_lines:
+        lines.append("Native runtime targets:")
+        lines.extend(target_lines)
+        lines.append(
+            "Worktree note: skills sync may create or update runtime directories. "
+            "Review git status and ignore rules intentionally."
+        )
     lines.extend(
         [
             f"Snapshot: {result.snapshot_reference}",
@@ -3982,6 +4094,17 @@ def _format_human_skill_sync_success(result: SyncSkillsResult) -> str:
         lines.append("Warnings:")
         lines.extend(f"  - {warning}" for warning in result.warnings)
     return "\n".join(lines)
+
+
+def _skill_sync_target_lines(result: SyncSkillsResult) -> list[str]:
+    lines: list[str] = []
+    for skill in result.skills:
+        for target in skill.targets:
+            runtime = target.get("runtime", "unknown")
+            path = target.get("path", "unknown")
+            status = target.get("status", "unknown")
+            lines.append(f"  - {runtime}: {path} ({status})")
+    return lines
 
 
 def _format_human_skill_promote_success(result: PromoteSkillRecommendationResult) -> str:
@@ -4018,10 +4141,30 @@ def _format_human_skill_import_success(result: ImportSkillResult) -> str:
     lines.extend(f"  - {path}" for path in result.affected_paths)
     lines.extend(
         [
+            f"Canonical path: {result.skill_file}",
             f"Snapshot: {result.snapshot_reference}",
             f"Audit: {result.audit_reference}",
+            "Import note: `.umem/skills/<slug>/SKILL.md` is now the canonical source. "
+            "The `--replace-native` flag only rewrites a matching managed native source; "
+            "use `--sync` to materialize configured runtime copies during import.",
         ]
     )
+    if result.native_installations:
+        lines.append("Native runtime targets:")
+        lines.extend(
+            f"  - {installation.get('path')} ({installation.get('status', 'synced')})"
+            for installation in result.native_installations
+        )
+    else:
+        lines.extend(
+            [
+                "Next action: run `umem skills sync "
+                f"{result.slug} --format json` or re-run import with `--sync` to "
+                "materialize the canonical skill into configured native runtimes when needed.",
+            ]
+        )
+    if not result.native_installations:
+        lines.append(f"Native target note: {NO_NATIVE_INSTALLATIONS_NOTE}")
     if result.warnings:
         lines.append("Warnings:")
         lines.extend(f"  - {warning}" for warning in result.warnings)
@@ -4064,9 +4207,20 @@ def _format_human_skill_mutation_success(
     return "\n".join(lines)
 
 
-def _format_human_update_skills(results: list[UpdateSkillResult]) -> str:
-    lines = ["Operation: update.skills", f"Updated skills: {len(results)}"]
-    warnings = [warning for result in results for warning in result.warnings]
+def _format_human_update_skills(result: UpdateSkillsRunResult) -> str:
+    lines = ["Operation: update.skills", f"Updated skills: {result.updated_count}"]
+    if result.preserved_count:
+        lines.append(f"Preserved skills: {result.preserved_count}")
+    for item in result.skills:
+        if isinstance(item, UpdateManagedSkillTemplateResult):
+            lines.append(f"Managed skill: {item.name} ({item.status})")
+            if item.updated_paths:
+                lines.append("Updated paths:")
+                lines.extend(f"  - {path}" for path in item.updated_paths)
+            if item.preserved_paths:
+                lines.append("Preserved paths:")
+                lines.extend(f"  - {path}" for path in item.preserved_paths)
+    warnings = result.warnings
     if warnings:
         lines.append("Warnings:")
         lines.extend(f"  - {warning}" for warning in warnings)
@@ -4138,11 +4292,15 @@ def _format_human_host_success(result: ConfigureHostResult, *, operation: str) -
 
 def _format_human_sync_success(result: SyncInstructionsResult) -> str:
     changes = ", ".join(change["path"] for change in result.planned_changes) or "(none)"
-    msg = (
-        "Host sync completed."
-        if result.validation_status == "success"
-        else "Dry-run completed. No changes were applied to the filesystem."
-    )
+    if result.validation_status == "success" and result.planned_changes:
+        msg = "Host sync applied instruction updates."
+    elif result.validation_status == "success":
+        msg = "Host sync completed. No instruction files needed changes."
+    else:
+        msg = "Dry-run completed. No changes were applied to the filesystem."
+    audit = result.audit_reference
+    if result.audit_reference == "not-applied":
+        audit = "not-applied (no filesystem write was needed)"
     return "\n".join(
         [
             msg,
@@ -4150,7 +4308,7 @@ def _format_human_sync_success(result: SyncInstructionsResult) -> str:
             f"Targets: {', '.join(result.instruction_targets)}",
             f"Files: {changes}",
             f"Validation: {result.validation_status}",
-            f"Audit: {result.audit_reference}",
+            f"Audit: {audit}",
             f"Snapshots: {result.snapshot_reference}",
         ]
     )
@@ -4273,9 +4431,9 @@ def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
         return None
     normalized = value.strip().casefold()
     if normalized in {"y", "yes"}:
-        return ProposeSkillDecision.sim
+        return ProposeSkillDecision.yes
     if normalized == "always":
-        return ProposeSkillDecision.sempre
+        return ProposeSkillDecision.always
     if normalized in {"n", "no"}:
-        return ProposeSkillDecision.nao
+        return ProposeSkillDecision.no
     return None

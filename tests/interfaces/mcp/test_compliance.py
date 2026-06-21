@@ -97,7 +97,11 @@ PUBLIC_MCP_TOOLS = {
         "description": "Usuario pede ciclo red green refactor",
         "triggers": ["red green refactor"],
     },
-    "import_skill": {"path": "native/tdd-recorrente/SKILL.md", "replace_native": True},
+    "import_skill": {
+        "path": "native/tdd-recorrente/SKILL.md",
+        "replace_native": True,
+        "sync_after_import": True,
+    },
     "promote_skill_recommendation": {"recommendation_id": FACT_ID, "targets": []},
     "generate_skill": {"latent_skill_id": FACT_ID},
     "sync_skills": {"skill_id_or_name": "TDD recorrente", "targets": ["opencode"]},
@@ -235,6 +239,7 @@ CONTRACT_KEYS_BY_TOOL = {
         "audit_reference",
         "snapshot_reference",
         "native_installations",
+        "native_installations_note",
         "canonical_skill",
     },
     "promote_skill_recommendation": {

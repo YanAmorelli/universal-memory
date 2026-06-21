@@ -7,6 +7,10 @@ from typing import cast
 
 import pytest
 
+from universal_memory.application.onboarding.setup_project import (
+    DEFAULT_UMEM_SKILL_REFERENCES,
+    setup_project,
+)
 from universal_memory.application.security import (
     PreparedSafeWrite,
     SafeWriteCommand,
@@ -18,6 +22,8 @@ from universal_memory.application.update import (
     UpdateBenchmarksUseCase,
     UpdateCheckCommand,
     UpdateCheckUseCase,
+    UpdateManagedSkillsCommand,
+    UpdateManagedSkillsUseCase,
     UpdateMigrateCommand,
     UpdateMigrateUseCase,
 )
@@ -28,6 +34,7 @@ from universal_memory.domain import (
     ValidationFailedError,
 )
 from universal_memory.domain.entities import Snapshot
+from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
     LocalAuditLogRepository,
@@ -37,6 +44,19 @@ from universal_memory.infrastructure.security import (
 MIN_BENCHMARK_FACT_COUNT = 1000
 MIN_BENCHMARK_QUERY_COUNT = 30
 VALID_CREATED_AT = "2026-05-01T00:00:00Z"
+LEGACY_SKILLS_LIFECYCLE = """# Skills Lifecycle
+
+Use this reference for UMEM skill discovery, latent skill tracking, approval, generation,
+activation, deactivation, and updates.
+
+## Canonical CLI
+
+```bash
+umem skills list --format json
+umem skills generate <latent-skill-id> --yes --format json
+umem skills update <latent-skill-id> --file <relative-markdown-path> --format json
+```
+"""
 
 
 def _safe_write(project_root: Path) -> SafeWriteUseCase:
@@ -64,6 +84,14 @@ def _init_project(project_root: Path) -> None:
             "[custom]\nflag = true\n"
         ),
         encoding="utf-8",
+    )
+
+
+def _setup_full_project(project_root: Path) -> None:
+    setup_project(
+        project_root,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
     )
 
 
@@ -108,6 +136,68 @@ def test_update_check_is_read_only_and_reports_required_fields(tmp_path: Path) -
         path: (path.read_bytes(), path.stat().st_mtime_ns)
         for path in [tmp_path / ".umem" / "config.toml", facts, result_file]
     } == before
+
+
+def test_update_managed_skills_updates_legacy_default_umem_lifecycle(
+    tmp_path: Path,
+) -> None:
+    _setup_full_project(tmp_path)
+    lifecycle_path = (
+        tmp_path
+        / ".umem"
+        / "skills"
+        / "use-universal-memory"
+        / "references"
+        / "skills-lifecycle.md"
+    )
+    lifecycle_path.write_text(LEGACY_SKILLS_LIFECYCLE, encoding="utf-8")
+
+    result = UpdateManagedSkillsUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+        UpdateManagedSkillsCommand(project_root=tmp_path)
+    )
+
+    assert len(result) == 1
+    assert result[0].status == "updated"
+    assert result[0].updated_paths == [
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+    ]
+    assert result[0].audit_reference
+    assert result[0].snapshot_reference
+    assert (
+        lifecycle_path.read_text(encoding="utf-8")
+        == DEFAULT_UMEM_SKILL_REFERENCES[
+            ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+        ]
+    )
+
+
+def test_update_managed_skills_preserves_custom_default_umem_skill_with_warning(
+    tmp_path: Path,
+) -> None:
+    _setup_full_project(tmp_path)
+    lifecycle_path = (
+        tmp_path
+        / ".umem"
+        / "skills"
+        / "use-universal-memory"
+        / "references"
+        / "skills-lifecycle.md"
+    )
+    custom_content = "# Skills Lifecycle\n\nCustom team instructions.\n"
+    lifecycle_path.write_text(custom_content, encoding="utf-8")
+
+    result = UpdateManagedSkillsUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+        UpdateManagedSkillsCommand(project_root=tmp_path)
+    )
+
+    assert result[0].status == "preserved"
+    assert result[0].updated_paths == []
+    assert (
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+        in result[0].preserved_paths
+    )
+    assert any("Preserved customized UMEM skill file" in warning for warning in result[0].warnings)
+    assert lifecycle_path.read_text(encoding="utf-8") == custom_content
 
 
 def test_update_check_treats_boolean_config_schema_as_invalid(tmp_path: Path) -> None:

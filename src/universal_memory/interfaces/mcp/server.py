@@ -683,6 +683,7 @@ def configure_server(  # noqa: PLR0915
         path: str,
         scope: Literal["project", "global"] = "project",
         replace_native: bool = False,
+        sync_after_import: bool = False,
     ) -> ToolResponse:
         """Import an existing native or local Agent Skill directory into canonical UMEM storage."""
         try:
@@ -695,6 +696,7 @@ def configure_server(  # noqa: PLR0915
                     scope=latent_scope,
                     origin="mcp",
                     replace_native=replace_native,
+                    sync_after_import=sync_after_import,
                 )
             )
             return _success_envelope(
@@ -1107,11 +1109,11 @@ def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
         return None
     normalized = value.strip().casefold()
     if normalized in {"y", "yes"}:
-        return ProposeSkillDecision.sim
+        return ProposeSkillDecision.yes
     if normalized == "always":
-        return ProposeSkillDecision.sempre
+        return ProposeSkillDecision.always
     if normalized in {"n", "no"}:
-        return ProposeSkillDecision.nao
+        return ProposeSkillDecision.no
     raise ValidationFailedError("decision must be 'yes', 'always' or 'no'.")
 
 

@@ -265,7 +265,7 @@ class CreateSkillUseCase:
     def _resolve_slug(self, scope: LatentSkillScope, base_slug: str) -> str:
         base_dir = self._absolute_skill_dir_for(scope, base_slug)
         if base_dir.exists() and not base_dir.is_dir():
-            raise StorageError(f"Caminho ocupado por um arquivo regular: {base_dir}")
+            raise StorageError(f"Path is occupied by a regular file: {base_dir}")
         if not base_dir.exists():
             return base_slug
         suffix = 2
@@ -273,7 +273,7 @@ class CreateSkillUseCase:
             candidate = f"{base_slug}-{suffix}"
             candidate_dir = self._absolute_skill_dir_for(scope, candidate)
             if candidate_dir.exists() and not candidate_dir.is_dir():
-                raise StorageError(f"Caminho ocupado por um arquivo regular: {candidate_dir}")
+                raise StorageError(f"Path is occupied by a regular file: {candidate_dir}")
             if not candidate_dir.exists():
                 return candidate
             suffix += 1
@@ -312,15 +312,15 @@ class CreateSkillUseCase:
             "",
             f"# {name}",
             "",
-            "## Quando Usar",
+            "## When To Use",
             "",
             *[f"- {trigger}" for trigger in active_triggers],
             "",
-            "## Instrucoes Operacionais",
+            "## Operational Instructions",
             "",
             f"- {description}",
-            "- Aplique a metodologia somente quando os gatilhos acima aparecerem no contexto.",
-            "- Registre arquivos e referencias usando caminhos relativos ao projeto.",
+            "- Apply the methodology only when the triggers above appear in context.",
+            "- Record files and references using project-relative paths.",
             "",
         ]
         return self._strip_absolute_project_paths("\n".join(lines))

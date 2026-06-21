@@ -94,6 +94,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         fact_repository=fact_repository,
         rule_repository=rule_repository,
         latent_skill_repository=latent_skill_repository,
+        agent_skill_repository=agent_skill_repository,
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
         data_root=data_root,

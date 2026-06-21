@@ -23,9 +23,9 @@ from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.ports import AgentSkillRepository, LatentSkillRepository
 
 RECOMMENDED_SKILL_ACTION = (
-    "Latent skills aparecem quando o universal-memory registra evidencias recorrentes. "
+    "Latent skills appear when universal-memory records recurring evidence. "
     "Use `umem skills track --name ... --description ... --evidence-summary ...` "
-    "para capturar evidencia explicita; depois rode `umem skills recommend`."
+    "to capture explicit evidence; then run `umem skills recommend`."
 )
 FRONTMATTER_SPLIT_PARTS = 2
 
@@ -295,7 +295,7 @@ class GetSkillDetailUseCase:
             raise ValidationFailedError(
                 f"Mais de uma skill corresponde a '{name_or_id}'. Informe o ID da skill."
             )
-        raise ValidationFailedError(f"Skill '{name_or_id}' nao encontrada.")
+        raise ValidationFailedError(f"Skill '{name_or_id}' not found.")
 
     def _find_agent_skill(self, name_or_id: str) -> AgentSkill | None:
         needle = name_or_id.strip()

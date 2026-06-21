@@ -69,11 +69,19 @@ def test_skills_import_json_uses_cli_origin_and_replace_native(capsys) -> None:
             scope=LatentSkillScope.project,
             origin="cli",
             replace_native=True,
+            sync_after_import=False,
         )
     ]
     assert payload["operation"] == "skills.import"
     assert payload["scope"] == "project"
     assert payload["data"]["skill_file"] == ".umem/skills/review-helper/SKILL.md"
+    assert payload["data"]["native_installations"] == []
+    assert "canonical .umem/skills registry" in payload["data"]["native_installations_note"]
+    assert (
+        "Supported compatible native targets can be adopted during import"
+        in payload["data"]["native_installations_note"]
+    )
+    assert "complete synchronized copies" in payload["data"]["native_installations_note"]
 
 
 def test_skills_import_human_output(capsys) -> None:
@@ -86,3 +94,42 @@ def test_skills_import_human_output(capsys) -> None:
     assert exit_code == 0
     assert "Operation: skills.import" in output
     assert ".umem/skills/review-helper/SKILL.md" in output
+    assert "Canonical path: .umem/skills/review-helper/SKILL.md" in output
+    assert "Import note:" in output
+    assert "Native target note:" in output
+    assert "native runtime copies" in output
+    assert "--replace-native" in output
+    assert "re-run import with `--sync`" in output
+
+
+def test_skills_import_sync_flag_uses_cli_origin_and_sync_after_import(capsys) -> None:
+    seen: list[ImportSkillCommand] = []
+
+    def import_skill(command: ImportSkillCommand) -> ImportSkillResult:
+        seen.append(command)
+        return make_result()
+
+    exit_code = cli_main(
+        [
+            "skills",
+            "import",
+            "native/review-helper",
+            "--scope",
+            "project",
+            "--sync",
+            "--format",
+            "json",
+        ],
+        import_skill_command=import_skill,
+    )
+
+    assert exit_code == 0
+    assert seen == [
+        ImportSkillCommand(
+            path=Path("native/review-helper"),
+            scope=LatentSkillScope.project,
+            origin="cli",
+            replace_native=False,
+            sync_after_import=True,
+        )
+    ]

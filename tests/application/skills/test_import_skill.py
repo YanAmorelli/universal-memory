@@ -235,6 +235,29 @@ def test_import_skill_adopts_matching_supported_native_source_by_default(tmp_pat
     assert result.warnings == []
 
 
+@pytest.mark.parametrize("path_suffix", ["", "SKILL.md"])
+def test_import_skill_adopts_agents_native_source_by_default(
+    tmp_path: Path, path_suffix: str
+) -> None:
+    use_case, repository, _safe_write = build_use_case(tmp_path)
+    source = write_source_skill(tmp_path / ".agents" / "skills" / "review-helper")
+
+    result = use_case.execute(
+        ImportSkillCommand(
+            path=source / path_suffix if path_suffix else source,
+            scope=LatentSkillScope.project,
+            origin="test",
+        )
+    )
+
+    stored = repository.read(result.agent_skill.id)
+    assert result.native_installations[0]["runtime"] == "codex"
+    assert result.native_installations[0]["path"] == ".agents/skills/review-helper"
+    assert stored.native_installations[0]["runtime"] == "codex"
+    assert stored.native_installations[0]["path"] == ".agents/skills/review-helper"
+    assert result.warnings == []
+
+
 def test_import_skill_replace_native_rewrites_matching_source(tmp_path: Path) -> None:
     use_case, _repository, _safe_write = build_use_case(tmp_path)
     source = write_source_skill(tmp_path / ".opencode" / "skills" / "review-helper")
@@ -250,6 +273,50 @@ def test_import_skill_replace_native_rewrites_matching_source(tmp_path: Path) ->
 
     assert ".opencode/skills/review-helper/SKILL.md" in result.affected_paths
     assert result.native_installations[0]["runtime"] == "opencode"
+
+
+def test_import_skill_replace_native_rewrites_agents_source(tmp_path: Path) -> None:
+    use_case, _repository, _safe_write = build_use_case(tmp_path)
+    source = write_source_skill(tmp_path / ".agents" / "skills" / "review-helper")
+
+    result = use_case.execute(
+        ImportSkillCommand(
+            path=source,
+            scope=LatentSkillScope.project,
+            origin="test",
+            replace_native=True,
+        )
+    )
+
+    assert ".agents/skills/review-helper/SKILL.md" in result.affected_paths
+    assert result.native_installations[0]["runtime"] == "codex"
+
+
+def test_import_skill_can_sync_configured_native_targets_after_import(tmp_path: Path) -> None:
+    use_case, repository, _safe_write = build_use_case(tmp_path)
+    source = write_source_skill(tmp_path / ".agents" / "skills" / "review-helper")
+
+    result = use_case.execute(
+        ImportSkillCommand(
+            path=source,
+            scope=LatentSkillScope.project,
+            origin="test",
+            sync_after_import=True,
+        )
+    )
+
+    canonical_file = tmp_path / ".umem" / "skills" / "review-helper" / "SKILL.md"
+    agents_file = tmp_path / ".agents" / "skills" / "review-helper" / "SKILL.md"
+    opencode_file = tmp_path / ".opencode" / "skills" / "review-helper" / "SKILL.md"
+    stored = repository.read(result.agent_skill.id)
+    installation_paths = {installation["path"] for installation in result.native_installations}
+
+    assert agents_file.read_text(encoding="utf-8") == canonical_file.read_text(encoding="utf-8")
+    assert opencode_file.read_text(encoding="utf-8") == canonical_file.read_text(encoding="utf-8")
+    assert ".agents/skills/review-helper" in installation_paths
+    assert ".opencode/skills/review-helper" in installation_paths
+    assert ".agents/skills/review-helper/SKILL.md" in result.affected_paths
+    assert stored.metadata["sync_after_import"] is True
 
 
 class BlockingScanner(SecretScannerPort):

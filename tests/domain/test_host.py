@@ -304,6 +304,17 @@ def test_runtime_registry_declares_paths_targets_and_native_skill_targets() -> N
             rollback_policy="snapshot_restore",
         )
     ]
+    codex = registry.get(RuntimeId.codex)
+    assert codex.display_name == "Codex/OpenAI-class"
+    assert codex.native_skill_targets == [
+        NativeSkillTarget(
+            relative_path=".agents/skills",
+            format="markdown-directory",
+            install_strategy="sync_directory",
+            drift_strategy="compare_manifest_hash",
+            rollback_policy="snapshot_restore",
+        )
+    ]
 
 
 def test_runtime_registry_uses_validated_runtime_targets_for_tier_2_rules() -> None:

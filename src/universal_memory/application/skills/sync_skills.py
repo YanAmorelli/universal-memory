@@ -241,7 +241,7 @@ def _validate_targets(targets: list[str] | None) -> None:
     supported = {item.value for item in RuntimeId}
     unsupported = [target for target in targets if target not in supported]
     if unsupported:
-        raise ValidationFailedError(f"Runtimes nao suportados: {', '.join(unsupported)}")
+        raise ValidationFailedError(f"Unsupported runtimes: {', '.join(unsupported)}")
 
 
 def _safe_relative_path(value: str) -> Path:

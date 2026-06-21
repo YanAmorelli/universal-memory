@@ -220,7 +220,7 @@ class NativeSkillSync:
                 if runtime_id not in {item.value for item in RuntimeId}
             ]
             if unsupported:
-                raise ValidationFailedError(f"Runtimes nao suportados: {', '.join(unsupported)}")
+                raise ValidationFailedError(f"Unsupported runtimes: {', '.join(unsupported)}")
             target_set = set(targets)
             return [
                 runtime
@@ -242,19 +242,17 @@ class NativeSkillSync:
         try:
             loaded = load_config(self.project_root)
         except (OSError, InvalidConfigError, StorageError) as exc:
-            raise ValidationFailedError(f"Falha ao ler configuracao do projeto: {exc}") from exc
+            raise ValidationFailedError(f"Failed to read project configuration: {exc}") from exc
         raw_runtimes = loaded.merged.get("runtimes")
         if raw_runtimes is None:
             return None
         if not isinstance(raw_runtimes, dict):
-            raise ValidationFailedError("Configuracao invalida: runtimes deve ser uma tabela.")
+            raise ValidationFailedError("Invalid configuration: runtimes must be a table.")
         raw_enabled = raw_runtimes.get("enabled")
         if raw_enabled is None:
             return None
         if not isinstance(raw_enabled, list):
-            raise ValidationFailedError(
-                "Configuracao invalida: runtimes.enabled deve ser uma lista."
-            )
+            raise ValidationFailedError("Invalid configuration: runtimes.enabled must be a list.")
         enabled = [str(runtime_id) for runtime_id in raw_enabled]
         unsupported = [
             runtime_id
@@ -262,7 +260,7 @@ class NativeSkillSync:
             if runtime_id not in {item.value for item in RuntimeId}
         ]
         if unsupported:
-            raise ValidationFailedError(f"Runtimes nao suportados: {', '.join(unsupported)}")
+            raise ValidationFailedError(f"Unsupported runtimes: {', '.join(unsupported)}")
         return enabled
 
     @staticmethod
@@ -281,7 +279,7 @@ class NativeSkillSync:
         try:
             target_path.relative_to(self.project_root)
         except ValueError as exc:
-            raise ValidationFailedError("Native target resolve fora do projeto.") from exc
+            raise ValidationFailedError("Native target resolves outside the project.") from exc
         if target_path.is_dir():
             shutil.rmtree(target_path)
         elif target_path.is_file():

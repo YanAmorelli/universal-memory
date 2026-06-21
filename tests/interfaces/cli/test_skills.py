@@ -63,7 +63,7 @@ def update_result() -> UpdateSkillResult:
         skill_file=".umem/skills/tdd-recorrente/SKILL.md",
         audit_reference="audit-3",
         snapshot_reference="snapshot-3",
-        rollback_hint="Use rollback por escopo para restaurar o snapshot anterior.",
+        rollback_hint="Use scoped rollback to restore the previous snapshot.",
     )
 
 
@@ -265,6 +265,7 @@ def test_skills_missing_id_maps_not_found_storage_error_to_validation_failed(cap
 
     assert exit_code == 1
     assert payload["error"]["code"] == "validation_failed"
+    assert "edit `.umem/skills/<slug>/SKILL.md`" in payload["error"]["detail"]
 
 
 def test_skills_global_mutation_human_output_uses_global_store_path(capsys) -> None:

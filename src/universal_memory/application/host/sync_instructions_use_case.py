@@ -346,7 +346,7 @@ class SyncInstructionsUseCase:
             return InstructionClassification(str(raw))
         except ValueError as exc:
             raise ValidationFailedError(
-                f"Classificacao de regra nao suportada para '{rule.name}': {raw}"
+                f"Unsupported rule classification for '{rule.name}': {raw}"
             ) from exc
 
     def _normalized_host_ids(self, host_ids: list[str] | None) -> list[str]:
@@ -357,7 +357,7 @@ class SyncInstructionsUseCase:
                 normalized.append(host_id)
         unsupported = [host_id for host_id in normalized if host_id not in DEFAULT_SYNC_HOSTS]
         if unsupported:
-            raise ValidationFailedError(f"Hosts nao suportados: {', '.join(unsupported)}")
+            raise ValidationFailedError(f"Unsupported hosts: {', '.join(unsupported)}")
         return normalized
 
     def _host_ids_for_command(
@@ -376,8 +376,8 @@ class SyncInstructionsUseCase:
         for host_id in normalized:
             if host_id not in enabled_hosts and apply:
                 warnings.append(
-                    f"Host '{host_id}' nao esta habilitado em .umem/config.toml; "
-                    "ativando automaticamente."
+                    f"Host '{host_id}' is not enabled in .umem/config.toml; enabling it "
+                    "automatically."
                 )
                 to_enable.append(host_id)
 
@@ -394,20 +394,18 @@ class SyncInstructionsUseCase:
         try:
             loaded = load_config(self.project_root)
         except (OSError, InvalidConfigError, StorageError) as exc:
-            raise ValidationFailedError(f"Falha ao ler configuracao do projeto: {exc}") from exc
+            raise ValidationFailedError(f"Failed to read project configuration: {exc}") from exc
 
         raw_runtimes = loaded.merged.get("runtimes")
         if raw_runtimes is None:
             return None
         if not isinstance(raw_runtimes, dict):
-            raise ValidationFailedError("Configuracao invalida: runtimes deve ser uma tabela.")
+            raise ValidationFailedError("Invalid configuration: runtimes must be a table.")
         raw_enabled = raw_runtimes.get("enabled")
         if raw_enabled is None:
             return None
         if not isinstance(raw_enabled, list):
-            raise ValidationFailedError(
-                "Configuracao invalida: runtimes.enabled deve ser uma lista."
-            )
+            raise ValidationFailedError("Invalid configuration: runtimes.enabled must be a list.")
         enabled = [str(host_id) for host_id in raw_enabled]
         return [host_id for host_id in enabled if host_id in DEFAULT_SYNC_HOSTS]
 
@@ -423,7 +421,7 @@ class SyncInstructionsUseCase:
     def _manual_steps(self, results: list[Any], apply: bool) -> list[str]:
         steps: list[str] = []
         if not apply:
-            steps.append("Revise os caminhos afetados antes de aplicar.")
+            steps.append("Review affected paths before applying.")
         for result in results:
             for step in result.manual_steps:
                 if step not in steps:

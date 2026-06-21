@@ -69,6 +69,42 @@ def test_sync_skills_materializes_missing_native_target_and_persists_installatio
     assert result.affected_paths == [".opencode/skills/repair-skill/SKILL.md"]
 
 
+def test_sync_skills_default_materializes_agents_native_target(tmp_path: Path) -> None:
+    safe_write, repository, skill_id = _create_skill(tmp_path)
+
+    result = SyncSkillsUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(SyncSkillsCommand(origin="test"))
+
+    native_file = tmp_path / ".agents" / "skills" / "repair-skill" / "SKILL.md"
+    paths = {
+        installation["path"] for installation in repository.read(skill_id).native_installations
+    }
+    assert native_file.is_file()
+    assert ".agents/skills/repair-skill" in paths
+    assert ".agents/skills/repair-skill/SKILL.md" in result.affected_paths
+
+
+def test_sync_skills_codex_target_materializes_agents_native_target(tmp_path: Path) -> None:
+    safe_write, repository, skill_id = _create_skill(tmp_path)
+
+    result = SyncSkillsUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(SyncSkillsCommand(origin="test", targets=["codex"]))
+
+    native_file = tmp_path / ".agents" / "skills" / "repair-skill" / "SKILL.md"
+    stored = repository.read(skill_id)
+    assert native_file.is_file()
+    assert result.skills[0].targets[0]["runtime"] == "codex"
+    assert result.skills[0].targets[0]["status"] == "synced"
+    assert stored.native_installations[0]["path"] == ".agents/skills/repair-skill"
+    assert result.affected_paths == [".agents/skills/repair-skill/SKILL.md"]
+
+
 def test_sync_one_skill_by_exact_name_only_syncs_selected_skill(tmp_path: Path) -> None:
     safe_write, repository, first_id = _create_skill(tmp_path, name="First Skill")
     _create_skill(tmp_path, name="Second Skill")

@@ -176,7 +176,7 @@ def partition_instruction_blocks(
     for block in blocks:
         if UMEM_START in block.content or UMEM_END in block.content:
             raise ValidationFailedError(
-                f"O conteudo do bloco '{block.title}' nao pode conter os delimitadores UMEM."
+                f"Block '{block.title}' content cannot contain UMEM delimiters."
             )
 
         classification = block.resolved_classification
@@ -184,12 +184,10 @@ def partition_instruction_blocks(
             relative_path = block.relative_path or _canonical_doc_path(block.title, docs_directory)
             _safe_relative_path(relative_path)
             if relative_path in seen_paths:
-                raise ValidationFailedError(
-                    f"Caminho canonico duplicado detectado: {relative_path}"
-                )
+                raise ValidationFailedError(f"Duplicate canonical path detected: {relative_path}")
             seen_paths.add(relative_path)
             document = CanonicalDocument(
-                title=block.title.strip() or "Documento canônico",
+                title=block.title.strip() or "Canonical document",
                 content=block.content.strip(),
                 relative_path=relative_path,
             )
@@ -342,11 +340,11 @@ class ConfigureHostUseCase:
         try:
             path.relative_to(project_root_resolved)
         except ValueError:
-            failures.append("Falha de Arquivo de Instrução: caminho fora do projeto.")
+            failures.append("Instruction file failure: path is outside the project.")
             return self._host_read_validation_result(method, checks, failures)
 
         if not path.exists() or not path.is_file():
-            failures.append(f"Falha de Arquivo de Instrução: {target.relative_path} ausente.")
+            failures.append(f"Instruction file failure: {target.relative_path} is missing.")
             return self._host_read_validation_result(method, checks, failures)
 
         checks["instruction_file_exists"] = True
@@ -355,8 +353,7 @@ class ConfigureHostUseCase:
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             failures.append(
-                f"Falha de Permissão de Leitura ou Escrita: não foi possível ler "
-                f"{target.relative_path}: {exc}"
+                f"Read or write permission failure: could not read {target.relative_path}: {exc}"
             )
             return self._host_read_validation_result(method, checks, failures)
 
@@ -369,8 +366,8 @@ class ConfigureHostUseCase:
             )
         except ValidationFailedError:
             failures.append(
-                f"Falha de Arquivo de Instrução: {target.relative_path} deve conter "
-                "delimitadores UMEM válidos."
+                f"Instruction file failure: {target.relative_path} must contain valid UMEM "
+                "delimiters."
             )
             return self._host_read_validation_result(method, checks, failures)
 
@@ -384,14 +381,14 @@ class ConfigureHostUseCase:
             )
             self._validate_no_raw_memory_dump(content, target_path=target.relative_path)
         except ValidationFailedError as exc:
-            failures.append(f"Falha de Arquivo de Instrução: {exc}")
+            failures.append(f"Instruction file failure: {exc}")
 
         inner_content = self._managed_block_inner_content(managed_block).strip()
         if inner_content:
             checks["managed_block_has_content"] = True
         else:
             failures.append(
-                f"Falha de Arquivo de Instrução: bloco UMEM em {target.relative_path} está vazio."
+                f"Instruction file failure: UMEM block in {target.relative_path} is empty."
             )
 
         if self._has_mcp_reference(inner_content):
@@ -399,8 +396,8 @@ class ConfigureHostUseCase:
             checks["mcp_configuration_documented_or_active"] = True
         else:
             failures.append(
-                "Falha de Configuração MCP: bloco UMEM não referencia universal-memory, "
-                "MCP/FastMCP ou comandos como umem context/status."
+                "MCP configuration failure: UMEM block does not reference universal-memory, "
+                "MCP/FastMCP, or commands such as umem context/status."
             )
 
         result = self._host_read_validation_result(method, checks, failures)
@@ -531,14 +528,16 @@ class ConfigureHostUseCase:
             target_name_val = getattr(target.name, "value", target.name)
             if classification_val not in supported:
                 warnings.append(
-                    f"Instrucao '{block.title}' com classificacao '{classification_val}' "
-                    f"foi ignorada pois nao e suportada pelo target {target_name_val}."
+                    f"Instruction '{block.title}' with classification '{classification_val}' "
+                    f"was ignored because target {target_name_val} does not support it."
                 )
 
         canonical_documents: list[CanonicalDocument] = []
         if target.name == InstructionTargetType.claude_md:
             if partition.canonical_documents:
-                raise ValidationFailedError("Host Claude Code nao suporta documentos canonicos.")
+                raise ValidationFailedError(
+                    "Claude Code host does not support canonical documents."
+                )
             managed_content = self._render_claude_managed_block(
                 self._target_manifest_blocks(
                     partition,
@@ -667,7 +666,7 @@ class ConfigureHostUseCase:
         try:
             host_name = HostName(host_id)
         except ValueError as exc:
-            raise ValidationFailedError(f"Host nao suportado: {host_id}") from exc
+            raise ValidationFailedError(f"Unsupported host: {host_id}") from exc
         timestamp = datetime.now(UTC)
         if host_name == HostName.claude_code:
             return Host(
@@ -696,7 +695,7 @@ class ConfigureHostUseCase:
                 audit_event_type="host_setup",
             )
         else:
-            raise ValidationFailedError(f"Host ainda nao suportado para setup: {host_id}")
+            raise ValidationFailedError(f"Host setup is not yet supported for: {host_id}")
 
     def _agents_md_target(self, host: Host) -> InstructionTarget:
         return self._instruction_target_for(host, InstructionTargetType.agents_md)
@@ -707,7 +706,9 @@ class ConfigureHostUseCase:
         target_type: InstructionTargetType,
     ) -> InstructionTarget:
         if host is not None and target_type not in host.supported_targets:
-            raise ValidationFailedError(f"Host {host.name.value} nao suporta {target_type.value}")
+            raise ValidationFailedError(
+                f"Host {host.name.value} does not support {target_type.value}"
+            )
         timestamp = datetime.now(UTC)
         if target_type == InstructionTargetType.claude_md:
             return InstructionTarget(
@@ -738,19 +739,19 @@ class ConfigureHostUseCase:
                 ],
             )
         else:
-            raise ValidationFailedError(f"Target nao suportado: {target_type.value}")
+            raise ValidationFailedError(f"Unsupported target: {target_type.value}")
 
     def _read_existing(self, relative_path: str) -> str:
         path = (self.project_root / relative_path).resolve()
         if not path.exists():
             return ""
         if not path.is_file():
-            raise ValidationFailedError(f"Caminho alvo nao e arquivo: {relative_path}")
+            raise ValidationFailedError(f"Target path is not a file: {relative_path}")
         try:
             path.relative_to(self.project_root)
         except ValueError as exc:
             raise ValidationFailedError(
-                "Caminho fora do diretorio do projeto nao permitido."
+                "Path outside the project directory is not allowed."
             ) from exc
         return path.read_text(encoding="utf-8")
 
@@ -1026,7 +1027,7 @@ class ConfigureHostUseCase:
         chars_count = len(content)
         if chars_count > max_chars or lines_count > max_lines:
             raise ValidationFailedError(
-                f"Manifesto {target_path} deve permanecer compacto; mova conteudo longo para docs/."
+                f"Manifest {target_path} must remain compact; move long content to docs/."
             )
 
     def _validate_no_raw_memory_dump(self, content: str, *, target_path: str = "AGENTS.md") -> None:
@@ -1038,15 +1039,15 @@ class ConfigureHostUseCase:
         )
         if json_fact_hits >= 2:  # noqa: PLR2004
             raise ValidationFailedError(
-                f"Manifesto {target_path} deve permanecer compacto e nao pode conter dump bruto "
-                "de fatos ou memorias."
+                f"Manifest {target_path} must remain compact and cannot contain raw fact or "
+                "memory dumps."
             )
 
         raw_fact_hits = len(re.findall(r"\b(?:raw memory fact|fact_id|source_fact_ids)\b", managed))
         if raw_fact_hits >= 5:  # noqa: PLR2004
             raise ValidationFailedError(
-                f"Manifesto {target_path} deve permanecer compacto e nao pode conter dump bruto "
-                "de fatos ou memorias."
+                f"Manifest {target_path} must remain compact and cannot contain raw fact or "
+                "memory dumps."
             )
 
     def _planned_changes(
@@ -1162,8 +1163,8 @@ def _canonical_doc_path(title: str, docs_directory: str) -> str:
 def _safe_relative_path(value: str) -> str:
     normalized = value.replace("\\", "/")
     if ":" in normalized or normalized.startswith("/") or not normalized:
-        raise ValidationFailedError("Caminho relativo invalido.")
+        raise ValidationFailedError("Invalid relative path.")
     path = PurePosixPath(normalized)
     if path.is_absolute() or ".." in path.parts:
-        raise ValidationFailedError("Caminho relativo invalido.")
+        raise ValidationFailedError("Invalid relative path.")
     return path.as_posix()

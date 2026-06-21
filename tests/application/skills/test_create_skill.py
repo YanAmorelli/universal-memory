@@ -72,6 +72,12 @@ def test_create_skill_directly_writes_canonical_quoted_yaml_and_syncs_native(
     assert (tmp_path / ".umem" / "memory" / "skills.jsonl").is_file()
     assert not (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").is_file()
     assert result.native_installations
+    assert (tmp_path / ".agents" / "skills" / "launch-funnel-operator" / "SKILL.md").is_file()
+    assert any(
+        installation["runtime"] == "codex"
+        and installation["path"] == ".agents/skills/launch-funnel-operator"
+        for installation in result.native_installations
+    )
     assert "sync_native_skill" in {event.action for event in audit.written}
     assert result.latent_skill.status == LatentSkillStatus.active
 
@@ -156,6 +162,7 @@ def test_create_skill_removes_canonical_file_when_registry_write_fails(tmp_path:
     assert not (tmp_path / ".umem" / "skills" / "broken-skill" / "SKILL.md").exists()
     assert not (tmp_path / ".claude" / "skills" / "broken-skill" / "SKILL.md").exists()
     assert not (tmp_path / ".opencode" / "skills" / "broken-skill" / "SKILL.md").exists()
+    assert not (tmp_path / ".agents" / "skills" / "broken-skill" / "SKILL.md").exists()
     assert not (tmp_path / ".umem" / "memory" / "skills.jsonl").exists()
 
 
@@ -221,3 +228,4 @@ def test_create_skill_can_disable_native_targets(tmp_path: Path) -> None:
     assert result.native_installations == []
     assert result.affected_paths == [".umem/skills/canonical-only/SKILL.md"]
     assert not (tmp_path / ".opencode" / "skills" / "canonical-only").exists()
+    assert not (tmp_path / ".agents" / "skills" / "canonical-only").exists()

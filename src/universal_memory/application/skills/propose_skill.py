@@ -19,9 +19,13 @@ from universal_memory.infrastructure.config.toml_loader import (
 
 
 class ProposeSkillDecision(StrEnum):
-    sim = "sim"
-    sempre = "sempre"
-    nao = "nao"
+    yes = "yes"
+    always = "always"
+    no = "no"
+    # Backward-compatible aliases for existing stored values and in-process callers.
+    sim = "yes"
+    sempre = "always"
+    nao = "no"
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +91,7 @@ class ProposeSkillUseCase:
         auto_approval_recorded = False
         rollback_hint = None
 
-        if command.decision == ProposeSkillDecision.sempre:
+        if command.decision == ProposeSkillDecision.always:
             try:
                 config_loaded = self._record_auto_approval(updated, command)
                 auto_approval_recorded = True
@@ -112,7 +116,7 @@ class ProposeSkillUseCase:
             latent_skill=updated,
             proposal=proposal,
             requires_decision=False,
-            accepted=command.decision in {ProposeSkillDecision.sim, ProposeSkillDecision.sempre},
+            accepted=command.decision in {ProposeSkillDecision.yes, ProposeSkillDecision.always},
             auto_approval_recorded=auto_approval_recorded,
             audit_reference=audit_reference,
             snapshot_reference=snapshot_reference,
@@ -126,7 +130,7 @@ class ProposeSkillUseCase:
     ) -> LatentSkill:
         status = (
             LatentSkillStatus.ignored
-            if command.decision == ProposeSkillDecision.nao
+            if command.decision == ProposeSkillDecision.no
             else LatentSkillStatus.active
         )
         metadata = dict(skill.metadata) if skill.metadata is not None else {}
@@ -162,7 +166,7 @@ class ProposeSkillUseCase:
                             "name": skill.name,
                             "scope": skill.scope.value,
                             "pattern": skill.name,
-                            "decision": ProposeSkillDecision.sempre.value,
+                            "decision": ProposeSkillDecision.always.value,
                             "origin": command.origin,
                             "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                             "reversible": True,

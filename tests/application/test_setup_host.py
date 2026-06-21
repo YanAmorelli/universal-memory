@@ -470,7 +470,8 @@ def test_claude_code_check_reports_drift_warnings_without_mutation(
     )
 
     assert result.warnings == [
-        "Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths in specs, code and docs."
+        "Duplicate instruction in AGENTS.md and CLAUDE.md: "
+        "Use relative paths in specs, code and docs."
     ]
     assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8").count("Use relative paths") == 1
 
@@ -486,7 +487,7 @@ def test_host_check_records_failure_when_instruction_file_is_missing(
     assert result.planned_changes == []
     assert result.snapshot_reference == "planned"
     assert result.audit_reference != "not-applied"
-    assert any("Falha de Arquivo de Instrução" in warning for warning in result.warnings)
+    assert any("Instruction file failure" in warning for warning in result.warnings)
     assert len(audit_log_repository.events) == 1
     event = audit_log_repository.events[0]
     assert event.action == "host_validation.codex"
@@ -538,7 +539,7 @@ def test_host_check_records_failure_for_corrupted_umem_delimiters(
     result = use_case.execute(ConfigureHostCommand(host_id="claude_code", check=True, origin="cli"))
 
     assert result.validation_status == "failure"
-    assert any("delimitadores UMEM" in warning for warning in result.warnings)
+    assert any("valid UMEM delimiters" in warning for warning in result.warnings)
     event = audit_log_repository.events[0]
     assert event.action == "host_validation.claude_code"
     details = json.loads(event.details or "{}")

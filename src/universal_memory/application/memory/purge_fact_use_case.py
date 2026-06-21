@@ -25,12 +25,10 @@ class PurgeFactUseCase:
 
     def execute(self, command: PurgeFactCommand) -> PurgeFactResult:
         if command.id is None and command.scope is None:
-            raise ValidationFailedError("Deve ser fornecido um id de fato ou um escopo para purga.")
+            raise ValidationFailedError("Provide either a fact ID or a scope to purge.")
 
         if command.id is not None and command.scope is not None:
-            raise ValidationFailedError(
-                "Nao e permitido fornecer simultaneamente id e escopo para purga."
-            )
+            raise ValidationFailedError("Provide either a fact ID or a scope to purge, not both.")
 
         if command.id is not None:
             fact = self.fact_repository.read(command.id)

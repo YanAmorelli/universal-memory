@@ -601,4 +601,4 @@ def test_update_skill_preserves_original_error_when_rollback_fails(tmp_path: Pat
             )
         )
 
-    assert any("Rollback do arquivo da skill falhou" in note for note in exc_info.value.__notes__)
+    assert any("Skill file rollback failed" in note for note in exc_info.value.__notes__)

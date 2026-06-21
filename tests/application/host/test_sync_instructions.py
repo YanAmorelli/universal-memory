@@ -347,7 +347,7 @@ def test_sync_preview_noops_with_supported_runtime_and_no_active_rules(
     assert result.instruction_targets == []
     assert result.audit_reference == "not-applied"
     assert result.snapshot_reference == "planned"
-    assert result.manual_steps == ["Revise os caminhos afetados antes de aplicar."]
+    assert result.manual_steps == ["Review affected paths before applying."]
     assert config_path.read_text(encoding="utf-8") == original_config
     assert not (tmp_path / "AGENTS.md").exists()
     assert not (tmp_path / "CLAUDE.md").exists()
@@ -409,7 +409,7 @@ def test_sync_apply_explicit_disabled_host_mutates_project_config(
     assert result.host_ids == ["claude_code"]
     assert result.validation_status == "success"
     assert result.warnings == [
-        "Host 'claude_code' nao esta habilitado em .umem/config.toml; ativando automaticamente."
+        "Host 'claude_code' is not enabled in .umem/config.toml; enabling it automatically."
     ]
     updated_config = config_path.read_text(encoding="utf-8")
     assert '"codex"' in updated_config

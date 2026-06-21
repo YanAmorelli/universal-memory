@@ -30,6 +30,14 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.ports import AgentSkillRepository
 
+NO_NATIVE_INSTALLATIONS_NOTE = (
+    "Import copied/adopted the source into the canonical .umem/skills registry. "
+    "No native runtime target was recorded for this import. Supported compatible native targets "
+    "can be adopted during import and refreshed with `umem skills sync <skill-id-or-name> "
+    "--format json`, which distributes complete synchronized copies as native runtime copies "
+    "to configured runtimes."
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ImportSkillCommand:
@@ -37,6 +45,7 @@ class ImportSkillCommand:
     scope: LatentSkillScope
     origin: str
     replace_native: bool = False
+    sync_after_import: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +82,7 @@ class ImportSkillResult:
         )
 
     def to_payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "skill_id": self.agent_skill.id,
             "name": self.agent_skill.name,
             "slug": self.slug,
@@ -95,6 +104,9 @@ class ImportSkillResult:
                 "content_hash": self.agent_skill.content_hash,
             },
         }
+        if not self.native_installations:
+            payload["native_installations_note"] = NO_NATIVE_INSTALLATIONS_NOTE
+        return payload
 
 
 class _ImportSkillSchema(BaseModel):
@@ -104,6 +116,7 @@ class _ImportSkillSchema(BaseModel):
     scope: LatentSkillScope
     origin: str = Field(min_length=1)
     replace_native: bool = False
+    sync_after_import: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +246,35 @@ class ImportSkillUseCase:
                     "metadata": {**metadata, "native_installations": native_result.installations},
                 }
             )
+            if validated.sync_after_import:
+                native_result = self.native_skill_sync.sync(
+                    skill=agent_skill,  # type: ignore[arg-type]
+                    slug=slug,
+                    canonical_skill_file=canonical_skill_file,
+                    origin=validated.origin,
+                    drift_decision="keep",
+                    canonical_base_path=write.project_root,
+                    allow_unmanaged_overwrite=False,
+                )
+                warnings.extend(native_result.warnings)
+                agent_skill = agent_skill.model_copy(
+                    update={
+                        "native_installations": native_result.installations,
+                        "audit_reference": ", ".join(
+                            ref
+                            for ref in [
+                                agent_skill.audit_reference,
+                                *native_result.audit_references,
+                            ]
+                            if ref
+                        ),
+                        "metadata": {
+                            **metadata,
+                            "native_installations": native_result.installations,
+                            "sync_after_import": True,
+                        },
+                    }
+                )
             registry_write = self.repository.write(agent_skill, origin=validated.origin)
             audit_references = [agent_skill.audit_reference]
             snapshot_references = [

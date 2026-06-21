@@ -167,9 +167,9 @@ def test_list_skills_empty_returns_recommended_action(tmp_path: Path) -> None:
     assert result.to_payload() == {
         "skills": [],
         "recommended_action": (
-            "Latent skills aparecem quando o universal-memory registra evidencias recorrentes. "
+            "Latent skills appear when universal-memory records recurring evidence. "
             "Use `umem skills track --name ... --description ... --evidence-summary ...` "
-            "para capturar evidencia explicita; depois rode `umem skills recommend`."
+            "to capture explicit evidence; then run `umem skills recommend`."
         ),
     }
 

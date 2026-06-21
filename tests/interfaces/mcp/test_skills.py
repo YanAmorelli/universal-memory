@@ -88,7 +88,7 @@ def update_result() -> UpdateSkillResult:
         skill_file=".umem/skills/tdd-recorrente/SKILL.md",
         audit_reference="audit-3",
         snapshot_reference="snapshot-3",
-        rollback_hint="Use rollback por escopo para restaurar o snapshot anterior.",
+        rollback_hint="Use scoped rollback to restore the previous snapshot.",
     )
 
 
@@ -793,6 +793,7 @@ async def test_import_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: 
             "path": "native/review-helper/SKILL.md",
             "scope": "project",
             "replace_native": True,
+            "sync_after_import": True,
         },
     )
     payload = result.structured_content
@@ -806,6 +807,7 @@ async def test_import_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: 
             scope=LatentSkillScope.project,
             origin="mcp",
             replace_native=True,
+            sync_after_import=True,
         )
     ]
     assert success_payload["ok"] is True

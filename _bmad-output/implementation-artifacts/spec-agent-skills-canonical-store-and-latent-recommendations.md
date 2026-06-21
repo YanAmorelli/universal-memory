@@ -92,6 +92,7 @@ This workflow is useful, but it must not be the only way to create skills.
 5. Latent skills become a recommendation subsystem with explicit evidence sources, thresholds, and user decisions.
 6. Existing `track -> propose -> generate` remains as compatibility, but is reframed as recommendation/promotion, not the main creation path.
 7. Agent instructions are part of the feature contract. Without updated host instructions and `use-universal-memory` guidance, latent recommendations are not product-complete.
+8. Agent Skills runtime support is copy-based by default: enabled runtimes receive complete synchronized skill directories from `.umem/skills`, including `.agents/skills` for hosts that support the shared Agent Skills convention. Wrappers are a local policy exception, not the normal product flow.
 
 ## Requirements
 
@@ -175,9 +176,11 @@ Current expected target behavior:
 - OpenCode: `.opencode/skills/<slug>/SKILL.md`
 - Cursor: `.cursor/rules/<slug>/SKILL.mdc`
 - Antigravity: `.antigravity/rules/<slug>/SKILL.md`
-- Codex/OpenAI-class: no native Agent Skills target unless a supported target is added; keep AGENTS.md guidance only.
+- Codex/OpenAI-class and AGENTS.md-style hosts with Agent Skills support: `.agents/skills/<slug>/SKILL.md`
 
-Open question: determine whether `.agents/skills/<slug>/SKILL.md` should be added as a shared Agent Skills target for hosts that follow the broader `agentskills.io` convention. If added, it must be represented in the runtime registry, not created ad hoc.
+`.agents/skills/<slug>/SKILL.md` is a first-class native target when the host/runtime is enabled and supports the shared Agent Skills convention. It must be represented in the runtime registry as a native skill target, not created ad hoc and not treated as manual compatibility outside UMEM. `AGENTS.md` remains the compact bootstrap and policy pointer; it is not a substitute for synchronizing complete skill copies into `.agents/skills` when that runtime target is supported.
+
+Native target sync writes complete skill directories from the canonical `.umem/skills/<slug>/` tree. It must not create wrapper stubs by default. A wrapper that points to `.umem/skills` may be allowed only by explicit repository/runtime policy, for example to satisfy a local constraint, and must be documented as an exception.
 
 ### FR5: Skill List and Detail Must Reflect Canonical and Native State
 
@@ -235,12 +238,14 @@ sync_skills(skill_id_or_name=None, targets=None, drift_decision="keep")
 Behavior:
 
 - Read canonical skills.
-- Install missing targets for enabled runtimes.
+- Install missing targets for enabled runtimes, including `.agents/skills` for enabled AGENTS.md/Codex/OpenAI-class hosts that support native Agent Skills.
 - Detect drift using previous target hash.
 - Keep by default in non-interactive mode.
 - Overwrite only when explicitly requested.
 - Snapshot before overwrite.
 - Report target-level results.
+
+`skills create`, `skills import`, `skills promote`, `skills generate`, and direct canonical edits followed by `skills sync` all converge on this same model: mutate or adopt the canonical `.umem/skills/<slug>/` source, then distribute complete synchronized copies to configured native targets.
 
 ### FR7: Latent Recommendation Engine
 
@@ -399,7 +404,20 @@ The output must explain:
 - Validate imported `SKILL.md`.
 - Copy into `.umem/skills/<slug>`.
 - Register canonical record.
-- Optionally replace native folder with managed synchronized copy.
+- Treat the imported canonical copy as the source of truth.
+- Allow `skills sync` to write the canonical copy back to `.agents/skills`, `.opencode/skills`, `.antigravity/`, or other configured native targets as managed complete copies.
+- Optionally replace the source native folder with the managed synchronized copy during import when explicitly requested; do not create wrappers by default.
+
+### Phase 3.5: Migrate Existing Native Skill Trees
+
+Future `skills migrate` behavior must follow the same direction as import:
+
+- Discover existing native skills under configured runtime target directories.
+- Import or adopt selected skills into canonical `.umem/skills/<slug>/`.
+- Validate canonical content and configured native targets.
+- Synchronize complete managed copies from canonical into enabled runtime targets, including `.agents/skills` when supported.
+- Preserve unmanaged or drifted native files unless the user explicitly chooses adoption or overwrite.
+- Offer `wrap-source` only as an optional exceptional policy for repositories that deliberately want native wrapper stubs; it must not be the default migration result.
 
 ### Phase 4: Latent Recommendations
 
@@ -419,15 +437,16 @@ The output must explain:
 1. Given a direct MCP `create_skill` call with a description containing `:`, when the skill is created, then `.umem/skills/<slug>/SKILL.md` and native target files contain valid YAML frontmatter.
 2. Given a skill created via UMEM, when `umem skills list --format json` runs, then it returns the canonical skill and target status without relying on `latent_skills.jsonl`.
 3. Given an enabled OpenCode runtime, when a canonical skill is created, then the corresponding `.opencode/skills/<slug>/SKILL.md` target is written and validated.
-4. Given a native target manually changed after sync, when `umem skills sync --format json` runs, then drift is reported and not overwritten by default.
-5. Given a valid native skill folder not registered in UMEM, when diagnostics or sync inventory runs, then it is reported as unmanaged rather than silently ignored.
-6. Given no repeated latent evidence, when `umem skills recommend` runs, then it returns an honest empty state explaining the current evidence sources and thresholds.
-7. Given a latent skill with recurrence count 2 and evidence, when `umem skills recommend` runs, then it returns a recommendation with reasons and a promotion command.
-8. Given a recommendation is promoted, when the operation completes, then the resulting canonical skill uses the same validation and native sync path as direct creation.
-9. Given existing `track -> propose -> generate` usage, when the commands are called, then they continue to work or return migration guidance without data loss.
-10. Given an agent reads `use-universal-memory`, when it completes substantial repeated workflow work, then the instructions clearly tell it when to call `track_latent_skill` and when not to.
-11. Given a user explicitly asks to create a skill, when the agent follows UMEM guidance, then it uses direct `create_skill` instead of creating a latent candidate first.
-12. Given no durable repeated workflow was observed, when the agent follows UMEM guidance, then it does not call `track_latent_skill` just to satisfy a checklist.
+4. Given an enabled AGENTS.md/Codex/OpenAI-class runtime with native Agent Skills support, when a canonical skill is created or synced, then the corresponding `.agents/skills/<slug>/SKILL.md` target is written as a complete copy and validated.
+5. Given a native target manually changed after sync, when `umem skills sync --format json` runs, then drift is reported and not overwritten by default.
+6. Given a valid native skill folder not registered in UMEM, when diagnostics or sync inventory runs, then it is reported as unmanaged rather than silently ignored.
+7. Given no repeated latent evidence, when `umem skills recommend` runs, then it returns an honest empty state explaining the current evidence sources and thresholds.
+8. Given a latent skill with recurrence count 2 and evidence, when `umem skills recommend` runs, then it returns a recommendation with reasons and a promotion command.
+9. Given a recommendation is promoted, when the operation completes, then the resulting canonical skill uses the same validation and native sync path as direct creation.
+10. Given existing `track -> propose -> generate` usage, when the commands are called, then they continue to work or return migration guidance without data loss.
+11. Given an agent reads `use-universal-memory`, when it completes substantial repeated workflow work, then the instructions clearly tell it when to call `track_latent_skill` and when not to.
+12. Given a user explicitly asks to create a skill, when the agent follows UMEM guidance, then it uses direct `create_skill` instead of creating a latent candidate first.
+13. Given no durable repeated workflow was observed, when the agent follows UMEM guidance, then it does not call `track_latent_skill` just to satisfy a checklist.
 
 ## Implementation Notes
 
@@ -436,14 +455,13 @@ The output must explain:
 - Keep all paths relative in payloads.
 - Add parity tests for every new CLI JSON command and MCP tool.
 - Add regression tests for colon-containing descriptions in canonical and native target files.
-- Add regression tests for orphan native skill inventory using `.agents/skills` if that target is adopted.
+- Add regression tests for orphan native skill inventory and managed sync using `.agents/skills` for enabled AGENTS.md/Codex/OpenAI-class runtimes.
 
 ## Open Questions
 
-1. Should `.agents/skills` be a first-class shared Agent Skills target in the default runtime registry?
-2. Should canonical global skills live under a global UMEM root and materialize into project host targets on demand, or should global skills only be referenced until explicitly installed per project?
-3. Should `skills propose/generate` remain public long-term, or become compatibility aliases for `recommend/promote`?
-4. Should recommendations use only explicit `skills track` evidence for now, or also scan curated facts tagged with workflow-like tags in the first implementation?
+1. Should canonical global skills live under a global UMEM root and materialize into project host targets on demand, or should global skills only be referenced until explicitly installed per project?
+2. Should `skills propose/generate` remain public long-term, or become compatibility aliases for `recommend/promote`?
+3. Should recommendations use only explicit `skills track` evidence for now, or also scan curated facts tagged with workflow-like tags in the first implementation?
 
 ## Recommended First Story
 

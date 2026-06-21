@@ -20,6 +20,19 @@ from universal_memory.interfaces.cli.init_command import main as cli_main
 
 MIN_BENCHMARK_FACT_COUNT = 1000
 MIN_BENCHMARK_QUERY_COUNT = 30
+LEGACY_SKILLS_LIFECYCLE = """# Skills Lifecycle
+
+Use this reference for UMEM skill discovery, latent skill tracking, approval, generation,
+activation, deactivation, and updates.
+
+## Canonical CLI
+
+```bash
+umem skills list --format json
+umem skills generate <latent-skill-id> --yes --format json
+umem skills update <latent-skill-id> --file <relative-markdown-path> --format json
+```
+"""
 
 
 @pytest.fixture(autouse=True)
@@ -241,6 +254,47 @@ def test_update_skills_json_syncs_active_project_skills_with_keep_and_preserves_
             native_drift_decision="keep",
         )
     ]
+
+
+def test_update_skills_json_updates_managed_default_umem_skill_and_reports_preserved_paths(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["init", "--yes", "--format", "json"]) == 0
+    capsys.readouterr()
+    lifecycle_path = (
+        tmp_path
+        / ".umem"
+        / "skills"
+        / "use-universal-memory"
+        / "references"
+        / "skills-lifecycle.md"
+    )
+    lifecycle_path.write_text(LEGACY_SKILLS_LIFECYCLE, encoding="utf-8")
+
+    exit_code = main(["update", "--skills", "--format", "json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["operation"] == "update.skills"
+    assert payload["data"]["updated_count"] == 1
+    assert payload["data"]["preserved_count"] == 0
+    skill = payload["data"]["skills"][0]
+    assert skill["managed"] is True
+    assert skill["name"] == "use-universal-memory"
+    assert skill["status"] == "updated"
+    assert skill["updated_paths"] == [
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+    ]
+    assert ".umem/skills/use-universal-memory/SKILL.md" in skill["preserved_paths"]
+    assert skill["audit_reference"]
+    assert skill["snapshot_reference"]
+    assert (
+        "umem skills import .agents/skills/<skill-name> --scope project --sync"
+        in lifecycle_path.read_text(encoding="utf-8")
+    )
 
 
 def test_skills_update_json_preserves_warnings_and_defaults_native_drift_to_keep(capsys) -> None:

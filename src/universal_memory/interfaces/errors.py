@@ -58,9 +58,9 @@ def error_descriptor(error: Exception) -> ErrorDescriptor:
             ErrorDescriptor(
                 "secret_detected",
                 JSON_RPC_SECRET_DETECTED,
-                "Conteudo sensivel bloqueado.",
                 "Sensitive content blocked.",
-                "Remova ou mascare valores sensiveis antes de repetir a operacao.",
+                "Sensitive content blocked.",
+                "Remove or mask sensitive values before retrying.",
             ),
         ),
         (
@@ -68,9 +68,9 @@ def error_descriptor(error: Exception) -> ErrorDescriptor:
             ErrorDescriptor(
                 "snapshot_failed",
                 JSON_RPC_SNAPSHOT_FAILED,
-                "Falha de snapshot.",
                 "Snapshot failed.",
-                "Execute uma mutacao segura antes de tentar rollback ou verifique o escopo.",
+                "Snapshot failed.",
+                "Run a safe mutation before retrying rollback, or check the scope.",
             ),
         ),
         (
@@ -78,9 +78,9 @@ def error_descriptor(error: Exception) -> ErrorDescriptor:
             ErrorDescriptor(
                 "validation_failed",
                 JSON_RPC_VALIDATION_FAILED,
-                "Validacao falhou.",
                 "Validation failed.",
-                "Corrija os dados invalidos informados.",
+                "Validation failed.",
+                "Fix the invalid input data.",
             ),
         ),
         (
@@ -88,9 +88,9 @@ def error_descriptor(error: Exception) -> ErrorDescriptor:
             ErrorDescriptor(
                 "fact_not_found",
                 JSON_RPC_FACT_NOT_FOUND,
-                "Fato nao encontrado.",
                 "Fact not found.",
-                "Verifique o identificador ou escopo informado.",
+                "Fact not found.",
+                "Check the provided identifier or scope.",
             ),
         ),
         (
@@ -98,9 +98,9 @@ def error_descriptor(error: Exception) -> ErrorDescriptor:
             ErrorDescriptor(
                 "invalid_config",
                 JSON_RPC_INVALID_CONFIG,
-                "Configuracao invalida.",
                 "Invalid configuration.",
-                "Verifique as configuracoes no arquivo config.toml.",
+                "Invalid configuration.",
+                "Check the settings in config.toml.",
             ),
         ),
         (
@@ -108,9 +108,9 @@ def error_descriptor(error: Exception) -> ErrorDescriptor:
             ErrorDescriptor(
                 "storage_error",
                 JSON_RPC_STORAGE_ERROR,
-                "Falha de armazenamento.",
                 "Storage error.",
-                "Verifique o layout local e execute umem init na raiz do projeto.",
+                "Storage error.",
+                "Check the local layout and run umem init at the project root.",
             ),
         ),
     )
@@ -119,9 +119,9 @@ def error_descriptor(error: Exception) -> ErrorDescriptor:
         ErrorDescriptor(
             "unexpected_error",
             JSON_RPC_UNEXPECTED_ERROR,
-            "Erro inesperado.",
             "Unexpected error.",
-            "Tente novamente. Se persistir, consulte os logs de diagnostico.",
+            "Unexpected error.",
+            "Try again. If the problem persists, check the diagnostic logs.",
         ),
     )
 
@@ -137,26 +137,7 @@ def recovery_hint(error: Exception) -> str:
 
 def _recovery_hint_for_locale(error: Exception, *, message_locale: str) -> str:
     hint = recovery_hint(error)
-    if message_locale == "pt-BR":
-        return hint
-    translations = {
-        "Remova ou mascare valores sensiveis antes de repetir a operacao.": (
-            "Remove or mask sensitive values before retrying."
-        ),
-        "Execute uma mutacao segura antes de tentar rollback ou verifique o escopo.": (
-            "Run a safe mutation before retrying rollback, or check the scope."
-        ),
-        "Corrija os dados invalidos informados.": "Fix the invalid input data.",
-        "Verifique o identificador ou escopo informado.": "Check the provided identifier or scope.",
-        "Verifique as configuracoes no arquivo config.toml.": "Check the settings in config.toml.",
-        "Verifique o layout local e execute umem init na raiz do projeto.": (
-            "Check the local layout and run umem init at the project root."
-        ),
-        "Tente novamente. Se persistir, consulte os logs de diagnostico.": (
-            "Try again. If the problem persists, check the diagnostic logs."
-        ),
-    }
-    return translations.get(hint, hint)
+    return hint
 
 
 def sanitize_error_detail(error_or_detail: Exception | str, *, max_length: int = 240) -> str:
