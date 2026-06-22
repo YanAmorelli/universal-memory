@@ -302,6 +302,24 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
         (
             [
                 "skills",
+                "import",
+                "native/review-helper/SKILL.md",
+                "--scope",
+                "project",
+                "--sync",
+                "--format",
+                "json",
+            ],
+            "import_skill",
+            {
+                "path": "native/review-helper/SKILL.md",
+                "scope": "project",
+                "sync_after_import": True,
+            },
+        ),
+        (
+            [
+                "skills",
                 "propose",
                 "11111111-1111-4111-8111-111111111111",
                 "--yes",

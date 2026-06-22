@@ -295,6 +295,10 @@ def test_import_skill_replace_native_rewrites_agents_source(tmp_path: Path) -> N
 def test_import_skill_can_sync_configured_native_targets_after_import(tmp_path: Path) -> None:
     use_case, repository, _safe_write = build_use_case(tmp_path)
     source = write_source_skill(tmp_path / ".agents" / "skills" / "review-helper")
+    (source / "references").mkdir()
+    (source / "references" / "guide.md").write_text("Use careful review.\n", encoding="utf-8")
+    (source / "scripts").mkdir()
+    (source / "scripts" / "check.sh").write_text("printf 'ok'\n", encoding="utf-8")
 
     result = use_case.execute(
         ImportSkillCommand(
@@ -306,16 +310,38 @@ def test_import_skill_can_sync_configured_native_targets_after_import(tmp_path: 
     )
 
     canonical_file = tmp_path / ".umem" / "skills" / "review-helper" / "SKILL.md"
+    canonical_reference = (
+        tmp_path / ".umem" / "skills" / "review-helper" / "references" / "guide.md"
+    )
+    canonical_script = tmp_path / ".umem" / "skills" / "review-helper" / "scripts" / "check.sh"
     agents_file = tmp_path / ".agents" / "skills" / "review-helper" / "SKILL.md"
+    agents_reference = tmp_path / ".agents" / "skills" / "review-helper" / "references" / "guide.md"
+    agents_script = tmp_path / ".agents" / "skills" / "review-helper" / "scripts" / "check.sh"
     opencode_file = tmp_path / ".opencode" / "skills" / "review-helper" / "SKILL.md"
+    opencode_reference = (
+        tmp_path / ".opencode" / "skills" / "review-helper" / "references" / "guide.md"
+    )
+    opencode_script = tmp_path / ".opencode" / "skills" / "review-helper" / "scripts" / "check.sh"
     stored = repository.read(result.agent_skill.id)
     installation_paths = {installation["path"] for installation in result.native_installations}
 
     assert agents_file.read_text(encoding="utf-8") == canonical_file.read_text(encoding="utf-8")
+    assert agents_reference.read_text(encoding="utf-8") == canonical_reference.read_text(
+        encoding="utf-8"
+    )
+    assert agents_script.read_text(encoding="utf-8") == canonical_script.read_text(encoding="utf-8")
     assert opencode_file.read_text(encoding="utf-8") == canonical_file.read_text(encoding="utf-8")
+    assert opencode_reference.read_text(encoding="utf-8") == canonical_reference.read_text(
+        encoding="utf-8"
+    )
+    assert opencode_script.read_text(encoding="utf-8") == canonical_script.read_text(
+        encoding="utf-8"
+    )
     assert ".agents/skills/review-helper" in installation_paths
     assert ".opencode/skills/review-helper" in installation_paths
     assert ".agents/skills/review-helper/SKILL.md" in result.affected_paths
+    assert ".agents/skills/review-helper/references/guide.md" in result.affected_paths
+    assert ".opencode/skills/review-helper/scripts/check.sh" in result.affected_paths
     assert stored.metadata["sync_after_import"] is True
 
 

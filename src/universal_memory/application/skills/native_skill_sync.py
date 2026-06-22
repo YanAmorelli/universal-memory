@@ -4,7 +4,7 @@ import hashlib
 import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
@@ -82,7 +82,7 @@ class NativeSkillSync:
                 )
                 current_path = self.project_root / relative_path
                 previous = previous_by_path.get(relative_path)
-                current_hash = _hash_target_tree(current_path)
+                current_hash = self._target_hash_for_previous_installation(current_path, previous)
                 has_drift = (
                     previous is not None
                     and current_hash is not None
@@ -121,6 +121,7 @@ class NativeSkillSync:
 
                 write_results = []
                 target_files = _target_files_for(canonical_files, target)
+                target_manifest = [path for path, _content in target_files]
                 for target_relative_file, content in target_files:
                     write_results.append(
                         self.safe_write_use_case.execute(
@@ -133,7 +134,13 @@ class NativeSkillSync:
                             )
                         )
                     )
+                obsolete_paths = self._remove_obsolete_managed_files(
+                    target_root=current_path,
+                    previous_manifest=_manifest_for(previous),
+                    target_manifest=target_manifest,
+                )
                 affected_paths.extend(result.relative_path for result in write_results)
+                affected_paths.extend(f"{relative_path}/{path}" for path in obsolete_paths)
                 audit_refs.extend(result.audit_reference for result in write_results)
                 snapshot_refs.extend(result.snapshot_reference for result in write_results)
                 if has_drift:
@@ -147,7 +154,7 @@ class NativeSkillSync:
                         "path": relative_path,
                         "canonical_hash": canonical_hash,
                         "target_hash": _hash_tree(target_files),
-                        "manifest": [path for path, _content in target_files],
+                        "manifest": target_manifest,
                         "timestamp": datetime.now(UTC).isoformat(),
                         "audit_reference": ", ".join(
                             result.audit_reference for result in write_results
@@ -167,6 +174,34 @@ class NativeSkillSync:
             installations=installations,
             warnings=warnings,
         )
+
+    def _target_hash_for_previous_installation(
+        self, current_path: Path, previous: dict[str, Any] | None
+    ) -> str | None:
+        if previous is None:
+            return _hash_target_tree(current_path)
+        manifest = _manifest_for(previous)
+        if not manifest:
+            return _hash_target_tree(current_path)
+        return _hash_target_manifest_tree(current_path, manifest)
+
+    def _remove_obsolete_managed_files(
+        self,
+        *,
+        target_root: Path,
+        previous_manifest: list[str],
+        target_manifest: list[str],
+    ) -> list[str]:
+        obsolete = sorted(set(previous_manifest) - set(target_manifest))
+        removed: list[str] = []
+        for relative_path in obsolete:
+            path = _safe_manifest_path(target_root, relative_path)
+            if path is None or not path.is_file():
+                continue
+            path.unlink()
+            removed.append(relative_path)
+            _prune_empty_directories(path.parent, target_root)
+        return removed
 
     def disable(
         self,
@@ -311,6 +346,17 @@ def _previous_installations_by_path(metadata: dict[str, Any] | None) -> dict[str
     return result
 
 
+def _manifest_for(installation: dict[str, Any] | None) -> list[str]:
+    raw_manifest = (installation or {}).get("manifest", [])
+    if not isinstance(raw_manifest, list):
+        return []
+    manifest: list[str] = []
+    for item in raw_manifest:
+        if isinstance(item, str) and _safe_manifest_relative_path(item):
+            manifest.append(item)
+    return manifest
+
+
 def _directory_files(directory: Path) -> list[tuple[str, str]]:
     if not directory.is_dir():
         raise ValidationFailedError(f"Diretorio canonico de skill ausente: {directory}")
@@ -341,6 +387,51 @@ def _hash_target_tree(path: Path) -> str | None:
     if not path.is_dir():
         return None
     return _hash_tree(_directory_files(path))
+
+
+def _hash_target_manifest_tree(path: Path, manifest: list[str]) -> str | None:
+    if not path.is_dir():
+        return None
+    files: list[tuple[str, str]] = []
+    for relative_path in sorted(manifest):
+        target_file = _safe_manifest_path(path, relative_path)
+        if target_file is None or not target_file.is_file():
+            return None
+        files.append((relative_path, target_file.read_text(encoding="utf-8")))
+    return _hash_tree(files)
+
+
+def _safe_manifest_relative_path(relative_path: str) -> bool:
+    if "\\" in relative_path:
+        return False
+    path = PurePosixPath(relative_path)
+    return relative_path != "" and not path.is_absolute() and ".." not in path.parts
+
+
+def _safe_manifest_path(root: Path, relative_path: str) -> Path | None:
+    if not _safe_manifest_relative_path(relative_path):
+        return None
+    resolved = (root / relative_path).resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError:
+        return None
+    return resolved
+
+
+def _prune_empty_directories(path: Path, root: Path) -> None:
+    root = root.resolve()
+    current = path.resolve()
+    while current != root:
+        try:
+            current.relative_to(root)
+        except ValueError:
+            return
+        try:
+            current.rmdir()
+        except OSError:
+            return
+        current = current.parent
 
 
 def _hash_tree(files: list[tuple[str, str]]) -> str:

@@ -12,6 +12,10 @@ from universal_memory.__main__ import main
 from universal_memory.application.skills import (
     ListSkillsCommand,
     ListSkillsResult,
+    SkillListItem,
+    SyncSkillResult,
+    SyncSkillsCommand,
+    SyncSkillsResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
@@ -239,6 +243,7 @@ def test_update_skills_json_syncs_active_project_skills_with_keep_and_preserves_
     exit_code = cli_main(
         ["update", "--skills", "--format", "json"],
         list_skills_command=list_skills,
+        sync_skills_command=lambda _command: SyncSkillsResult(skills=[]),
         update_skill_command=update_skill,
     )
 
@@ -254,6 +259,78 @@ def test_update_skills_json_syncs_active_project_skills_with_keep_and_preserves_
             native_drift_decision="keep",
         )
     ]
+
+
+def test_update_skills_json_syncs_canonical_agent_skills_from_list_result(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    seen_sync: list[SyncSkillsCommand] = []
+    seen_update: list[UpdateSkillCommand] = []
+    monkeypatch.chdir(tmp_path)
+
+    def list_skills(command: ListSkillsCommand) -> ListSkillsResult:
+        assert command.status == LatentSkillStatus.active
+        return ListSkillsResult(
+            skills=[
+                SkillListItem(
+                    id="agent-skill-1",
+                    name="Review Helper",
+                    scope="project",
+                    status="active",
+                    relative_path=".umem/skills/review-helper/SKILL.md",
+                    canonical_path=".umem/skills/review-helper/SKILL.md",
+                    created_at="2026-06-01T00:00:00Z",
+                    updated_at="2026-06-01T00:00:00Z",
+                    origin="test",
+                    audit_reference="audit-list",
+                    targets=[],
+                )
+            ]
+        )
+
+    def sync_skills(command: SyncSkillsCommand) -> SyncSkillsResult:
+        seen_sync.append(command)
+        return SyncSkillsResult(
+            skills=[
+                SyncSkillResult(
+                    skill_id="agent-skill-1",
+                    name="Review Helper",
+                    scope="project",
+                    status="active",
+                    canonical_path=".umem/skills/review-helper/SKILL.md",
+                    affected_paths=[".agents/skills/review-helper/SKILL.md"],
+                    targets=[{"runtime": "codex", "path": ".agents/skills/review-helper"}],
+                )
+            ],
+            affected_paths=[".agents/skills/review-helper/SKILL.md"],
+        )
+
+    def update_skill(command: UpdateSkillCommand) -> UpdateSkillResult:
+        seen_update.append(command)
+        return _update_skill_result()
+
+    exit_code = cli_main(
+        ["update", "--skills", "--format", "json"],
+        list_skills_command=list_skills,
+        sync_skills_command=sync_skills,
+        update_skill_command=update_skill,
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["updated_count"] == 1
+    assert payload["data"]["skills"][0]["managed"] is False
+    assert payload["data"]["skills"][0]["canonical_path"] == (".umem/skills/review-helper/SKILL.md")
+    assert seen_sync == [
+        SyncSkillsCommand(
+            skill_id_or_name="agent-skill-1",
+            origin="cli_update_skills",
+            drift_decision="keep",
+        )
+    ]
+    assert seen_update == []
 
 
 def test_update_skills_json_updates_managed_default_umem_skill_and_reports_preserved_paths(

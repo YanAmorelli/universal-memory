@@ -77,6 +77,7 @@ from universal_memory.application.skills import (
     ProposeSkillResult,
     RecommendSkillsCommand,
     RecommendSkillsResult,
+    SyncSkillResult,
     SyncSkillsCommand,
     SyncSkillsResult,
     TrackLatentSkillCommand,
@@ -194,7 +195,7 @@ UpdateManagedSkillsCommandHandler = Callable[
 ]
 UpdateMigrateCommandHandler = Callable[[UpdateMigrateCommand], UpdateMigrateResult]
 UpdateBenchmarksCommandHandler = Callable[[UpdateBenchmarksCommand], UpdateBenchmarksResult]
-UpdateSkillsItem = UpdateSkillResult | UpdateManagedSkillTemplateResult
+UpdateSkillsItem = UpdateSkillResult | UpdateManagedSkillTemplateResult | SyncSkillResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -511,6 +512,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 migrate_command=update_migrate_command,
                 benchmarks_command=update_benchmarks_command,
                 list_skills_command=list_skills_command,
+                sync_skills_command=sync_skills_command,
                 update_skill_command=update_skill_command,
                 update_managed_skills_command=update_managed_skills_command,
                 output_format=_effective_format(ctx, output_format),
@@ -2131,6 +2133,7 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
     migrate_command: UpdateMigrateCommandHandler | None,
     benchmarks_command: UpdateBenchmarksCommandHandler | None,
     list_skills_command: ListSkillsCommandHandler | None,
+    sync_skills_command: SyncSkillsCommandHandler | None,
     update_skill_command: UpdateSkillCommandHandler | None,
     update_managed_skills_command: UpdateManagedSkillsCommandHandler | None,
     output_format: str,
@@ -2238,10 +2241,15 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
             return 0
 
         if skills:
-            if list_skills_command is None or update_skill_command is None:
+            if (
+                list_skills_command is None
+                or sync_skills_command is None
+                or update_skill_command is None
+            ):
                 raise RuntimeError("CLI skill update dependencies were not configured.")
             result = _sync_active_skills_for_update(
                 list_skills_command,
+                sync_skills_command,
                 update_skill_command,
                 update_managed_skills_command,
                 output_format=output_format,
@@ -2902,28 +2910,40 @@ def _should_prompt_native_drift(
     )
 
 
-def _sync_active_skills_for_update(
+def _sync_active_skills_for_update(  # noqa: PLR0913
     list_command: ListSkillsCommandHandler,
+    sync_command: SyncSkillsCommandHandler,
     update_command: UpdateSkillCommandHandler,
     update_managed_command: UpdateManagedSkillsCommandHandler | None,
     *,
     output_format: str,
     yes: bool,
 ) -> UpdateSkillsRunResult:
-    list_command(ListSkillsCommand(status=LatentSkillStatus.active))
+    list_result = list_command(ListSkillsCommand(status=LatentSkillStatus.active))
     managed_results = (
         update_managed_command(UpdateManagedSkillsCommand(project_root=Path.cwd()))
         if update_managed_command is not None
         else []
     )
-    skill_ids = _active_project_skill_ids(Path.cwd())
+    canonical_skill_ids = _active_canonical_project_skill_ids(list_result)
+    legacy_skill_ids = _active_project_skill_ids(Path.cwd(), exclude_ids=set(canonical_skill_ids))
     results: list[UpdateSkillsItem] = [*managed_results]
-    for skill_id in skill_ids:
+    drift_decision = _default_native_drift_decision(output_format)
+    for skill_id in canonical_skill_ids:
+        sync_result = sync_command(
+            SyncSkillsCommand(
+                skill_id_or_name=skill_id,
+                origin="cli_update_skills",
+                drift_decision=drift_decision or "keep",
+            )
+        )
+        results.extend(sync_result.skills)
+    for skill_id in legacy_skill_ids:
         result = update_command(
             UpdateSkillCommand(
                 latent_skill_id=skill_id,
                 origin="cli_update_skills",
-                native_drift_decision=_default_native_drift_decision(output_format),
+                native_drift_decision=drift_decision,
             )
         )
         if _should_prompt_native_drift(result, output_format=output_format, yes=yes):
@@ -2949,13 +2969,34 @@ def _update_skills_item_updated(result: UpdateSkillsItem) -> bool:
     updated_paths = getattr(result, "updated_paths", None)
     if isinstance(updated_paths, list):
         return bool(updated_paths)
+    affected_paths = getattr(result, "affected_paths", None)
+    if isinstance(affected_paths, list):
+        return bool(affected_paths)
     return True
 
 
-def _active_project_skill_ids(project_root: Path) -> list[str]:
+def _active_canonical_project_skill_ids(result: ListSkillsResult) -> list[str]:
+    skill_ids: list[str] = []
+    for skill in result.skills:
+        if skill.scope != LatentSkillScope.project.value:
+            continue
+        if skill.status != "active" or skill.id is None:
+            continue
+        if skill.id == DEFAULT_UMEM_SKILL_ID:
+            continue
+        if skill.canonical_path is None:
+            continue
+        skill_ids.append(skill.id)
+    return skill_ids
+
+
+def _active_project_skill_ids(
+    project_root: Path, *, exclude_ids: set[str] | None = None
+) -> list[str]:
     path = project_root / ".umem" / "memory" / "latent_skills.jsonl"
     if not path.is_file():
         return []
+    exclude_ids = exclude_ids or set()
     skill_ids: list[str] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -2971,6 +3012,8 @@ def _active_project_skill_ids(project_root: Path) -> list[str]:
                 f"Invalid latent skills store: {path.as_posix()}"
             ) from error
         if payload.get("id") == DEFAULT_UMEM_SKILL_ID:
+            continue
+        if payload.get("id") in exclude_ids:
             continue
         if payload.get("status") == LatentSkillStatus.active.value and isinstance(
             payload.get("id"), str
@@ -3215,6 +3258,8 @@ def _update_skills_success_envelope(result: UpdateSkillsRunResult) -> dict[str, 
 def _update_skills_item_payload(result: UpdateSkillsItem) -> dict[str, Any]:
     if isinstance(result, UpdateManagedSkillTemplateResult):
         return {"managed": True, **result.to_payload()}
+    if isinstance(result, SyncSkillResult):
+        return {"managed": False, **result.to_payload()}
     return {"managed": False, **_skill_mutation_payload(result)}
 
 
@@ -4220,6 +4265,11 @@ def _format_human_update_skills(result: UpdateSkillsRunResult) -> str:
             if item.preserved_paths:
                 lines.append("Preserved paths:")
                 lines.extend(f"  - {path}" for path in item.preserved_paths)
+        elif isinstance(item, SyncSkillResult):
+            lines.append(f"Canonical skill: {item.name} ({item.status})")
+            if item.affected_paths:
+                lines.append("Synced paths:")
+                lines.extend(f"  - {path}" for path in item.affected_paths)
     warnings = result.warnings
     if warnings:
         lines.append("Warnings:")

@@ -171,6 +171,32 @@ def test_update_managed_skills_updates_legacy_default_umem_lifecycle(
     )
 
 
+def test_update_managed_skills_detects_default_umem_skill_without_latent_record(
+    tmp_path: Path,
+) -> None:
+    _setup_full_project(tmp_path)
+    (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").unlink()
+    lifecycle_path = (
+        tmp_path
+        / ".umem"
+        / "skills"
+        / "use-universal-memory"
+        / "references"
+        / "skills-lifecycle.md"
+    )
+    lifecycle_path.write_text(LEGACY_SKILLS_LIFECYCLE, encoding="utf-8")
+
+    result = UpdateManagedSkillsUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+        UpdateManagedSkillsCommand(project_root=tmp_path)
+    )
+
+    assert len(result) == 1
+    assert result[0].status == "updated"
+    assert result[0].updated_paths == [
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+    ]
+
+
 def test_update_managed_skills_preserves_custom_default_umem_skill_with_warning(
     tmp_path: Path,
 ) -> None:

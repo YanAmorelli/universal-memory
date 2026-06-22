@@ -446,6 +446,8 @@ class UpdateManagedSkillsUseCase:
         ]
 
     def _default_umem_skill_is_registered(self, project_root: Path) -> bool:
+        if self._default_umem_skill_has_managed_paths(project_root):
+            return True
         path = project_root / DEFAULT_UMEM_LATENT_SKILLS_RELATIVE_PATH
         if not path.exists():
             return False
@@ -468,6 +470,16 @@ class UpdateManagedSkillsUseCase:
             ):
                 return True
         return False
+
+    def _default_umem_skill_has_managed_paths(self, project_root: Path) -> bool:
+        skill_file = project_root / DEFAULT_UMEM_SKILL_RELATIVE_PATH
+        if not skill_file.is_file():
+            return False
+        expected_paths = [
+            DEFAULT_UMEM_SKILL_RELATIVE_PATH,
+            *DEFAULT_UMEM_SKILL_REFERENCES,
+        ]
+        return any((project_root / relative_path).is_file() for relative_path in expected_paths)
 
     def _is_known_managed_template(self, relative_path: str, content: str) -> bool:
         known_hashes = LEGACY_DEFAULT_UMEM_SKILL_HASHES.get(relative_path, set())

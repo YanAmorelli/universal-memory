@@ -145,6 +145,56 @@ def test_sync_keeps_managed_drift_by_default(tmp_path: Path) -> None:
     assert repository.read(skill_id).native_installations[0]["drift_detected"] is True
 
 
+def test_sync_removes_obsolete_managed_files_from_previous_manifest(tmp_path: Path) -> None:
+    safe_write, repository, skill_id = _create_skill(tmp_path)
+    canonical_reference = tmp_path / ".umem" / "skills" / "repair-skill" / "references" / "old.md"
+    canonical_reference.parent.mkdir(parents=True)
+    canonical_reference.write_text("Managed reference.\n", encoding="utf-8")
+    use_case = SyncSkillsUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    )
+    use_case.execute(SyncSkillsCommand(origin="test", targets=["opencode"]))
+    native_reference = tmp_path / ".opencode" / "skills" / "repair-skill" / "references" / "old.md"
+    assert native_reference.is_file()
+
+    canonical_reference.unlink()
+    result = use_case.execute(SyncSkillsCommand(origin="test", targets=["opencode"]))
+
+    assert not native_reference.exists()
+    assert ".opencode/skills/repair-skill/references/old.md" in result.affected_paths
+    assert "references/old.md" not in repository.read(skill_id).native_installations[0]["manifest"]
+
+
+def test_sync_preserves_unmanaged_extra_files_while_pruning_manifest(tmp_path: Path) -> None:
+    safe_write, repository, skill_id = _create_skill(tmp_path)
+    canonical_reference = tmp_path / ".umem" / "skills" / "repair-skill" / "references" / "old.md"
+    canonical_reference.parent.mkdir(parents=True)
+    canonical_reference.write_text("Managed reference.\n", encoding="utf-8")
+    use_case = SyncSkillsUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    )
+    use_case.execute(SyncSkillsCommand(origin="test", targets=["opencode"]))
+    native_extra = tmp_path / ".opencode" / "skills" / "repair-skill" / "local-notes.md"
+    native_extra.write_text("Unmanaged local notes.\n", encoding="utf-8")
+    nested_native_extra = (
+        tmp_path / ".opencode" / "skills" / "repair-skill" / "references" / "local.md"
+    )
+    nested_native_extra.write_text("Unmanaged local reference.\n", encoding="utf-8")
+
+    canonical_reference.unlink()
+    result = use_case.execute(SyncSkillsCommand(origin="test", targets=["opencode"]))
+
+    assert native_extra.read_text(encoding="utf-8") == "Unmanaged local notes.\n"
+    assert nested_native_extra.read_text(encoding="utf-8") == "Unmanaged local reference.\n"
+    assert result.skills[0].targets[0]["status"] == "synced"
+    assert ".opencode/skills/repair-skill/references/old.md" in result.affected_paths
+    assert repository.read(skill_id).native_installations[0]["drift_detected"] is False
+
+
 def test_sync_preserves_unmanaged_native_target_without_persisting_baseline(tmp_path: Path) -> None:
     safe_write, repository, skill_id = _create_skill(tmp_path)
     native_file = tmp_path / ".opencode" / "skills" / "repair-skill" / "SKILL.md"

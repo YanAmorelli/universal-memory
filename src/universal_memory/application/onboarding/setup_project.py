@@ -336,7 +336,7 @@ umem skills update <latent-skill-id> --file <relative-markdown-path> --format js
 - `list_skills()`
 - `get_skill_detail(name_or_id="<skill-id-or-name>")`
 - `create_skill(name="Skill name", description="What the skill does.", scope="project", raw_markdown="<complete SKILL.md content>")`
-- `import_skill(path=".agents/skills/<skill-name>", scope="project", replace_native=false)`
+- `import_skill(path=".agents/skills/<skill-name>", scope="project", replace_native=false, sync_after_import=true)`
 - `sync_skills(skill_id_or_name="<skill-id-or-name>", targets=null, drift_decision="keep")`
 - `track_latent_skill(name="Skill name", description="What the skill does.", scope="project", evidence_summary="Why this pattern recurred.", tags=["workflow"])`
 - `recommend_skills(scope="project", min_recurrence=null, dry_run=true)`
