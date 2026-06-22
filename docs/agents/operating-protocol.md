@@ -41,14 +41,29 @@ inferences.
 Prefer the CLI or MCP tool over direct file edits for memory, instruction, and
 skill mutations. This preserves snapshots, audit events, and secret scanning.
 
+## Skills During Work
+
+Treat `.umem/skills/<slug>/SKILL.md` as the canonical skill source. Native runtime
+folders are synchronized copies for the host that consumes them.
+
+Use the narrowest command for the task:
+
+- `umem skills create` for a new skill;
+- `umem skills import <path> --sync` for an existing `.agents/skills/...`,
+  `.opencode/skills/...`, or `SKILL.md`;
+- `umem skills sync <slug>` after editing one canonical skill;
+- `umem update --skills` for project-wide maintenance.
+
+Do not use `skills update`, `activate`, or `deactivate` on imported canonical skill IDs
+unless the command payload identifies the target as a latent/generated skill.
+
 ## Skill References
 
-The expected future skill reference location is:
+The operational skill reference location is:
 
 ```text
 .umem/skills/use-universal-memory/references/
 ```
 
-That directory is not present in this worktree. Until the SKILLS front creates
-it, agents should rely on the installed `use-universal-memory` skill instructions
-when available and this curated protocol page for public documentation.
+Agents should rely on the installed `use-universal-memory` skill instructions when
+available, then open the focused reference file for the current task.

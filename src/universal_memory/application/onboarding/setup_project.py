@@ -621,6 +621,7 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | Track skill | `umem skills track ... --format json` | `track_latent_skill(...)` |
 | Recommend skills | `umem skills recommend --scope project --format json` | `recommend_skills(scope="project", dry_run=true)` |
 | Propose skill | `umem skills propose <latent-skill-id> --decision yes --format json` | `propose_skill(latent_skill_id="<latent-skill-id>", decision="yes")` |
+| Promote skill recommendation | `umem skills promote <recommendation-id> --yes --format json` | `promote_skill_recommendation(recommendation_id="<recommendation-id>", confirm=true)` |
 | Generate skill | `umem skills generate <latent-skill-id> --yes --format json` | `generate_skill(latent_skill_id="<latent-skill-id>")` |
 | Activate skill | `umem skills activate <latent-skill-id> --format json` | `activate_skill(latent_skill_id="<latent-skill-id>")` |
 | Deactivate skill | `umem skills deactivate <latent-skill-id> --format json` | `deactivate_skill(latent_skill_id="<latent-skill-id>")` |

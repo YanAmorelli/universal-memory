@@ -60,6 +60,22 @@ For automation, prefer JSON:
 umem context --scope project --format json
 ```
 
+## Adopt An Existing Skill
+
+If you already have an Agent Skill under a native runtime folder, import it into UMEM and
+sync complete managed copies back to configured hosts:
+
+```bash
+umem skills import .agents/skills/review-protocol --scope project --sync
+umem skills detail review-protocol
+```
+
+From then on, edit `.umem/skills/review-protocol/SKILL.md` and refresh the native copies:
+
+```bash
+umem skills sync review-protocol
+```
+
 ## Check Health
 
 ```bash

@@ -82,8 +82,10 @@ umem skills detail <skill-id-or-name>
 umem skills create --name "Review Protocol" --description "Recurring review workflow"
 umem skills import .agents/skills/review-protocol --scope project --sync
 umem skills sync review-protocol
-umem skills propose <latent-skill-id>
-umem skills generate <latent-skill-id>
+umem skills recommend --scope project
+umem skills propose <latent-skill-id> --decision yes
+umem skills promote <recommendation-id> --yes
+umem skills generate <latent-skill-id> --yes
 umem skills activate <latent-skill-id>
 umem skills deactivate <latent-skill-id>
 umem skills update <latent-skill-id> --name "Updated Skill"
