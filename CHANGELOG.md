@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.1.5] - 2026-06-22
+
+### Changed
+
+- Updated README and user documentation with the 0.1.4 Agent Skills command flow.
+- Clarified `.umem/skills` as the canonical Agent Skills source of truth, with complete
+  synchronized native copies for supported runtimes.
+- Added create, import, sync, recommend, and promote examples across CLI and MCP parity
+  documentation.
+- Updated the packaged `use-universal-memory` reference template so generated project
+  guidance matches the project-owned docs.
+
+### Security
+
+- Bumped `starlette` from `1.0.1` to `1.3.1`, addressing StaticFiles path handling,
+  form parser limit enforcement, HTTP method dispatch, and URL authority handling fixes.
+- Bumped `python-multipart` from `0.0.29` to `0.0.31`, addressing form parsing,
+  Content-Length validation, and parameter smuggling fixes.
+- Bumped `cryptography` from `48.0.0` to `48.0.1`, updating packaged wheels to newer
+  OpenSSL builds.
+- Bumped `pydantic-settings` from `2.14.1` to `2.14.2`, fixing symlink traversal in
+  nested secrets settings sources.
+
 ## [0.1.4] - 2026-06-22
 
 ### Added
@@ -113,7 +136,8 @@ corresponding Git tags when available.
 - Added secret scanning guardrails.
 - Added safe-write snapshots and audit trails before mutations.
 
-[0.1.4]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.3...HEAD
+[0.1.5]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.0...v0.1.1
