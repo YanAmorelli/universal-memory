@@ -273,6 +273,7 @@ def _target_payload(installation: dict[str, Any]) -> dict[str, Any]:
         "drift_detected": drift,
         "canonical_hash": installation.get("canonical_hash", ""),
         "target_hash": installation.get("target_hash", ""),
+        "hash_algorithm": installation.get("hash_algorithm", ""),
         "audit_reference": installation.get("audit_reference", ""),
         "snapshot_reference": installation.get("snapshot_reference", ""),
         "affected_paths": list(installation.get("manifest", [])),

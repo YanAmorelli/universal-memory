@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from universal_memory.application.security import SafeWriteCommand, SafeWriteUseCase
 from universal_memory.application.skills.create_skill import _hash_text
 from universal_memory.application.skills.native_skill_sync import (
+    MANIFEST_TREE_HASH_ALGORITHM,
     NativeSkillSync,
     NativeSkillSyncResult,
 )
@@ -195,7 +196,7 @@ class ImportSkillUseCase:
                 )
 
             now = datetime.now(UTC)
-            content_hash = _hash_tree(files)
+            content_hash = _hash_text(markdown)
             import_source = self._safe_relative_source(source_dir, validated.scope)
             metadata: dict[str, Any] = {
                 "triggers": parsed.triggers,
@@ -426,6 +427,7 @@ class ImportSkillUseCase:
             "path": path,
             "canonical_hash": tree_hash,
             "target_hash": tree_hash,
+            "hash_algorithm": MANIFEST_TREE_HASH_ALGORITHM,
             "manifest": [relative_path for relative_path, _content in files],
             "timestamp": datetime.now(UTC).isoformat(),
             "audit_reference": "",

@@ -82,6 +82,10 @@ def test_sync_skills_materializes_missing_native_target_and_persists_installatio
     assert native_file.is_file()
     assert result.skills[0].targets[0]["runtime"] == "opencode"
     assert result.skills[0].targets[0]["status"] == "synced"
+    assert result.skills[0].targets[0]["hash_algorithm"] == "manifest_tree_sha256"
+    assert (
+        result.skills[0].targets[0]["canonical_hash"] == result.skills[0].targets[0]["target_hash"]
+    )
     assert stored.native_installations[0]["path"] == ".opencode/skills/repair-skill"
     assert result.affected_paths == [".opencode/skills/repair-skill/SKILL.md"]
 

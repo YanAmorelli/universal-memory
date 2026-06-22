@@ -28,6 +28,7 @@ DRIFT_WARNING = (
     "agent workflow. Keep local version or Overwrite with canonical library version? "
     "[Keep/Overwrite]"
 )
+MANIFEST_TREE_HASH_ALGORITHM = "manifest_tree_sha256"
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +68,6 @@ class NativeSkillSync:
         canonical_path = (canonical_base_path or self.project_root) / canonical_skill_file
         canonical_dir = canonical_path.parent
         canonical_files = _directory_files(canonical_dir)
-        canonical_hash = _hash_tree(canonical_files)
         previous_by_path = _previous_installations_by_path(skill.metadata)
 
         affected_paths: list[str] = []
@@ -83,6 +83,8 @@ class NativeSkillSync:
                     target_base=target.relative_path,
                     slug=slug,
                 )
+                target_files = _target_files_for(canonical_files, target)
+                target_canonical_hash = _hash_tree(target_files)
                 current_path = self.project_root / relative_path
                 previous = previous_by_path.get(relative_path)
                 current_hash = self._target_hash_for_previous_installation(current_path, previous)
@@ -104,8 +106,9 @@ class NativeSkillSync:
                             "source_skill_id": skill.id,
                             "runtime": runtime.runtime_id.value,
                             "path": relative_path,
-                            "canonical_hash": canonical_hash,
+                            "canonical_hash": target_canonical_hash,
                             "target_hash": current_hash,
+                            "hash_algorithm": MANIFEST_TREE_HASH_ALGORITHM,
                             "manifest": [],
                             "timestamp": datetime.now(UTC).isoformat(),
                             "audit_reference": "",
@@ -123,7 +126,6 @@ class NativeSkillSync:
                     continue
 
                 write_results = []
-                target_files = _target_files_for(canonical_files, target)
                 target_manifest = [path for path, _content in target_files]
                 for target_relative_file, content in target_files:
                     write_results.append(
@@ -159,8 +161,9 @@ class NativeSkillSync:
                         "source_skill_id": skill.id,
                         "runtime": runtime.runtime_id.value,
                         "path": relative_path,
-                        "canonical_hash": canonical_hash,
+                        "canonical_hash": target_canonical_hash,
                         "target_hash": _hash_tree(target_files),
+                        "hash_algorithm": MANIFEST_TREE_HASH_ALGORITHM,
                         "manifest": target_manifest,
                         "removed_paths": [
                             result.relative_path.removeprefix(f"{relative_path}/")

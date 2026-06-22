@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -47,6 +48,10 @@ def test_import_skill_copies_directory_and_registers_canonical_record(tmp_path: 
     assert stored.metadata["recommendation_flow"] is False
     assert stored.metadata["triggers"] == ["when reviewing code"]
     assert stored.metadata["import_source"] == "native/skills/review-helper"
+    assert (
+        stored.content_hash
+        == sha256((source / "SKILL.md").read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+    )
     assert result.skill_file == ".umem/skills/review-helper/SKILL.md"
     assert ".umem/skills/review-helper/references/guide.md" in result.created_paths
     assert not (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").exists()

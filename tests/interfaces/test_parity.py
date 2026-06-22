@@ -805,6 +805,7 @@ def sync_skills_result(command: SyncSkillsCommand) -> SyncSkillsResult:
                         "drift_detected": False,
                         "canonical_hash": "canonical",
                         "target_hash": "target",
+                        "hash_algorithm": "manifest_tree_sha256",
                         "audit_reference": "audit-1",
                         "snapshot_reference": "snapshot-1",
                         "affected_paths": ["SKILL.md"],

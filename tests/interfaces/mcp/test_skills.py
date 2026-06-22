@@ -187,6 +187,7 @@ def sync_result() -> SyncSkillsResult:
                         "drift_detected": False,
                         "canonical_hash": "canonical",
                         "target_hash": "target",
+                        "hash_algorithm": "manifest_tree_sha256",
                         "audit_reference": "audit-sync",
                         "snapshot_reference": "snapshot-sync",
                         "affected_paths": ["SKILL.md"],
@@ -781,6 +782,10 @@ async def test_sync_skills_tool_uses_mcp_origin_and_success_envelope(tmp_path: P
     assert success_payload["data"]["skills"][0]["targets"][0]["removed_paths"] == [
         "references/old.md"
     ]
+    assert (
+        success_payload["data"]["skills"][0]["targets"][0]["hash_algorithm"]
+        == "manifest_tree_sha256"
+    )
     assert success_payload["data"]["skills"][0]["targets"][0]["status"] == "synced"
 
 

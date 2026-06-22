@@ -35,6 +35,7 @@ def test_skills_sync_json_uses_cli_origin_targets_and_success_envelope(capsys) -
                             "drift_detected": False,
                             "canonical_hash": "canonical",
                             "target_hash": "target",
+                            "hash_algorithm": "manifest_tree_sha256",
                             "audit_reference": "audit-1",
                             "snapshot_reference": "snapshot-1",
                             "affected_paths": ["SKILL.md"],
@@ -83,6 +84,7 @@ def test_skills_sync_json_uses_cli_origin_targets_and_success_envelope(capsys) -
         ".opencode/skills/repair-skill/references/old.md"
     ]
     assert payload["data"]["skills"][0]["targets"][0]["removed_paths"] == ["references/old.md"]
+    assert payload["data"]["skills"][0]["targets"][0]["hash_algorithm"] == "manifest_tree_sha256"
     assert payload["data"]["skills"][0]["targets"][0]["status"] == "synced"
 
 
