@@ -1,0 +1,120 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+This project follows semantic versioning while it is in alpha. Dates are based on the
+corresponding Git tags when available.
+
+## [0.1.4] - 2026-06-22
+
+### Added
+
+- Added canonical Agent Skills lifecycle support with `.umem/skills/<slug>/SKILL.md` as
+  the source of truth.
+- Added `umem skills import <path> --sync` to adopt existing native skills into UMEM and
+  distribute complete native copies to configured targets.
+- Added `.agents/skills` as a managed native target for Codex/OpenAI-class hosts when
+  supported by the runtime registry.
+- Added Agent Skills documentation covering create, import, sync, update, target
+  behavior, and CLI/MCP parity expectations.
+
+### Changed
+
+- Changed native skill sync to distribute complete managed skill copies instead of local
+  wrapper files by default.
+- Changed `update --skills` to keep canonical skill drift intentionally rather than
+  overwriting local canonical edits.
+- Improved native sync output by separating synced/affected paths from removed managed
+  paths.
+- Clarified hash semantics for skill sync payloads: canonical `SKILL.md` hashes are
+  distinct from native target manifest tree hashes.
+- Updated documentation assets to use absolute image URLs for PyPI rendering.
+- Added public repository guardrails, grouped dependency update configuration, and SEO
+  metadata for the documentation site.
+
+### Fixed
+
+- Fixed native skill sync cleanup so obsolete UMEM-managed target files are removed
+  through snapshot/audit-backed safe writes while unmanaged local files are preserved.
+- Fixed CLI/MCP parity around import-sync, sync removals, and removed path reporting.
+- Fixed target hash reporting by marking native target hashes as
+  `manifest_tree_sha256`.
+
+## [0.1.3] - 2026-06-07
+
+### Added
+
+- Added a curated MkDocs documentation site with user, agent, contributor, and reference
+  pages.
+- Added a documentation publishing workflow for the docs site.
+- Added expanded UMEM guide skill references for startup, context, memory facts, host
+  sync, skill lifecycle, parity, and guardrails.
+
+### Changed
+
+- Packaged the UMEM guide skill references so installed distributions include the
+  expected skill documentation.
+- Clarified update command behavior so package upgrades are documented separately from
+  project context and skill updates.
+- Refined storage bootstrap follow-up documentation.
+
+### Fixed
+
+- Fixed packaged UMEM skill reference paths.
+- Fixed UMEM storage and host sync regressions.
+- Fixed storage bootstrap read-lock behavior.
+
+## [0.1.2] - 2026-06-04
+
+### Added
+
+- Added `umem doctor` diagnostics for project and environment checks.
+- Added project discovery metadata for package indexes and public repositories.
+- Added community contribution guidelines and templates.
+
+### Changed
+
+- Translated planning and implementation artifacts to technical English.
+- Bumped the package version for PyPI publishing.
+- Applied formatting and lint cleanups across the codebase.
+
+## [0.1.1] - 2026-06-04
+
+### Changed
+
+- Fixed README image and badge references for PyPI compatibility.
+- Improved package metadata and installation guidance in the README.
+
+## [0.1.0] - 2026-06-03
+
+### Added
+
+- Initial alpha release of Universal Memory as a local, vendor-agnostic memory layer for
+  AI agents.
+- Added local `.umem` project storage, TOML configuration, and project initialization.
+- Added safe atomic writes, local snapshots, audit log listing, and rollback by scope.
+- Added local fact storage, listing, purge, context hygiene, offline search, and context
+  summary assembly.
+- Added CLI commands for initialization, memory facts, context, status, rollback, host
+  setup/sync, update, and skills operations.
+- Added FastMCP server support with CLI/MCP parity tests and structured error envelopes.
+- Added host instruction setup and sync for Codex `AGENTS.md` and Claude Code
+  `CLAUDE.md`.
+- Added latent skill tracking, proposal, generation, listing, detail, activation,
+  deactivation, update, and mutation flows.
+- Added native runtime registry groundwork and native skill support.
+- Added `umem update`, default locale configuration, terminal splash, and proactive memory
+  engagement guidance.
+- Added PyPI publishing workflow, MIT license, comprehensive README, CI, pre-commit,
+  pyright, ruff, and test coverage.
+
+### Security
+
+- Added secret scanning guardrails.
+- Added safe-write snapshots and audit trails before mutations.
+
+[0.1.4]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/YanAmorelli/universal-memory/releases/tag/v0.1.0
