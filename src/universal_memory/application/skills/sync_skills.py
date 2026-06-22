@@ -42,6 +42,7 @@ class SyncSkillResult:
     status: str
     canonical_path: str
     affected_paths: list[str] = field(default_factory=list)
+    removed_paths: list[str] = field(default_factory=list)
     targets: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     audit_reference: str = ""
@@ -55,6 +56,7 @@ class SyncSkillResult:
             "status": self.status,
             "canonical_path": self.canonical_path,
             "affected_paths": self.affected_paths,
+            "removed_paths": self.removed_paths,
             "targets": self.targets,
             "warnings": self.warnings,
             "audit_reference": self.audit_reference,
@@ -67,6 +69,7 @@ class SyncSkillsResult:
     skills: list[SyncSkillResult]
     warnings: list[str] = field(default_factory=list)
     affected_paths: list[str] = field(default_factory=list)
+    removed_paths: list[str] = field(default_factory=list)
     audit_reference: str = ""
     snapshot_reference: str = ""
 
@@ -74,6 +77,7 @@ class SyncSkillsResult:
         return {
             "skills": [skill.to_payload() for skill in self.skills],
             "affected_paths": self.affected_paths,
+            "removed_paths": self.removed_paths,
             "audit_reference": self.audit_reference,
             "snapshot_reference": self.snapshot_reference,
         }
@@ -118,6 +122,7 @@ class SyncSkillsUseCase:
         results: list[SyncSkillResult] = []
         warnings: list[str] = []
         affected_paths: list[str] = []
+        removed_paths: list[str] = []
         audit_refs: list[str] = []
         snapshot_refs: list[str] = []
         for skill in skills:
@@ -161,6 +166,7 @@ class SyncSkillsUseCase:
                 status=updated.status.value,
                 canonical_path=updated.canonical_path,
                 affected_paths=native_result.affected_paths,
+                removed_paths=native_result.removed_paths,
                 targets=[_target_payload(target) for target in native_result.installations],
                 warnings=native_result.warnings,
                 audit_reference=", ".join(ref for ref in skill_audit_refs if ref),
@@ -169,6 +175,7 @@ class SyncSkillsUseCase:
             results.append(skill_result)
             warnings.extend(native_result.warnings)
             affected_paths.extend(native_result.affected_paths)
+            removed_paths.extend(native_result.removed_paths)
             audit_refs.extend(skill_audit_refs)
             snapshot_refs.extend(skill_snapshot_refs)
 
@@ -176,6 +183,7 @@ class SyncSkillsUseCase:
             skills=results,
             warnings=warnings,
             affected_paths=affected_paths,
+            removed_paths=removed_paths,
             audit_reference=", ".join(ref for ref in audit_refs if ref),
             snapshot_reference=", ".join(ref for ref in snapshot_refs if ref),
         )
@@ -268,6 +276,7 @@ def _target_payload(installation: dict[str, Any]) -> dict[str, Any]:
         "audit_reference": installation.get("audit_reference", ""),
         "snapshot_reference": installation.get("snapshot_reference", ""),
         "affected_paths": list(installation.get("manifest", [])),
+        "removed_paths": list(installation.get("removed_paths", [])),
     }
 
 

@@ -260,6 +260,7 @@ CONTRACT_KEYS_BY_TOOL = {
     "sync_skills": {
         "skills",
         "affected_paths",
+        "removed_paths",
         "audit_reference",
         "snapshot_reference",
     },
@@ -455,6 +456,7 @@ CONTRACT_TYPES_BY_TOOL = {
     "sync_skills": {
         "skills": list,
         "affected_paths": list,
+        "removed_paths": list,
         "audit_reference": str,
         "snapshot_reference": str,
     },

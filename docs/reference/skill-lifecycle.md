@@ -90,6 +90,12 @@ umem skills update <latent-skill-id> --name "Updated Skill"
 umem update --skills
 ```
 
+Use `umem skills sync <skill-id-or-name>` when validating or refreshing one skill. A bare
+`umem skills sync` is project-wide and may report unrelated native targets. `umem update
+--skills` is also project-wide maintenance; it preserves managed native drift with `keep`
+and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-name>
+--drift-decision overwrite` when overwriting drift is intentional.
+
 ## File Shape
 
 Generated skills use a canonical structure:
@@ -106,5 +112,7 @@ material and helper automation.
 
 ## Safety
 
-Skill mutations should create snapshots and audit events. Native runtime sync
-should warn before overwriting manually changed target files.
+Skill mutations should create snapshots and audit events. Native runtime sync should warn
+before overwriting manually changed target files. When sync removes files that were
+previously managed by UMEM but no longer exist in the canonical skill directory, the
+removed files should be reported separately from written paths.

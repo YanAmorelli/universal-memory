@@ -307,6 +307,12 @@ umem skills update <latent-skill-id> --name "New name" --description "New descri
 umem skills update <latent-skill-id> --file <relative-markdown-path> --format json
 ```
 
+Use `umem skills sync <skill-id-or-name>` when validating or refreshing one skill. A bare
+`umem skills sync` is project-wide and may report unrelated native targets. `umem update
+--skills` is also project-wide maintenance; it preserves managed native drift with `keep`
+and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-name>
+--drift-decision overwrite` when overwriting drift is intentional.
+
 ## Parameters
 
 - `<skill-id-or-name>`: identifier or unique name for read-only detail.
@@ -367,6 +373,8 @@ umem skills update <latent-skill-id> --file <relative-markdown-path> --format js
   `.agents/skills/...`, or `.antigravity/...` depending on configured runtimes. Treat these
   as intentional worktree changes and review whether repository ignore rules should include
   generated runtime targets.
+- `skills sync` reports removed managed files separately from written paths when a file was
+  present in the previous UMEM manifest but is no longer present in the canonical skill.
 - For enabled AGENTS.md/Codex/OpenAI-class hosts with Agent Skills support,
   `.agents/skills/...` is the expected native target for complete synchronized copies.
 - `--replace-native` on import only rewrites the matching managed native source target when

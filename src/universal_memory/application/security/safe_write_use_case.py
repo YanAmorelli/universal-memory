@@ -57,6 +57,45 @@ class SafeWriteUseCase:
         prepared = self.prepare(command)
         return self.commit_prepared(prepared)
 
+    def delete(self, command: SafeWriteCommand) -> SafeWriteResult:
+        prepared = self.prepare(command)
+        command = prepared.command
+        try:
+            prepared.target_path.unlink(missing_ok=True)
+        except BaseException:
+            try:
+                self._record_audit(
+                    command,
+                    snapshot_reference=prepared.snapshot.id,
+                    result="failure",
+                    status="failed",
+                )
+            except Exception as audit_error:
+                audit_error.add_note("Audit failure suppressed to preserve delete exception")
+            raise
+
+        try:
+            event = self._record_audit(
+                command,
+                snapshot_reference=prepared.snapshot.id,
+                result="success",
+                status="logged",
+            )
+            audit_ref = event.audit_reference
+        except Exception as audit_exc:
+            print(
+                f"CRITICAL COMPLIANCE WARNING: Delete succeeded for {prepared.relative_path}, "
+                f"but audit logging failed: {audit_exc}. This delete is UNAUDITED.",
+                file=sys.stderr,
+            )
+            audit_ref = "UNAUDITED"
+
+        return SafeWriteResult(
+            relative_path=prepared.relative_path,
+            audit_reference=audit_ref,
+            snapshot_reference=prepared.snapshot.id,
+        )
+
     def prepare(self, command: SafeWriteCommand) -> PreparedSafeWrite:
         relative_path = self._validate_relative_path(command.relative_path)
 

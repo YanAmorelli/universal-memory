@@ -30,6 +30,23 @@ def _safe_write(tmp_path: Path) -> SafeWriteUseCase:
     )
 
 
+def _safe_write_with_recorders(
+    tmp_path: Path,
+) -> tuple[SafeWriteUseCase, RecordingSnapshotRepository, RecordingAuditRepository]:
+    snapshots = RecordingSnapshotRepository()
+    audit = RecordingAuditRepository()
+    return (
+        SafeWriteUseCase(
+            project_root=tmp_path,
+            secret_scanner=RecordingScanner(),
+            snapshot_repository=snapshots,
+            audit_log_repository=audit,
+        ),
+        snapshots,
+        audit,
+    )
+
+
 def _create_skill(tmp_path: Path, *, name: str = "Repair Skill"):
     safe_write = _safe_write(tmp_path)
     repository = LocalAgentSkillRepository(project_root=tmp_path, safe_write_use_case=safe_write)
@@ -146,7 +163,22 @@ def test_sync_keeps_managed_drift_by_default(tmp_path: Path) -> None:
 
 
 def test_sync_removes_obsolete_managed_files_from_previous_manifest(tmp_path: Path) -> None:
-    safe_write, repository, skill_id = _create_skill(tmp_path)
+    safe_write, snapshots, audit = _safe_write_with_recorders(tmp_path)
+    repository = LocalAgentSkillRepository(project_root=tmp_path, safe_write_use_case=safe_write)
+    result = CreateSkillUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(
+        CreateSkillCommand(
+            name="Repair Skill",
+            description="Repair native targets from canonical skill content.",
+            scope=LatentSkillScope.project,
+            origin="test",
+            targets=[],
+        )
+    )
+    skill_id = result.agent_skill.id
     canonical_reference = tmp_path / ".umem" / "skills" / "repair-skill" / "references" / "old.md"
     canonical_reference.parent.mkdir(parents=True)
     canonical_reference.write_text("Managed reference.\n", encoding="utf-8")
@@ -158,12 +190,20 @@ def test_sync_removes_obsolete_managed_files_from_previous_manifest(tmp_path: Pa
     use_case.execute(SyncSkillsCommand(origin="test", targets=["opencode"]))
     native_reference = tmp_path / ".opencode" / "skills" / "repair-skill" / "references" / "old.md"
     assert native_reference.is_file()
+    snapshots.written.clear()
+    audit.written.clear()
 
     canonical_reference.unlink()
     result = use_case.execute(SyncSkillsCommand(origin="test", targets=["opencode"]))
 
     assert not native_reference.exists()
     assert ".opencode/skills/repair-skill/references/old.md" in result.affected_paths
+    assert ".opencode/skills/repair-skill/references/old.md" in result.removed_paths
+    assert ".opencode/skills/repair-skill/references/old.md" in result.skills[0].removed_paths
+    assert "remove_obsolete_native_skill_file" in {event.action for event in audit.written}
+    assert ".opencode/skills/repair-skill/references/old.md" in {
+        snapshot.relative_path for snapshot in snapshots.written
+    }
     assert "references/old.md" not in repository.read(skill_id).native_installations[0]["manifest"]
 
 

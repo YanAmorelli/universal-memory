@@ -16,6 +16,7 @@ from universal_memory.domain.entities import (
     RuntimeAdapter,
     RuntimeId,
     RuntimeRegistry,
+    SafeWriteResult,
     default_runtime_registry,
 )
 from universal_memory.infrastructure.config.toml_loader import load_config
@@ -32,6 +33,7 @@ DRIFT_WARNING = (
 @dataclass(frozen=True, slots=True)
 class NativeSkillSyncResult:
     affected_paths: list[str] = field(default_factory=list)
+    removed_paths: list[str] = field(default_factory=list)
     audit_references: list[str] = field(default_factory=list)
     snapshot_references: list[str] = field(default_factory=list)
     installations: list[dict[str, Any]] = field(default_factory=list)
@@ -69,6 +71,7 @@ class NativeSkillSync:
         previous_by_path = _previous_installations_by_path(skill.metadata)
 
         affected_paths: list[str] = []
+        removed_paths: list[str] = []
         audit_refs: list[str] = []
         snapshot_refs: list[str] = []
         installations: list[dict[str, Any]] = []
@@ -134,15 +137,19 @@ class NativeSkillSync:
                             )
                         )
                     )
-                obsolete_paths = self._remove_obsolete_managed_files(
-                    target_root=current_path,
+                delete_results = self._remove_obsolete_managed_files(
+                    target_relative_path=relative_path,
                     previous_manifest=_manifest_for(previous),
                     target_manifest=target_manifest,
+                    origin=origin,
                 )
                 affected_paths.extend(result.relative_path for result in write_results)
-                affected_paths.extend(f"{relative_path}/{path}" for path in obsolete_paths)
+                affected_paths.extend(result.relative_path for result in delete_results)
+                removed_paths.extend(result.relative_path for result in delete_results)
                 audit_refs.extend(result.audit_reference for result in write_results)
+                audit_refs.extend(result.audit_reference for result in delete_results)
                 snapshot_refs.extend(result.snapshot_reference for result in write_results)
+                snapshot_refs.extend(result.snapshot_reference for result in delete_results)
                 if has_drift:
                     warnings.append(
                         f"Native target overwritten after manual drift: {relative_path}"
@@ -155,12 +162,17 @@ class NativeSkillSync:
                         "canonical_hash": canonical_hash,
                         "target_hash": _hash_tree(target_files),
                         "manifest": target_manifest,
+                        "removed_paths": [
+                            result.relative_path.removeprefix(f"{relative_path}/")
+                            for result in delete_results
+                        ],
                         "timestamp": datetime.now(UTC).isoformat(),
                         "audit_reference": ", ".join(
-                            result.audit_reference for result in write_results
+                            result.audit_reference for result in [*write_results, *delete_results]
                         ),
                         "snapshot_reference": ", ".join(
-                            result.snapshot_reference for result in write_results
+                            result.snapshot_reference
+                            for result in [*write_results, *delete_results]
                         ),
                         "drift_detected": False,
                         "status": "overwritten" if has_drift else "synced",
@@ -169,6 +181,7 @@ class NativeSkillSync:
 
         return NativeSkillSyncResult(
             affected_paths=affected_paths,
+            removed_paths=removed_paths,
             audit_references=audit_refs,
             snapshot_references=snapshot_refs,
             installations=installations,
@@ -188,18 +201,28 @@ class NativeSkillSync:
     def _remove_obsolete_managed_files(
         self,
         *,
-        target_root: Path,
+        target_relative_path: str,
         previous_manifest: list[str],
         target_manifest: list[str],
-    ) -> list[str]:
+        origin: str,
+    ) -> list[SafeWriteResult]:
         obsolete = sorted(set(previous_manifest) - set(target_manifest))
-        removed: list[str] = []
+        removed = []
         for relative_path in obsolete:
+            target_root = self.project_root / target_relative_path
             path = _safe_manifest_path(target_root, relative_path)
             if path is None or not path.is_file():
                 continue
-            path.unlink()
-            removed.append(relative_path)
+            result = self.safe_write_use_case.delete(
+                SafeWriteCommand(
+                    relative_path=f"{target_relative_path}/{relative_path}",
+                    content="",
+                    scope=AuditEventScope.project,
+                    origin=origin,
+                    action="remove_obsolete_native_skill_file",
+                )
+            )
+            removed.append(result)
             _prune_empty_directories(path.parent, target_root)
         return removed
 
