@@ -9,6 +9,7 @@ AGENTS.md
 CLAUDE.md
 *.diff
 _bmad-output/**/review-prompt-*.md
+.maestri/   
 
 # Universal Memory Local Database & Benchmarks
 .umem/*

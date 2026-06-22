@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/umem-logo-transparent.png" alt="Universal Memory logo" width="720">
+  <img src="https://docs.universal-memory.com/assets/umem-logo-transparent.png" alt="Universal Memory logo" width="720">
 </p>
 
 # Universal Memory (umem)
@@ -12,7 +12,7 @@ A vendor-agnostic cognitive persistence layer for AI agents. Eliminate the "repe
 
 To see the core idea visually, check out the [Excalidraw design](https://excalidraw.com/#json=j3XjQIWMYEnkIzHpypuBb,rNJaVOECDGZ3WSuEYcCDjQ) or the proposal structure:
 
-![Universal Memory MVP Proposal](docs/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
+![Universal Memory MVP Proposal](https://docs.universal-memory.com/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
 
 ### Diagram Breakdown
 

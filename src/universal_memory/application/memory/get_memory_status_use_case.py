@@ -9,6 +9,7 @@ from pathlib import Path
 
 from universal_memory import __version__
 from universal_memory.domain.entities import (
+    AgentSkillStatus,
     AuditEventScope,
     FactScope,
     FactStatus,
@@ -17,6 +18,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.ports import (
+    AgentSkillRepository,
     AuditLogRepository,
     FactRepository,
     LatentSkillRepository,
@@ -52,6 +54,7 @@ class GetMemoryStatusUseCase:
         rule_repository: RuleRepository,
         latent_skill_repository: LatentSkillRepository,
         layout_port: ProjectLayoutPort,
+        agent_skill_repository: AgentSkillRepository | None = None,
         audit_log_repository: AuditLogRepository | None = None,
         data_root: Path | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -59,6 +62,7 @@ class GetMemoryStatusUseCase:
         self.fact_repository = fact_repository
         self.rule_repository = rule_repository
         self.latent_skill_repository = latent_skill_repository
+        self.agent_skill_repository = agent_skill_repository
         self.layout_port = layout_port
         self.audit_log_repository = audit_log_repository
         self.data_root = data_root
@@ -79,10 +83,10 @@ class GetMemoryStatusUseCase:
                 approximate_size_bytes=0,
                 last_health_check=None,
                 host_validation={},
-                recommended_action="Execute 'umem init' a partir do diretorio raiz do projeto.",
+                recommended_action="Run 'umem init' from the project root directory.",
             )
 
-        # Diagnóstico de health check: verificar permissão de leitura/escrita
+        # Health check: verify read/write permissions.
         health_ok = True
         try:
             if not data_root.exists() or not os.access(data_root, os.R_OK | os.W_OK):
@@ -96,19 +100,24 @@ class GetMemoryStatusUseCase:
             fact_counts[fact.scope.value][fact.status.value] += 1
 
         active_rules = self.rule_repository.list(status=RuleStatus.active)
-        active_skills = self.latent_skill_repository.list(status=LatentSkillStatus.active)
+        registered_skills_count = self._registered_skills_count()
 
         return GetMemoryStatusResult(
             initialized=True,
             project_path=project_path,
             fact_counts=fact_counts,
             active_rules_count=len(active_rules),
-            registered_skills_count=len(active_skills),
+            registered_skills_count=registered_skills_count,
             approximate_size_bytes=_directory_size(data_root),
             last_health_check=format_utc_iso(self.clock()) if health_ok else None,
             host_validation=self._host_validation(),
             recommended_action=None,
         )
+
+    def _registered_skills_count(self) -> int:
+        if self.agent_skill_repository is not None:
+            return len(self.agent_skill_repository.list(status=AgentSkillStatus.active))
+        return len(self.latent_skill_repository.list(status=LatentSkillStatus.active))
 
     def _host_validation(self) -> dict[str, dict[str, str | None]]:
         unconfigured = {

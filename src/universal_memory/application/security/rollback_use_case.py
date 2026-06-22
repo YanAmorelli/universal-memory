@@ -54,8 +54,8 @@ class RollbackUseCase:
         )
         if not snapshots:
             raise SnapshotFailedError(
-                "Nenhum snapshot encontrado para o escopo solicitado. "
-                "Hint: execute uma mutacao segura antes de tentar rollback."
+                "No snapshot found for the requested scope. "
+                "Hint: run a safe mutation before trying rollback."
             )
 
         snapshot = max(snapshots, key=lambda item: self._normalize_datetime(item.timestamp))
@@ -73,9 +73,9 @@ class RollbackUseCase:
                     actual_hash = sha256(content).hexdigest()
                     if actual_hash != snapshot.hash:
                         raise SnapshotFailedError(
-                            "Falha de integridade do snapshot: hash SHA-256 do backup fisico "
-                            "nao corresponde ao manifesto. Hint: inspecione os snapshots e recrie "
-                            "o estado a partir de um backup confiavel."
+                            "Snapshot integrity failure: physical backup SHA-256 hash does not "
+                            "match the manifest. Hint: inspect snapshots and recreate state from "
+                            "a trusted backup."
                         )
                     self._atomic_write_bytes(target_path, content)
             else:
@@ -117,8 +117,8 @@ class RollbackUseCase:
     def _remove_created_file_snapshot(self, snapshot: Snapshot, target_path: Path) -> None:
         if snapshot.hash != EMPTY_FILE_HASH:
             raise SnapshotFailedError(
-                "Falha de integridade do snapshot: estado anterior ausente deve ter "
-                "hash SHA-256 de conteudo vazio. Hint: inspecione o manifesto de snapshots."
+                "Snapshot integrity failure: missing previous state must have an empty-content "
+                "SHA-256 hash. Hint: inspect the snapshot manifest."
             )
         target_path.unlink(missing_ok=True)
 

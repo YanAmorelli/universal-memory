@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-01T23:27:13Z"
-last_updated: "2026-06-03T18:41:00-03:00"
+last_updated: "2026-06-13T12:07:43-03:00"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
@@ -94,5 +94,11 @@ development_status:
   6-4-register-and-list-skills: done
   6-5-safely-activate-deactivate-and-edit-skills: done
   6-6-expose-skills-management-via-cli-and-mcp: done
+  6-7-agent-skills-canonical-registry-and-direct-create: done
+  6-8-agent-instruction-loop-for-latent-skills: done
+  6-9-agent-skills-recommend-latent-candidates: done
+  6-10-agent-skills-promote-approved-candidates: done
+  6-11-agent-skills-sync-canonical-to-native-targets: done
+  6-12-agent-skills-import-existing-native-skills: done
   spec-publish-to-pypi: done
   epic-6-retrospective: optional

@@ -133,7 +133,7 @@ class DeactivateSkillUseCase:
         skill = self.repository.read(validated.latent_skill_id)
         if skill.status != LatentSkillStatus.active:
             raise ValidationFailedError(
-                f"A latent skill {skill.id} precisa estar active para ser desativada."
+                f"Latent skill {skill.id} must be active before it can be deactivated."
             )
 
         native_result = None
@@ -168,21 +168,21 @@ class ActivateSkillUseCase:
         skill = self.repository.read(validated.latent_skill_id)
         if skill.status != LatentSkillStatus.ignored:
             raise ValidationFailedError(
-                f"A latent skill {skill.id} precisa estar ignored para ser ativada."
+                f"Latent skill {skill.id} must be ignored before it can be activated."
             )
 
         relative_path = self._skill_file_for(skill)
         absolute_path = self._absolute_skill_file_for(skill, relative_path)
         if not absolute_path.is_file():
-            raise ValidationFailedError(f"SKILL.md ausente no caminho esperado: {relative_path}")
+            raise ValidationFailedError(f"SKILL.md is missing at expected path: {relative_path}")
 
         try:
             parsed = _parse_skill_markdown(absolute_path.read_text(encoding="utf-8"))
         except OSError as exc:
-            raise ValidationFailedError(f"Falha ao ler SKILL.md: {relative_path}") from exc
+            raise ValidationFailedError(f"Failed to read SKILL.md: {relative_path}") from exc
 
         if not parsed.name or not parsed.description:
-            raise ValidationFailedError(f"frontmatter invalido em {relative_path}")
+            raise ValidationFailedError(f"Invalid frontmatter in {relative_path}")
 
         updated = _replace_skill(skill, status=LatentSkillStatus.active)
         write_result = self.repository.write(updated, origin=validated.origin)
@@ -269,7 +269,7 @@ class UpdateSkillUseCase:
                     origin=validated.origin,
                 )
             except Exception as rollback_error:
-                exc.add_note(f"Rollback do arquivo da skill falhou: {rollback_error}")
+                exc.add_note(f"Skill file rollback failed: {rollback_error}")
             raise
 
         audit_reference = write_result.audit_reference
@@ -286,7 +286,7 @@ class UpdateSkillUseCase:
             skill_file=relative_path,
             audit_reference=audit_reference,
             snapshot_reference=snapshot_reference,
-            rollback_hint="Use rollback por escopo para restaurar o snapshot anterior.",
+            rollback_hint="Use scoped rollback to restore the previous snapshot.",
             native_installations=native_result.installations if native_result is not None else [],
             warnings=native_result.warnings if native_result is not None else [],
         )
@@ -429,11 +429,11 @@ def _render_skill_markdown(skill: LatentSkill, project_root: Path) -> str:
         "",
         f"# {skill.name}",
         "",
-        "## Quando Usar",
+        "## When To Use",
         "",
         *[f"- {trigger}" for trigger in triggers],
         "",
-        "## Instrucoes Operacionais",
+        "## Operational Instructions",
         "",
         *[f"- {instruction}" for instruction in instructions],
         "",
@@ -465,8 +465,8 @@ def _instructions_for(skill: LatentSkill) -> list[str]:
         return instructions
     return [
         skill.description,
-        "Aplique a metodologia somente quando os gatilhos acima aparecerem no contexto.",
-        "Registre arquivos e referencias usando caminhos relativos ao projeto.",
+        "Apply the methodology only when the triggers above appear in context.",
+        "Record files and references using project-relative paths.",
     ]
 
 

@@ -222,7 +222,13 @@ def default_runtime_registry() -> RuntimeRegistry:
                 global_config_path=".codex/config.toml",
                 project_config_path=".codex/config.toml",
                 instruction_targets=[_agents_md_target()],
-                native_skill_targets=[],
+                native_skill_targets=[
+                    _native_skill_target(
+                        ".agents/skills",
+                        "markdown-directory",
+                        "sync_directory",
+                    )
+                ],
                 mcp_config_method="codex_toml_mcp_config",
                 read_validation_method="agents_md_compact_validator",
                 write_validation_method="safe_write_use_case",

@@ -70,6 +70,14 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "credentials" in skill_content
     assert "Record only curated, durable facts" in skill_content
     assert "References are loaded only on demand" in skill_content
+    for expected_skill_guidance in (
+        "Latent Skill Decision Loop",
+        "track_latent_skill",
+        "umem skills create",
+        "umem skills import <path>",
+        "do not call `track_latent_skill` just to",
+    ):
+        assert expected_skill_guidance in skill_content
     assert "Mandatory Startup" in skill_content
     assert "at the start of a work session or conversation" in skill_content
     assert "UMEM unavailable or uninitialized" in skill_content
@@ -102,6 +110,42 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
         "enabled": ["claude_code", "opencode", "codex", "cursor", "antigravity"]
     }
     assert "hosts" not in config
+
+
+def test_setup_project_skills_lifecycle_documents_valid_create_command(tmp_path: Path) -> None:
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+
+    skills_lifecycle_content = (
+        tmp_path
+        / ".umem"
+        / "skills"
+        / "use-universal-memory"
+        / "references"
+        / "skills-lifecycle.md"
+    ).read_text(encoding="utf-8")
+
+    assert '--trigger "when to use it"' in skills_lifecycle_content
+    assert (
+        "umem skills import .agents/skills/<skill-name> --scope project --sync"
+        in skills_lifecycle_content
+    )
+    assert "umem skills sync <skill-id-or-name> --format json" in skills_lifecycle_content
+    assert "Official Workflows" in skills_lifecycle_content
+    assert "do not pass a canonical `skill_id`" in skills_lifecycle_content
+    assert "umem host sync --apply --yes --format json" in skills_lifecycle_content
+    assert "Decision Guide For Agents" in skills_lifecycle_content
+    assert "Playbook: Adopt Existing Native Skill Into UMEM" in skills_lifecycle_content
+    assert "umem status --format json" in skills_lifecycle_content
+    assert "umem context --scope project --format json" in skills_lifecycle_content
+    assert "umem skills detail foo --format json" in skills_lifecycle_content
+    assert "native_installations" in skills_lifecycle_content
+    assert "Normal\n   `git status` can hide" in skills_lifecycle_content
+    assert "Native\nwrappers are a repository policy choice" in skills_lifecycle_content
+    assert "--file path/to/SKILL.md" not in skills_lifecycle_content
 
 
 def test_setup_project_persists_selected_runtimes(tmp_path: Path) -> None:
@@ -224,6 +268,38 @@ def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path)
         ".umem/skills/use-universal-memory/references/guardrails-and-recording.md",
         ".umem/memory/latent_skills.jsonl",
     ]
+
+
+def test_setup_project_does_not_overwrite_existing_default_umem_skill_reference(
+    tmp_path: Path,
+) -> None:
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+    lifecycle_path = (
+        tmp_path
+        / ".umem"
+        / "skills"
+        / "use-universal-memory"
+        / "references"
+        / "skills-lifecycle.md"
+    )
+    custom_content = "# Skills Lifecycle\n\nExisting project guidance must stay intact.\n"
+    lifecycle_path.write_text(custom_content, encoding="utf-8")
+
+    result = setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+
+    assert result.already_initialized is True
+    assert lifecycle_path.read_text(encoding="utf-8") == custom_content
+    assert (
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md" in result.existing_paths
+    )
 
 
 def test_setup_project_repairs_partial_layout_state(tmp_path: Path) -> None:
