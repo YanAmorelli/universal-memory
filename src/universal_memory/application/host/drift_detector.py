@@ -16,7 +16,7 @@ class InstructionDriftDetector:
             normalized = _normalize_line(claude_line)
             if normalized in agents_by_normalized:
                 warnings.append(
-                    "Instrucao duplicada em AGENTS.md e CLAUDE.md: "
+                    "Duplicate instruction in AGENTS.md and CLAUDE.md: "
                     f"{agents_by_normalized[normalized]}"
                 )
 
@@ -73,7 +73,8 @@ def _detect_always_never_contradictions(
         agents_polarity = _rule_polarity(agents_norm)
         if agents_polarity != claude_polarity:
             warnings.append(
-                f"Contradicao explicita entre AGENTS.md e CLAUDE.md: {agents_line} / {claude_line}"
+                f"Explicit contradiction between AGENTS.md and CLAUDE.md: "
+                f"{agents_line} / {claude_line}"
             )
     return warnings
 

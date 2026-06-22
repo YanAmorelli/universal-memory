@@ -7,8 +7,11 @@ from uuid import uuid4
 import pytest
 
 from universal_memory.application.memory import GetMemoryStatusCommand, GetMemoryStatusUseCase
+from universal_memory.application.security import SafeWriteResult
 from universal_memory.domain import ProjectLayoutPort, ProjectLayoutResult
 from universal_memory.domain.entities import (
+    AgentSkill,
+    AgentSkillStatus,
     AuditEvent,
     AuditEventScope,
     Fact,
@@ -22,6 +25,7 @@ from universal_memory.domain.entities import (
     RuleStatus,
 )
 from universal_memory.domain.ports import (
+    AgentSkillRepository,
     AuditLogRepository,
     FactRepository,
     LatentSkillRepository,
@@ -133,6 +137,36 @@ class RecordingLatentSkillRepository(LatentSkillRepository):
         return None
 
 
+class RecordingAgentSkillRepository(AgentSkillRepository):
+    def __init__(self, skills: list[AgentSkill]) -> None:
+        self.skills = skills
+        self.filters: list[tuple[LatentSkillScope | None, AgentSkillStatus | None]] = []
+
+    def read(self, id: str) -> AgentSkill:
+        raise KeyError(id)
+
+    def list(
+        self, scope: LatentSkillScope | None = None, status: AgentSkillStatus | None = None
+    ) -> list[AgentSkill]:
+        self.filters.append((scope, status))
+        skills = self.skills
+        if scope is not None:
+            skills = [skill for skill in skills if skill.scope == scope]
+        if status is not None:
+            skills = [skill for skill in skills if skill.status == status]
+        return skills
+
+    def write(self, entity: AgentSkill, *, origin: str = "repository") -> SafeWriteResult | None:
+        self.skills.append(entity)
+        return None
+
+    def delete(self, id: str) -> None:
+        raise KeyError(id)
+
+    def migrate(self, target_version: int) -> None:
+        return None
+
+
 class RecordingAuditLogRepository(AuditLogRepository):
     def __init__(self, events: list[AuditEvent] | None = None, *, fail_list: bool = False) -> None:
         self.events = events or []
@@ -194,6 +228,24 @@ def make_skill(*, status: LatentSkillStatus) -> LatentSkill:
     )
 
 
+def make_agent_skill(*, status: AgentSkillStatus) -> AgentSkill:
+    now = datetime(2026, 5, 27, tzinfo=UTC)
+    return AgentSkill(
+        id=str(uuid4()),
+        created_at=now,
+        updated_at=now,
+        name="canonical status",
+        slug="canonical-status",
+        description="Canonical status skill",
+        scope=LatentSkillScope.project,
+        status=status,
+        canonical_path=".umem/skills/canonical-status/SKILL.md",
+        origin="test",
+        audit_reference="audit-canonical",
+        content_hash="hash-canonical",
+    )
+
+
 def make_host_validation_event(
     *,
     host_id: str,
@@ -225,6 +277,7 @@ def build_use_case(  # noqa: PLR0913
     facts: list[Fact] | None = None,
     rules: list[Rule] | None = None,
     skills: list[LatentSkill] | None = None,
+    agent_skills: list[AgentSkill] | None = None,
     audit_log_repository: AuditLogRepository | None = None,
 ) -> tuple[
     GetMemoryStatusUseCase,
@@ -235,11 +288,15 @@ def build_use_case(  # noqa: PLR0913
     layout_port = RecordingLayoutPort(initialized=initialized)
     rule_repository = RecordingRuleRepository(rules or [])
     skill_repository = RecordingLatentSkillRepository(skills or [])
+    agent_skill_repository = (
+        RecordingAgentSkillRepository(agent_skills) if agent_skills is not None else None
+    )
     return (
         GetMemoryStatusUseCase(
             fact_repository=RecordingFactRepository(facts or []),
             rule_repository=rule_repository,
             latent_skill_repository=skill_repository,
+            agent_skill_repository=agent_skill_repository,
             layout_port=layout_port,
             audit_log_repository=audit_log_repository,
         ),
@@ -262,7 +319,7 @@ def test_status_returns_actionable_uninitialized_result_without_creating_files(
 
     assert result.initialized is False
     assert result.project_path == "."
-    assert result.recommended_action == "Execute 'umem init' a partir do diretorio raiz do projeto."
+    assert result.recommended_action == "Run 'umem init' from the project root directory."
     assert result.fact_counts == {}
     assert result.last_health_check is None
     assert layout_port.checked_roots == [tmp_path]
@@ -322,6 +379,27 @@ def test_status_counts_initialized_memory_and_detects_hosts(
     }
     assert rules.filters == [(None, RuleStatus.active)]
     assert skills.filters == [(None, LatentSkillStatus.active)]
+
+
+def test_status_counts_registered_canonical_skills_when_repository_is_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".umem" / "memory").mkdir(parents=True)
+    use_case, _layout, _rules, latent_skills = build_use_case(
+        initialized=True,
+        project_root=tmp_path,
+        skills=[make_skill(status=LatentSkillStatus.active)],
+        agent_skills=[
+            make_agent_skill(status=AgentSkillStatus.active),
+            make_agent_skill(status=AgentSkillStatus.disabled),
+        ],
+    )
+
+    result = use_case.execute(GetMemoryStatusCommand(project_root=tmp_path))
+
+    assert result.registered_skills_count == 1
+    assert latent_skills.filters == []
 
 
 def test_status_loads_latest_host_validation_from_audit_log(

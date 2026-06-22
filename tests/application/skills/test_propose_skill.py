@@ -167,7 +167,7 @@ def test_sim_accepts_once_and_keeps_future_occurrences_subject_to_confirmation(
 
     stored = repository.read(skill.id)
     assert stored.status == LatentSkillStatus.active
-    assert stored.metadata["approval"]["decision"] == "sim"
+    assert stored.metadata["approval"]["decision"] == "yes"
     assert result.accepted is True
     assert result.auto_approval_recorded is False
     assert load_config(tmp_path).project_data.get("skills", {}) == {}
@@ -195,7 +195,7 @@ def test_sempre_accepts_and_records_reversible_auto_approval_preference(
     assert stored.status == LatentSkillStatus.active
     assert preference["name"] == "TDD recorrente"
     assert preference["scope"] == "project"
-    assert preference["decision"] == "sempre"
+    assert preference["decision"] == "always"
     assert preference["reversible"] is True
     assert result.accepted is True
     assert result.auto_approval_recorded is True
@@ -219,7 +219,7 @@ def test_nao_ignores_latent_skill_without_creating_skill_files(tmp_path: Path) -
 
     stored = repository.read(skill.id)
     assert stored.status == LatentSkillStatus.ignored
-    assert stored.metadata["approval"]["decision"] == "nao"
+    assert stored.metadata["approval"]["decision"] == "no"
     assert result.accepted is False
     assert not (tmp_path / ".umem" / "skills").exists()
 

@@ -1,3 +1,6 @@
+from universal_memory.infrastructure.storage.local_agent_skill_repository import (
+    LocalAgentSkillRepository,
+)
 from universal_memory.infrastructure.storage.local_context_summary_repository import (
     LocalContextSummaryRepository,
 )
@@ -8,6 +11,7 @@ from universal_memory.infrastructure.storage.local_latent_skill_repository impor
 from universal_memory.infrastructure.storage.local_rule_repository import LocalRuleRepository
 
 __all__ = [
+    "LocalAgentSkillRepository",
     "LocalContextSummaryRepository",
     "LocalFactRepository",
     "LocalLatentSkillRepository",

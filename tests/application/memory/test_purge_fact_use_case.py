@@ -107,12 +107,12 @@ def test_purge_fact_by_scope_only_removes_matching_scope() -> None:
 def test_purge_fact_requires_id_or_scope() -> None:
     use_case = PurgeFactUseCase(fact_repository=RecordingFactRepository())
 
-    with pytest.raises(ValidationFailedError, match="id de fato ou um escopo"):
+    with pytest.raises(ValidationFailedError, match="fact ID or a scope"):
         use_case.execute(PurgeFactCommand(id=None, scope=None))
 
 
 def test_purge_fact_raises_when_both_id_and_scope_provided() -> None:
     use_case = PurgeFactUseCase(fact_repository=RecordingFactRepository())
 
-    with pytest.raises(ValidationFailedError, match="simultaneamente id e escopo"):
+    with pytest.raises(ValidationFailedError, match="not both"):
         use_case.execute(PurgeFactCommand(id="fact-id", scope=FactScope.project))

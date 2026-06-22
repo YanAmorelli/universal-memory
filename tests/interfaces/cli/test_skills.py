@@ -9,6 +9,9 @@ from universal_memory.application.skills import (
     ActivateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
+    RecommendSkillsCommand,
+    RecommendSkillsResult,
+    SkillRecommendationItem,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
     UpdateSkillCommand,
@@ -60,7 +63,7 @@ def update_result() -> UpdateSkillResult:
         skill_file=".umem/skills/tdd-recorrente/SKILL.md",
         audit_reference="audit-3",
         snapshot_reference="snapshot-3",
-        rollback_hint="Use rollback por escopo para restaurar o snapshot anterior.",
+        rollback_hint="Use scoped rollback to restore the previous snapshot.",
     )
 
 
@@ -262,6 +265,7 @@ def test_skills_missing_id_maps_not_found_storage_error_to_validation_failed(cap
 
     assert exit_code == 1
     assert payload["error"]["code"] == "validation_failed"
+    assert "edit `.umem/skills/<slug>/SKILL.md`" in payload["error"]["detail"]
 
 
 def test_skills_global_mutation_human_output_uses_global_store_path(capsys) -> None:
@@ -441,3 +445,85 @@ def test_skills_track_secret_error_maps_to_safe_json(capsys) -> None:
     assert payload["ok"] is False
     assert payload["error"]["code"] == "secret_detected"
     assert "password=123" not in payload["error"]["detail"]
+
+
+def recommend_result() -> RecommendSkillsResult:
+    return RecommendSkillsResult(
+        recommendations=[
+            SkillRecommendationItem(
+                id=SKILL_ID,
+                name="TDD Recorrente",
+                description="Executa red green refactor",
+                scope="project",
+                status="proposed",
+                recurrence_count=2,
+                evidence_summaries=["first", "second"],
+                tags=["tdd"],
+                confidence=0.77,
+                reasons=["recurrence_count 2 meets minimum recurrence threshold 2"],
+                recommended_action=f"umem skills promote {SKILL_ID}",
+            )
+        ],
+        thresholds={"min_recurrence": 2, "min_evidence_summaries": 2},
+        evidence_sources=[{"source": "latent_skills", "description": "Tracked latent records."}],
+        limitations=["First implementation only evaluates explicit `skills track` latent records."],
+    )
+
+
+def test_skills_recommend_json_passes_scope_and_min_recurrence(capsys) -> None:
+    seen: list[RecommendSkillsCommand] = []
+
+    def recommend(command: RecommendSkillsCommand) -> RecommendSkillsResult:
+        seen.append(command)
+        return recommend_result()
+
+    exit_code = cli_main(
+        [
+            "skills",
+            "recommend",
+            "--scope",
+            "all",
+            "--min-recurrence",
+            "1",
+            "--format",
+            "json",
+        ],
+        recommend_skills_command=recommend,
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert seen == [RecommendSkillsCommand(scope=None, min_recurrence=1)]
+    assert payload["operation"] == "skills.recommend"
+    assert payload["scope"] == "all"
+    assert payload["data"]["recommendations"][0]["recommended_action"] == (
+        f"umem skills promote {SKILL_ID}"
+    )
+
+
+def test_skills_recommend_human_output_shows_policy_and_next_action(capsys) -> None:
+    exit_code = cli_main(
+        ["skills", "recommend"],
+        recommend_skills_command=lambda _command: recommend_result(),
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Operation: skills.recommend" in output
+    assert "Evidence sources:" in output
+    assert "Limitations:" in output
+    assert f"Next action: umem skills promote {SKILL_ID}" in output
+
+
+def test_skills_recommend_validation_error_is_safe_json(capsys) -> None:
+    def recommend(_command: RecommendSkillsCommand) -> RecommendSkillsResult:
+        raise ValidationFailedError("min_recurrence must be at least 1.")
+
+    exit_code = cli_main(
+        ["skills", "recommend", "--format", "json"],
+        recommend_skills_command=recommend,
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["error"]["code"] == "validation_failed"

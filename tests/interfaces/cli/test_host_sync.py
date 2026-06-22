@@ -85,6 +85,42 @@ def test_host_sync_json_apply_requires_yes(
     assert "--yes" in payload["error"]["detail"]
 
 
+def test_host_sync_human_apply_non_tty_requires_yes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls = []
+
+    def host_sync(command: SyncInstructionsCommand) -> SyncInstructionsResult:
+        calls.append(command)
+        return SyncInstructionsResult(
+            host_ids=["codex"],
+            instruction_targets=[],
+            planned_changes=[],
+            manual_steps=[],
+            validation_status="planned",
+            audit_reference="not-applied",
+            snapshot_reference="planned",
+            timestamp="2026-05-29T12:00:00Z",
+        )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+
+    exit_code = cli_main(
+        ["host", "sync", "--apply", "--format", "human"],
+        setup_project_command=lambda _project_root: None,  # type: ignore[arg-type,return-value]
+        host_sync_command=host_sync,
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert len(calls) == 1
+    assert "Non-TTY environment requires --yes" in captured.err
+
+
 def test_host_sync_human_dry_run_displays_plan_and_dry_run_concluido(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -120,6 +156,37 @@ def test_host_sync_human_dry_run_displays_plan_and_dry_run_concluido(
     assert "Dry-run completed. No changes were applied to the filesystem." in captured.out
 
 
+def test_host_sync_human_apply_no_changes_explains_noop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def host_sync(command: SyncInstructionsCommand) -> SyncInstructionsResult:
+        return SyncInstructionsResult(
+            host_ids=command.host_ids,
+            instruction_targets=["AGENTS.md", "CLAUDE.md"],
+            planned_changes=[],
+            manual_steps=[],
+            validation_status="success",
+            audit_reference="not-applied",
+            snapshot_reference="not-needed",
+            timestamp="2026-05-29T12:00:00Z",
+        )
+
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = cli_main(
+        ["host", "sync", "--apply", "--yes", "--format", "human"],
+        setup_project_command=lambda _project_root: None,  # type: ignore[arg-type,return-value]
+        host_sync_command=host_sync,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Host sync completed. No instruction files needed changes." in captured.out
+    assert "Audit: not-applied (no filesystem write was needed)" in captured.out
+
+
 def test_host_sync_human_apply_interactive_confirmation_no(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -146,6 +213,8 @@ def test_host_sync_human_apply_interactive_confirmation_no(
         "universal_memory.interfaces.cli.init_command._confirm",
         lambda _prompt, **kwargs: False,
     )
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
     monkeypatch.chdir(tmp_path)
 
     exit_code = cli_main(

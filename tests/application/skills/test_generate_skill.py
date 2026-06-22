@@ -257,7 +257,7 @@ def test_generate_skill_fails_when_path_occupied_by_regular_file(tmp_path: Path)
     with pytest.raises(StorageError) as exc_info:
         use_case.execute(GenerateSkillCommand(latent_skill_id=skill.id, origin="test"))
 
-    assert "Caminho ocupado por um arquivo regular" in str(exc_info.value)
+    assert "Path is occupied by a regular file" in str(exc_info.value)
 
 
 def test_generate_skill_installs_native_targets_and_records_metadata(tmp_path: Path) -> None:

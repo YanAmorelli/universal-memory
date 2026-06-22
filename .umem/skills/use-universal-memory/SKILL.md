@@ -75,13 +75,30 @@ references as the canonical behavior contract.
   query only the specific UMEM state needed after the initial preflight.
 - Preserve relative paths in specs, docs, code, and reports.
 
+## Latent Skill Decision Loop
+
+- During substantial work and before the final response, consider whether you observed a
+  repeated, durable workflow that would help future agents.
+- If a reusable methodology, checklist, transformation, review pattern, or domain workflow
+  recurs, call `track_latent_skill` or `umem skills track` with a short name,
+  description, tags, and a sanitized evidence summary.
+- If the user explicitly asks to create a new skill from scratch, use direct
+  `create_skill` or `umem skills create`; do not create a latent candidate first.
+- If the user points to an existing local or native skill directory, use
+  `import_skill` or `umem skills import <path>`; do not recreate it with `create`,
+  `track`, `promote`, or `generate`.
+- If no durable repeated workflow was observed, do not call `track_latent_skill` just to
+  satisfy a checklist.
+- Never track secrets, raw logs, raw prompts, private customer data, uncertain patterns, or
+  one-off preferences as latent skill evidence. Route durable preferences to memory facts.
+
 ## Reference Routing
 
 - For startup, health, context loading, and active-skill discovery, read
   `references/startup-and-context.md`.
 - For remembering, listing, and purging facts, read `references/memory-facts.md`.
-- For latent skill tracking, proposal, generation, listing, detail, activation,
-  deactivation, and update, read `references/skills-lifecycle.md`.
+- For skill creation, import, sync, latent tracking, proposal, generation, listing,
+  detail, activation, deactivation, and update, read `references/skills-lifecycle.md`.
 - For host instruction setup, validation, and sync, read
   `references/host-instructions-sync.md`.
 - For CLI/MCP payload parity and error behavior, read `references/cli-mcp-parity.md`.

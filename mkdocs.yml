@@ -6,6 +6,7 @@ repo_name: YanAmorelli/universal-memory
 
 theme:
   name: material
+  custom_dir: docs/overrides
   language: en
   logo: assets/umem-logo-transparent.png
   icon:

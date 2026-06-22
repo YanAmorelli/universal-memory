@@ -12,6 +12,10 @@ from universal_memory.__main__ import main
 from universal_memory.application.skills import (
     ListSkillsCommand,
     ListSkillsResult,
+    SkillListItem,
+    SyncSkillResult,
+    SyncSkillsCommand,
+    SyncSkillsResult,
     UpdateSkillCommand,
     UpdateSkillResult,
 )
@@ -20,6 +24,19 @@ from universal_memory.interfaces.cli.init_command import main as cli_main
 
 MIN_BENCHMARK_FACT_COUNT = 1000
 MIN_BENCHMARK_QUERY_COUNT = 30
+LEGACY_SKILLS_LIFECYCLE = """# Skills Lifecycle
+
+Use this reference for UMEM skill discovery, latent skill tracking, approval, generation,
+activation, deactivation, and updates.
+
+## Canonical CLI
+
+```bash
+umem skills list --format json
+umem skills generate <latent-skill-id> --yes --format json
+umem skills update <latent-skill-id> --file <relative-markdown-path> --format json
+```
+"""
 
 
 @pytest.fixture(autouse=True)
@@ -226,6 +243,7 @@ def test_update_skills_json_syncs_active_project_skills_with_keep_and_preserves_
     exit_code = cli_main(
         ["update", "--skills", "--format", "json"],
         list_skills_command=list_skills,
+        sync_skills_command=lambda _command: SyncSkillsResult(skills=[]),
         update_skill_command=update_skill,
     )
 
@@ -241,6 +259,185 @@ def test_update_skills_json_syncs_active_project_skills_with_keep_and_preserves_
             native_drift_decision="keep",
         )
     ]
+
+
+def test_update_skills_json_syncs_canonical_agent_skills_from_list_result(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    seen_sync: list[SyncSkillsCommand] = []
+    seen_update: list[UpdateSkillCommand] = []
+    monkeypatch.chdir(tmp_path)
+
+    def list_skills(command: ListSkillsCommand) -> ListSkillsResult:
+        assert command.status == LatentSkillStatus.active
+        return ListSkillsResult(
+            skills=[
+                SkillListItem(
+                    id="agent-skill-1",
+                    name="Review Helper",
+                    scope="project",
+                    status="active",
+                    relative_path=".umem/skills/review-helper/SKILL.md",
+                    canonical_path=".umem/skills/review-helper/SKILL.md",
+                    created_at="2026-06-01T00:00:00Z",
+                    updated_at="2026-06-01T00:00:00Z",
+                    origin="test",
+                    audit_reference="audit-list",
+                    targets=[],
+                )
+            ]
+        )
+
+    def sync_skills(command: SyncSkillsCommand) -> SyncSkillsResult:
+        seen_sync.append(command)
+        return SyncSkillsResult(
+            skills=[
+                SyncSkillResult(
+                    skill_id="agent-skill-1",
+                    name="Review Helper",
+                    scope="project",
+                    status="active",
+                    canonical_path=".umem/skills/review-helper/SKILL.md",
+                    affected_paths=[".agents/skills/review-helper/SKILL.md"],
+                    targets=[{"runtime": "codex", "path": ".agents/skills/review-helper"}],
+                )
+            ],
+            affected_paths=[".agents/skills/review-helper/SKILL.md"],
+        )
+
+    def update_skill(command: UpdateSkillCommand) -> UpdateSkillResult:
+        seen_update.append(command)
+        return _update_skill_result()
+
+    exit_code = cli_main(
+        ["update", "--skills", "--format", "json"],
+        list_skills_command=list_skills,
+        sync_skills_command=sync_skills,
+        update_skill_command=update_skill,
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["data"]["updated_count"] == 1
+    assert payload["data"]["skills"][0]["managed"] is False
+    assert payload["data"]["skills"][0]["canonical_path"] == (".umem/skills/review-helper/SKILL.md")
+    assert seen_sync == [
+        SyncSkillsCommand(
+            skill_id_or_name="agent-skill-1",
+            origin="cli_update_skills",
+            drift_decision="keep",
+        )
+    ]
+    assert seen_update == []
+
+
+def test_update_skills_human_separates_removed_managed_paths(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def list_skills(command: ListSkillsCommand) -> ListSkillsResult:
+        assert command.status == LatentSkillStatus.active
+        return ListSkillsResult(
+            skills=[
+                SkillListItem(
+                    id="agent-skill-1",
+                    name="Review Helper",
+                    scope="project",
+                    status="active",
+                    relative_path=".umem/skills/review-helper/SKILL.md",
+                    canonical_path=".umem/skills/review-helper/SKILL.md",
+                    created_at="2026-06-01T00:00:00Z",
+                    updated_at="2026-06-01T00:00:00Z",
+                    origin="test",
+                    audit_reference="audit-list",
+                    targets=[],
+                )
+            ]
+        )
+
+    def sync_skills(_command: SyncSkillsCommand) -> SyncSkillsResult:
+        return SyncSkillsResult(
+            skills=[
+                SyncSkillResult(
+                    skill_id="agent-skill-1",
+                    name="Review Helper",
+                    scope="project",
+                    status="active",
+                    canonical_path=".umem/skills/review-helper/SKILL.md",
+                    affected_paths=[
+                        ".agents/skills/review-helper/SKILL.md",
+                        ".agents/skills/review-helper/references/old.md",
+                    ],
+                    removed_paths=[".agents/skills/review-helper/references/old.md"],
+                    targets=[{"runtime": "codex", "path": ".agents/skills/review-helper"}],
+                )
+            ],
+            affected_paths=[
+                ".agents/skills/review-helper/SKILL.md",
+                ".agents/skills/review-helper/references/old.md",
+            ],
+            removed_paths=[".agents/skills/review-helper/references/old.md"],
+        )
+
+    exit_code = cli_main(
+        ["update", "--skills"],
+        list_skills_command=list_skills,
+        sync_skills_command=sync_skills,
+        update_skill_command=lambda _command: _update_skill_result(),
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Synced paths:" in output
+    assert "Removed managed paths:" in output
+    assert ".agents/skills/review-helper/references/old.md" in output
+    assert output.count(".agents/skills/review-helper/references/old.md") == 1
+
+
+def test_update_skills_json_updates_managed_default_umem_skill_and_reports_preserved_paths(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main(["init", "--yes", "--format", "json"]) == 0
+    capsys.readouterr()
+    lifecycle_path = (
+        tmp_path
+        / ".umem"
+        / "skills"
+        / "use-universal-memory"
+        / "references"
+        / "skills-lifecycle.md"
+    )
+    lifecycle_path.write_text(LEGACY_SKILLS_LIFECYCLE, encoding="utf-8")
+
+    exit_code = main(["update", "--skills", "--format", "json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["operation"] == "update.skills"
+    assert payload["data"]["updated_count"] == 1
+    assert payload["data"]["preserved_count"] == 0
+    skill = payload["data"]["skills"][0]
+    assert skill["managed"] is True
+    assert skill["name"] == "use-universal-memory"
+    assert skill["status"] == "updated"
+    assert skill["updated_paths"] == [
+        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+    ]
+    assert ".umem/skills/use-universal-memory/SKILL.md" in skill["preserved_paths"]
+    assert skill["audit_reference"]
+    assert skill["snapshot_reference"]
+    assert (
+        "umem skills import .agents/skills/<skill-name> --scope project --sync"
+        in lifecycle_path.read_text(encoding="utf-8")
+    )
 
 
 def test_skills_update_json_preserves_warnings_and_defaults_native_drift_to_keep(capsys) -> None:
