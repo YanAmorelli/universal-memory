@@ -43,41 +43,41 @@ def _normalize_text(value: str | None) -> str:
 
 def _query_specs() -> list[tuple[str, str, str, list[str]]]:
     return [
-        ("segredos", "segredos github_pat bloqueio scanner", "Segredos", ["security"]),
-        ("segredos", "chave aws secret access scanner", "AWS", ["security"]),
-        ("regras", "regras locais AGENTS.md precedencia", "AGENTS", ["rules"]),
-        ("regras", "instrucoes CLAUDE.md host claude", "Claude", ["rules"]),
-        ("global", "escopo global preferencia entre projetos", "Global", ["scope"]),
-        ("global", "memoria global compartilhada", "Compartilhada", ["scope"]),
-        ("project", "escopo project memoria local", "Project", ["scope"]),
-        ("arquitetura", "Arquitetura hexagonal ports adapters", "Arquitetura", ["architecture"]),
-        ("arquitetura", "MCP FastMCP adapter CLI paridade", "MCP", ["architecture"]),
-        ("auditoria", "auditoria snapshots rollback mutacao", "Auditoria", ["audit"]),
-        ("auditoria", "snapshot antes de mutacao segura", "Snapshot", ["audit"]),
-        ("latencia", "latencia recuperacao 150ms p95", "Latência", ["performance"]),
-        ("latencia", "consulta local abaixo 150ms", "Consulta", ["performance"]),
-        ("benchmark", "benchmark recuperacao textual semantico", "Benchmark", ["benchmark"]),
-        ("benchmark", "resultado retrieval-results json", "JSON", ["benchmark"]),
-        ("onboarding", "inicializacao .umem config toml", "Onboarding", ["onboarding"]),
-        ("onboarding", "layout local diretorio .umem", "Layout", ["onboarding"]),
-        ("skills", "latent skills recorrencia aprovacao", "Skills", ["skills"]),
-        ("skills", "agent skills estrutura ativar", "Agent", ["skills"]),
-        ("higiene", "context hygiene purge fatos", "Higiene", ["hygiene"]),
-        ("higiene", "purgar fatos obsoletos", "Purgar", ["hygiene"]),
-        ("busca", "busca textual substring regex acentuacao", "Busca", ["retrieval"]),
-        ("busca", "normalizacao caixa acentos", "Normalização", ["retrieval"]),
-        ("cli", "CLI Typer Rich comandos", "CLI", ["interface"]),
-        ("cli", "comando remember list search", "Comandos", ["interface"]),
-        ("mcp", "JSON-RPC contrato MCP tools", "JSON-RPC", ["interface"]),
-        ("mcp", "servidor MCP base fastmcp", "Servidor", ["interface"]),
-        ("simplicidade", "boring technology sem pytorch", "Boring", ["decision"]),
+        ("secrets", "secrets github_pat scanner block", "Secrets", ["security"]),
+        ("secrets", "aws secret access key scanner", "AWS", ["security"]),
+        ("rules", "local rules AGENTS.md precedence", "AGENTS", ["rules"]),
+        ("rules", "CLAUDE.md instructions claude host", "Claude", ["rules"]),
+        ("global", "global scope cross project preference", "Global", ["scope"]),
+        ("global", "shared global memory", "Shared", ["scope"]),
+        ("project", "project scope local memory", "Project", ["scope"]),
+        ("architecture", "hexagonal architecture ports adapters", "Architecture", ["architecture"]),
+        ("architecture", "MCP FastMCP adapter CLI parity", "MCP", ["architecture"]),
+        ("audit", "audit snapshots rollback mutation", "Audit", ["audit"]),
+        ("audit", "snapshot before safe mutation", "Snapshot", ["audit"]),
+        ("latency", "latency retrieval 150ms p95", "Latency", ["performance"]),
+        ("latency", "local query below 150ms", "Query", ["performance"]),
+        ("benchmark", "benchmark textual semantic retrieval", "Benchmark", ["benchmark"]),
+        ("benchmark", "retrieval-results json output", "JSON", ["benchmark"]),
+        ("onboarding", "initialize .umem config toml", "Onboarding", ["onboarding"]),
+        ("onboarding", "local layout .umem directory", "Layout", ["onboarding"]),
+        ("skills", "latent skills recurrence approval", "Skills", ["skills"]),
+        ("skills", "agent skills structure activate", "Agent", ["skills"]),
+        ("hygiene", "context hygiene purge facts", "Hygiene", ["hygiene"]),
+        ("hygiene", "purge obsolete facts", "Purge", ["hygiene"]),
+        ("search", "text search substring regex accents", "Search", ["retrieval"]),
+        ("search", "case and accent normalization", "Normalization", ["retrieval"]),
+        ("cli", "CLI Typer Rich commands", "CLI", ["interface"]),
+        ("cli", "remember list search command", "Commands", ["interface"]),
+        ("mcp", "JSON-RPC MCP tools contract", "JSON-RPC", ["interface"]),
+        ("mcp", "MCP server fastmcp base", "Server", ["interface"]),
+        ("simplicity", "boring technology without pytorch", "Boring", ["decision"]),
         (
-            "simplicidade",
-            "sem sentence transformers instalacao simples",
-            "Instalação",
+            "simplicity",
+            "no sentence transformers simple install",
+            "Installation",
             ["decision"],
         ),
-        ("qualidade", "score qualidade precisao revocabilidade", "Qualidade", ["quality"]),
+        ("quality", "quality score precision recall", "Quality", ["quality"]),
     ]
 
 
@@ -102,11 +102,11 @@ def generate_synthetic_facts(count: int = MIN_FACT_COUNT) -> list[BenchmarkFact]
         sequence = index + 1
         if sequence <= len(specs):
             content = (
-                f"{title}: fato sintetico {sequence} para benchmark de {category}. "
-                f"Termos alvo: {query}. Inclui recuperacao, memoria e seguranca."
+                f"{title}: synthetic fact {sequence} for {category} benchmark. "
+                f"Target terms: {query}. Includes retrieval, memory, and security."
             )
         else:
-            content = f"Fato sintetico distrator {sequence}: conteudo generico para benchmark."
+            content = f"Synthetic distractor fact {sequence}: generic benchmark content."
         facts.append(
             BenchmarkFact(
                 id=_benchmark_uuid(sequence),

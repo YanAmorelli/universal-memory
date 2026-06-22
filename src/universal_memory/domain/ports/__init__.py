@@ -1,3 +1,4 @@
+from universal_memory.domain.ports.agent_skill_repository import AgentSkillRepository
 from universal_memory.domain.ports.audit_log_repository import AuditLogRepository
 from universal_memory.domain.ports.config_validation_port import ConfigValidationPort
 from universal_memory.domain.ports.context_summary_repository import ContextSummaryRepository
@@ -9,6 +10,7 @@ from universal_memory.domain.ports.secret_scanner_port import SecretScannerPort
 from universal_memory.domain.ports.snapshot_repository import SnapshotRepository
 
 __all__ = [
+    "AgentSkillRepository",
     "AuditLogRepository",
     "ConfigValidationPort",
     "ContextSummaryRepository",

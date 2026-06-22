@@ -25,11 +25,16 @@ from universal_memory.application.security import (
 )
 from universal_memory.application.skills import (
     ActivateSkillUseCase,
+    CreateSkillUseCase,
     DeactivateSkillUseCase,
     GenerateSkillUseCase,
     GetSkillDetailUseCase,
+    ImportSkillUseCase,
     ListSkillsUseCase,
+    PromoteSkillRecommendationUseCase,
     ProposeSkillUseCase,
+    RecommendSkillsUseCase,
+    SyncSkillsUseCase,
     TrackLatentSkillUseCase,
     UpdateSkillUseCase,
 )
@@ -40,6 +45,7 @@ from universal_memory.infrastructure.security import (
     LocalSnapshotRepository,
 )
 from universal_memory.infrastructure.storage import (
+    LocalAgentSkillRepository,
     LocalContextSummaryRepository,
     LocalFactRepository,
     LocalLatentSkillRepository,
@@ -79,10 +85,16 @@ def build_server(project_root: Path | None = None) -> FastMCP:
         data_root=data_root,
         safe_write_use_case=safe_write_use_case,
     )
+    agent_skill_repository = LocalAgentSkillRepository(
+        project_root=root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
         rule_repository=rule_repository,
         latent_skill_repository=latent_skill_repository,
+        agent_skill_repository=agent_skill_repository,
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
         data_root=data_root,
@@ -146,6 +158,34 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             latent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    create_skill_use_case = CreateSkillUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    sync_skills_use_case = SyncSkillsUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    promote_skill_recommendation_use_case = PromoteSkillRecommendationUseCase(
+        recommendation_repository=latent_skill_repository,
+        create_skill_use_case=create_skill_use_case,
+    )
+    import_skill_use_case = ImportSkillUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
     _activate_skill_use_case = ActivateSkillUseCase(
         project_root=root,
         repository=latent_skill_repository,
@@ -166,10 +206,13 @@ def build_server(project_root: Path | None = None) -> FastMCP:
     list_skills_use_case = ListSkillsUseCase(
         project_root=root,
         repository=latent_skill_repository,
+        agent_skill_repository=agent_skill_repository,
     )
+    recommend_skills_use_case = RecommendSkillsUseCase(repository=latent_skill_repository)
     get_skill_detail_use_case = GetSkillDetailUseCase(
         project_root=root,
         repository=latent_skill_repository,
+        agent_skill_repository=agent_skill_repository,
     )
 
     def initialize_project(project_root: Path):
@@ -198,6 +241,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:
             propose_skill=propose_skill_use_case.execute,
             track_latent_skill=track_latent_skill_use_case.execute,
             generate_skill=generate_skill_use_case.execute,
+            create_skill=create_skill_use_case.execute,
+            sync_skills=sync_skills_use_case.execute,
+            promote_skill_recommendation=promote_skill_recommendation_use_case.execute,
+            import_skill=import_skill_use_case.execute,
+            recommend_skills=recommend_skills_use_case.execute,
             list_skills=list_skills_use_case.execute,
             get_skill_detail=get_skill_detail_use_case.execute,
             activate_skill=_activate_skill_use_case.execute,

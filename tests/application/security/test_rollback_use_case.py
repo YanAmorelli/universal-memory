@@ -151,7 +151,7 @@ def test_rollback_without_snapshots_raises_domain_error_without_side_effects(
         audit_log_repository=audit,
     )
 
-    with pytest.raises(SnapshotFailedError, match="Nenhum snapshot"):
+    with pytest.raises(SnapshotFailedError, match="No snapshot"):
         use_case.execute(RollbackCommand(scope=SnapshotScope.project, origin="cli"))
 
     assert target.read_bytes() == b"current state\n"
@@ -176,7 +176,7 @@ def test_rollback_blocks_hash_mismatch_before_write_and_audits_failure(
         audit_log_repository=audit,
     )
 
-    with pytest.raises(SnapshotFailedError, match="integridade"):
+    with pytest.raises(SnapshotFailedError, match="integrity"):
         use_case.execute(RollbackCommand(scope=SnapshotScope.project, origin="cli"))
 
     assert target.read_bytes() == b"current state\n"
@@ -301,7 +301,7 @@ def test_rollback_rejects_nonexistent_snapshot_with_non_empty_hash(tmp_path: Pat
         audit_log_repository=audit,
     )
 
-    with pytest.raises(SnapshotFailedError, match="estado anterior ausente"):
+    with pytest.raises(SnapshotFailedError, match="missing previous state"):
         use_case.execute(RollbackCommand(scope=SnapshotScope.project, origin="cli"))
 
     assert target.exists()

@@ -43,17 +43,27 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
+    CreateSkillCommand,
+    CreateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
     GenerateSkillCommand,
     GenerateSkillResult,
     GetSkillDetailCommand,
     GetSkillDetailResult,
+    ImportSkillCommand,
+    ImportSkillResult,
     ListSkillsCommand,
     ListSkillsResult,
+    PromoteSkillRecommendationCommand,
+    PromoteSkillRecommendationResult,
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    RecommendSkillsCommand,
+    RecommendSkillsResult,
+    SyncSkillsCommand,
+    SyncSkillsResult,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
     UpdateSkillCommand,
@@ -103,6 +113,13 @@ SyncInstructionsCommandHandler = Callable[[SyncInstructionsCommand], SyncInstruc
 ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 TrackLatentSkillCommandHandler = Callable[[TrackLatentSkillCommand], TrackLatentSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
+CreateSkillCommandHandler = Callable[[CreateSkillCommand], CreateSkillResult]
+PromoteSkillRecommendationCommandHandler = Callable[
+    [PromoteSkillRecommendationCommand], PromoteSkillRecommendationResult
+]
+ImportSkillCommandHandler = Callable[[ImportSkillCommand], ImportSkillResult]
+RecommendSkillsCommandHandler = Callable[[RecommendSkillsCommand], RecommendSkillsResult]
+SyncSkillsCommandHandler = Callable[[SyncSkillsCommand], SyncSkillsResult]
 ListSkillsCommandHandler = Callable[[ListSkillsCommand], ListSkillsResult]
 GetSkillDetailCommandHandler = Callable[[GetSkillDetailCommand], GetSkillDetailResult]
 ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResult]
@@ -134,6 +151,11 @@ class MCPUseCases:
     propose_skill: ProposeSkillCommandHandler = _missing_use_case
     track_latent_skill: TrackLatentSkillCommandHandler = _missing_use_case
     generate_skill: GenerateSkillCommandHandler = _missing_use_case
+    create_skill: CreateSkillCommandHandler = _missing_use_case
+    promote_skill_recommendation: PromoteSkillRecommendationCommandHandler = _missing_use_case
+    import_skill: ImportSkillCommandHandler = _missing_use_case
+    recommend_skills: RecommendSkillsCommandHandler = _missing_use_case
+    sync_skills: SyncSkillsCommandHandler = _missing_use_case
     list_skills: ListSkillsCommandHandler = _missing_use_case
     get_skill_detail: GetSkillDetailCommandHandler = _missing_use_case
     activate_skill: ActivateSkillCommandHandler = _missing_use_case
@@ -159,6 +181,9 @@ def configure_server(  # noqa: PLR0915
             raise ValidationFailedError(
                 "Project memory is not initialized. Call initialize_project first."
             )
+
+    def project_initialized() -> bool:
+        return use_cases.status(GetMemoryStatusCommand(project_root=root)).initialized
 
     @server.tool(name="initialize_project")
     def initialize_project() -> ToolResponse:
@@ -557,6 +582,132 @@ def configure_server(  # noqa: PLR0915
         except Exception as error:
             return _mcp_tool_error(error, operation="skills.generate", scope="project")
 
+    @server.tool(name="create_skill")
+    def create_skill(  # noqa: PLR0913
+        name: str,
+        description: str,
+        scope: Literal["project", "global"] = "project",
+        triggers: list[str] | None = None,
+        raw_markdown: str | None = None,
+        targets: list[str] | None = None,
+    ) -> ToolResponse:
+        """Directly create a canonical Agent Skill without recommendation promotion."""
+        try:
+            latent_scope = _latent_skill_scope(scope)
+            if latent_scope is LatentSkillScope.project:
+                require_project_initialized()
+            result = use_cases.create_skill(
+                CreateSkillCommand(
+                    name=name.strip(),
+                    description=description.strip(),
+                    scope=latent_scope,
+                    origin="mcp",
+                    triggers=_normalize_triggers(triggers) or [],
+                    raw_markdown=raw_markdown,
+                    targets=targets,
+                )
+            )
+            return _success_envelope(
+                operation="skills.create",
+                scope=result.latent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.create", scope=_raw_scope(scope))
+
+    @server.tool(name="promote_skill_recommendation")
+    def promote_skill_recommendation(
+        recommendation_id: str,
+        edits: dict[str, Any] | None = None,
+        targets: list[str] | None = None,
+    ) -> ToolResponse:
+        """Promote an approved latent skill candidate into a canonical Agent Skill."""
+        try:
+            initialized = project_initialized()
+            edits = edits or {}
+            result = use_cases.promote_skill_recommendation(
+                PromoteSkillRecommendationCommand(
+                    recommendation_id=recommendation_id,
+                    origin="mcp",
+                    name=_optional_str(edits.get("name")),
+                    description=_optional_str(edits.get("description")),
+                    triggers=_normalize_triggers(edits.get("triggers")),
+                    targets=targets,
+                    project_initialized=initialized,
+                )
+            )
+            return _success_envelope(
+                operation="skills.promote",
+                scope=result.promoted_recommendation.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(
+                _map_skill_mutation_error(error, recommendation_id),
+                operation="skills.promote",
+                scope="project",
+            )
+
+    @server.tool(name="sync_skills")
+    def sync_skills(
+        skill_id_or_name: str | None = None,
+        targets: list[str] | None = None,
+        drift_decision: Literal["keep", "overwrite"] = "keep",
+    ) -> ToolResponse:
+        """Synchronize canonical Agent Skills into native host targets."""
+        try:
+            require_project_initialized()
+            if drift_decision not in {"keep", "overwrite"}:
+                raise ValidationFailedError("drift_decision must be 'keep' or 'overwrite'.")
+            result = use_cases.sync_skills(
+                SyncSkillsCommand(
+                    skill_id_or_name=skill_id_or_name.strip() if skill_id_or_name else None,
+                    targets=targets,
+                    drift_decision=drift_decision,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="skills.sync",
+                scope="all",
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.sync", scope="all")
+
+    @server.tool(name="import_skill")
+    def import_skill(
+        path: str,
+        scope: Literal["project", "global"] = "project",
+        replace_native: bool = False,
+        sync_after_import: bool = False,
+    ) -> ToolResponse:
+        """Import an existing native or local Agent Skill directory into canonical UMEM storage."""
+        try:
+            latent_scope = _latent_skill_scope(scope)
+            if latent_scope is LatentSkillScope.project:
+                require_project_initialized()
+            result = use_cases.import_skill(
+                ImportSkillCommand(
+                    path=path,
+                    scope=latent_scope,
+                    origin="mcp",
+                    replace_native=replace_native,
+                    sync_after_import=sync_after_import,
+                )
+            )
+            return _success_envelope(
+                operation="skills.import",
+                scope=result.latent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.import", scope=_raw_scope(scope))
+
     @server.tool(name="list_skills")
     def list_skills() -> ToolResponse:
         """List registered skills and candidates without mutating local state."""
@@ -570,6 +721,33 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="skills.list", scope="all")
+
+    @server.tool(name="recommend_skills")
+    def recommend_skills(
+        scope: Literal["project", "global", "all"] = "project",
+        min_recurrence: int | None = None,
+        dry_run: bool = True,
+    ) -> ToolResponse:
+        """Review read-only latent skill recommendations captured by explicit skills.track evidence.
+
+        This never promotes, imports, syncs, creates, or mutates skills. `dry_run` is accepted
+        for API clarity; non-read-only behavior is not supported.
+        """
+        try:
+            _ = dry_run
+            latent_scope = _latent_skill_scope_optional_all(scope)
+            if latent_scope is None or latent_scope is LatentSkillScope.project:
+                require_project_initialized()
+            result = use_cases.recommend_skills(
+                RecommendSkillsCommand(scope=latent_scope, min_recurrence=min_recurrence)
+            )
+            return _success_envelope(
+                operation="skills.recommend",
+                scope=latent_scope.value if latent_scope is not None else "all",
+                data=result.to_payload(),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.recommend", scope=_raw_scope(scope))
 
     @server.tool(name="get_skill_detail")
     def get_skill_detail(name_or_id: str) -> ToolResponse:
@@ -831,10 +1009,22 @@ def _skill_triggers(skill: Any) -> list[str]:
     return [str(raw_triggers)]
 
 
-def _normalize_triggers(triggers: list[str] | None) -> list[str] | None:
+def _normalize_triggers(triggers: object) -> list[str] | None:
     if triggers is None:
         return None
-    return [trigger.strip() for trigger in triggers if trigger.strip()]
+    if isinstance(triggers, list):
+        values = triggers
+    elif isinstance(triggers, tuple | set):
+        values = list(triggers)
+    else:
+        values = [triggers]
+    return [str(trigger).strip() for trigger in values if str(trigger).strip()]
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value).strip()
 
 
 def _entry_dict(entry: Any) -> dict[str, Any]:
@@ -877,6 +1067,19 @@ def _latent_skill_scope(value: Literal["project", "global"]) -> LatentSkillScope
     raise ValidationFailedError("scope must be 'project' or 'global'.")
 
 
+def _latent_skill_scope_optional_all(
+    value: Literal["project", "global", "all"],
+) -> LatentSkillScope | None:
+    normalized = str(value).lower()
+    if normalized == "all":
+        return None
+    if normalized == "global":
+        return LatentSkillScope.global_
+    if normalized == "project":
+        return LatentSkillScope.project
+    raise ValidationFailedError("scope must be 'project', 'global', or 'all'.")
+
+
 def _fact_scope_optional(value: Literal["project", "global"] | None) -> FactScope | None:
     if value is None:
         return None
@@ -906,11 +1109,11 @@ def _skill_decision(value: str | None) -> ProposeSkillDecision | None:
         return None
     normalized = value.strip().casefold()
     if normalized in {"y", "yes"}:
-        return ProposeSkillDecision.sim
+        return ProposeSkillDecision.yes
     if normalized == "always":
-        return ProposeSkillDecision.sempre
+        return ProposeSkillDecision.always
     if normalized in {"n", "no"}:
-        return ProposeSkillDecision.nao
+        return ProposeSkillDecision.no
     raise ValidationFailedError("decision must be 'yes', 'always' or 'no'.")
 
 

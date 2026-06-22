@@ -23,17 +23,23 @@ from universal_memory.application.security import (
 )
 from universal_memory.application.skills import (
     ActivateSkillUseCase,
+    CreateSkillUseCase,
     DeactivateSkillUseCase,
     GenerateSkillUseCase,
     GetSkillDetailUseCase,
+    ImportSkillUseCase,
     ListSkillsUseCase,
+    PromoteSkillRecommendationUseCase,
     ProposeSkillUseCase,
+    RecommendSkillsUseCase,
+    SyncSkillsUseCase,
     TrackLatentSkillUseCase,
     UpdateSkillUseCase,
 )
 from universal_memory.application.update import (
     UpdateBenchmarksUseCase,
     UpdateCheckUseCase,
+    UpdateManagedSkillsUseCase,
     UpdateMigrateUseCase,
 )
 from universal_memory.domain import SnapshotFailedError
@@ -60,6 +66,7 @@ from universal_memory.infrastructure.security import (
     LocalSnapshotRepository,
 )
 from universal_memory.infrastructure.storage import (
+    LocalAgentSkillRepository,
     LocalContextSummaryRepository,
     LocalFactRepository,
     LocalLatentSkillRepository,
@@ -105,7 +112,7 @@ class EmptyLatentSkillRepository(LatentSkillRepository):
         return None
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     project_root = Path.cwd()
     data_root = project_root / ".umem"
     layout_port = LocalProjectLayoutPort()
@@ -147,10 +154,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         data_root=data_root,
         safe_write_use_case=safe_write_use_case,
     )
+    agent_skill_repository = LocalAgentSkillRepository(
+        project_root=project_root,
+        data_root=data_root,
+        safe_write_use_case=safe_write_use_case,
+    )
     status_use_case = GetMemoryStatusUseCase(
         fact_repository=fact_repository,
         rule_repository=rule_repository,
         latent_skill_repository=latent_skill_repository,
+        agent_skill_repository=agent_skill_repository,
         layout_port=layout_port,
         audit_log_repository=audit_log_repository,
         data_root=data_root,
@@ -200,6 +213,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             latent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    create_skill_use_case = CreateSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    sync_skills_use_case = SyncSkillsUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    promote_skill_recommendation_use_case = PromoteSkillRecommendationUseCase(
+        recommendation_repository=latent_skill_repository,
+        create_skill_use_case=create_skill_use_case,
+    )
+    import_skill_use_case = ImportSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
     _activate_skill_use_case = ActivateSkillUseCase(
         project_root=project_root,
         repository=latent_skill_repository,
@@ -220,12 +261,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     list_skills_use_case = ListSkillsUseCase(
         project_root=project_root,
         repository=latent_skill_repository,
+        agent_skill_repository=agent_skill_repository,
     )
+    recommend_skills_use_case = RecommendSkillsUseCase(repository=latent_skill_repository)
     get_skill_detail_use_case = GetSkillDetailUseCase(
         project_root=project_root,
         repository=latent_skill_repository,
+        agent_skill_repository=agent_skill_repository,
     )
     update_check_use_case = UpdateCheckUseCase()
+    update_managed_skills_use_case = UpdateManagedSkillsUseCase(
+        safe_write_use_case=safe_write_use_case
+    )
     update_migrate_use_case = UpdateMigrateUseCase(safe_write_use_case=safe_write_use_case)
     update_benchmarks_use_case = UpdateBenchmarksUseCase(
         safe_write_use_case=safe_write_use_case,
@@ -276,12 +323,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         propose_skill_command=propose_skill_use_case.execute,
         track_latent_skill_command=track_latent_skill_use_case.execute,
         generate_skill_command=generate_skill_use_case.execute,
+        create_skill_command=create_skill_use_case.execute,
+        sync_skills_command=sync_skills_use_case.execute,
+        promote_skill_recommendation_command=promote_skill_recommendation_use_case.execute,
+        import_skill_command=import_skill_use_case.execute,
+        recommend_skills_command=recommend_skills_use_case.execute,
         list_skills_command=list_skills_use_case.execute,
         get_skill_detail_command=get_skill_detail_use_case.execute,
         activate_skill_command=_activate_skill_use_case.execute,
         deactivate_skill_command=_deactivate_skill_use_case.execute,
         update_skill_command=_update_skill_use_case.execute,
         update_check_command=update_check_use_case.execute,
+        update_managed_skills_command=update_managed_skills_use_case.execute,
         update_migrate_command=update_migrate_use_case.execute,
         update_benchmarks_command=update_benchmarks_use_case.execute,
         locale_resolver=locale_resolver,

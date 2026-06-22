@@ -4,6 +4,7 @@ import json
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -11,6 +12,14 @@ import tomli_w
 from pydantic import BaseModel, ValidationError
 
 from universal_memory import __version__
+from universal_memory.application.onboarding.setup_project import (
+    DEFAULT_UMEM_LATENT_SKILLS_RELATIVE_PATH,
+    DEFAULT_UMEM_SKILL_ID,
+    DEFAULT_UMEM_SKILL_MARKDOWN,
+    DEFAULT_UMEM_SKILL_NAME,
+    DEFAULT_UMEM_SKILL_REFERENCES,
+    DEFAULT_UMEM_SKILL_RELATIVE_PATH,
+)
 from universal_memory.application.security import (
     PreparedSafeWrite,
     SafeWriteCommand,
@@ -31,6 +40,14 @@ except ModuleNotFoundError as error:  # pragma: no cover
     raise RuntimeError("Python 3.11+ with tomllib is required") from error
 
 TARGET_SCHEMA_VERSION = 1
+LEGACY_DEFAULT_UMEM_SKILL_HASHES = {
+    DEFAULT_UMEM_SKILL_RELATIVE_PATH: {
+        "4a5ce3e12e0b0fbc3e970901394aac67c3d86ac0f4c3a6ec420427f6669b7443"
+    },
+    ".umem/skills/use-universal-memory/references/skills-lifecycle.md": {
+        "35a4fb6da6ce0ff7160166920dbc7082bd7733e703aef341b39573a9590e41cd"
+    },
+}
 MEMORY_FILES = (
     "facts.jsonl",
     "rules.jsonl",
@@ -196,6 +213,36 @@ class UpdateBenchmarksResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class UpdateManagedSkillsCommand:
+    project_root: Path
+    origin: str = "cli_update_skills"
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateManagedSkillTemplateResult:
+    name: str
+    status: str
+    skill_file: str
+    updated_paths: list[str]
+    preserved_paths: list[str]
+    audit_reference: str
+    snapshot_reference: str
+    warnings: list[str] = field(default_factory=list)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "status": self.status,
+            "skill_file": self.skill_file,
+            "updated_paths": self.updated_paths,
+            "preserved_paths": self.preserved_paths,
+            "audit_reference": self.audit_reference,
+            "snapshot_reference": self.snapshot_reference,
+            "warnings": self.warnings,
+        }
+
+
 class UpdateCheckUseCase:
     def __init__(self, *, installed_version: str = __version__) -> None:
         self.installed_version = installed_version
@@ -330,6 +377,121 @@ class UpdateCheckUseCase:
         if needs_migration:
             warnings.append("Legacy [hosts] config will be migrated to [runtimes].")
         return needs_migration
+
+
+class UpdateManagedSkillsUseCase:
+    def __init__(self, *, safe_write_use_case: SafeWritePort) -> None:
+        self.safe_write_use_case = safe_write_use_case
+
+    def execute(
+        self, command: UpdateManagedSkillsCommand
+    ) -> list[UpdateManagedSkillTemplateResult]:
+        root = command.project_root
+        if not self._default_umem_skill_is_registered(root):
+            return []
+
+        templates = {
+            DEFAULT_UMEM_SKILL_RELATIVE_PATH: DEFAULT_UMEM_SKILL_MARKDOWN,
+            **DEFAULT_UMEM_SKILL_REFERENCES,
+        }
+        updated_paths: list[str] = []
+        preserved_paths: list[str] = []
+        warnings: list[str] = []
+        audit_refs: list[str] = []
+        snapshot_refs: list[str] = []
+
+        for relative_path, expected_content in templates.items():
+            path = root / relative_path
+            existing_content = path.read_text(encoding="utf-8") if path.exists() else None
+            if existing_content == expected_content:
+                preserved_paths.append(relative_path)
+                continue
+            if existing_content is not None and not self._is_known_managed_template(
+                relative_path, existing_content
+            ):
+                preserved_paths.append(relative_path)
+                warnings.append(
+                    f"Preserved customized UMEM skill file: {relative_path}. "
+                    "Review manually before replacing it with the current managed template."
+                )
+                continue
+
+            result = self.safe_write_use_case.execute(
+                SafeWriteCommand(
+                    relative_path=relative_path,
+                    content=expected_content,
+                    scope=AuditEventScope.project,
+                    origin=command.origin,
+                    action="update_managed_umem_skill",
+                )
+            )
+            updated_paths.append(result.relative_path)
+            audit_refs.append(result.audit_reference)
+            snapshot_refs.append(result.snapshot_reference)
+
+        if not updated_paths and not preserved_paths and not warnings:
+            return []
+        status = "updated" if updated_paths else "preserved"
+        return [
+            UpdateManagedSkillTemplateResult(
+                name=DEFAULT_UMEM_SKILL_NAME,
+                status=status,
+                skill_file=DEFAULT_UMEM_SKILL_RELATIVE_PATH,
+                updated_paths=updated_paths,
+                preserved_paths=preserved_paths,
+                audit_reference=audit_refs[-1] if audit_refs else "",
+                snapshot_reference=snapshot_refs[-1] if snapshot_refs else "",
+                warnings=warnings,
+            )
+        ]
+
+    def _default_umem_skill_is_registered(self, project_root: Path) -> bool:
+        if self._default_umem_skill_has_managed_paths(project_root):
+            return True
+        path = project_root / DEFAULT_UMEM_LATENT_SKILLS_RELATIVE_PATH
+        if not path.exists():
+            return False
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as error:
+            raise StorageError(str(error)) from error
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValidationFailedError(
+                    f"Invalid latent skills store: {DEFAULT_UMEM_LATENT_SKILLS_RELATIVE_PATH}"
+                ) from error
+            if (
+                payload.get("id") == DEFAULT_UMEM_SKILL_ID
+                or payload.get("name") == DEFAULT_UMEM_SKILL_NAME
+            ):
+                return True
+        return False
+
+    def _default_umem_skill_has_managed_paths(self, project_root: Path) -> bool:
+        skill_file = project_root / DEFAULT_UMEM_SKILL_RELATIVE_PATH
+        if not skill_file.is_file():
+            return False
+        expected_paths = [
+            DEFAULT_UMEM_SKILL_RELATIVE_PATH,
+            *DEFAULT_UMEM_SKILL_REFERENCES,
+        ]
+        return any((project_root / relative_path).is_file() for relative_path in expected_paths)
+
+    def _is_known_managed_template(self, relative_path: str, content: str) -> bool:
+        known_hashes = LEGACY_DEFAULT_UMEM_SKILL_HASHES.get(relative_path, set())
+        if sha256(content.encode("utf-8")).hexdigest() in known_hashes:
+            return True
+        return relative_path.endswith("/references/skills-lifecycle.md") and (
+            content.startswith("# Skills Lifecycle\n")
+            and "UMEM skill discovery, latent skill tracking" in content
+            and "umem skills generate <latent-skill-id>" in content
+            and "umem skills import" not in content
+            and "umem skills sync" not in content
+        )
 
 
 def _read_memory_records(path: Path, filename: str) -> list[tuple[int, Any]]:

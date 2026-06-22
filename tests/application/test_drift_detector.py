@@ -16,7 +16,8 @@ def test_drift_detector_warns_about_duplicate_instruction_lines() -> None:
     )
 
     assert warnings == [
-        "Instrucao duplicada em AGENTS.md e CLAUDE.md: Use relative paths in specs, code and docs."
+        "Duplicate instruction in AGENTS.md and CLAUDE.md: "
+        "Use relative paths in specs, code and docs."
     ]
 
 
@@ -35,6 +36,6 @@ def test_drift_detector_warns_about_explicit_always_never_contradictions() -> No
     )
 
     assert warnings == [
-        "Contradicao explicita entre AGENTS.md e CLAUDE.md: "
+        "Explicit contradiction between AGENTS.md and CLAUDE.md: "
         "Always run tests before review. / Never run tests before review."
     ]
