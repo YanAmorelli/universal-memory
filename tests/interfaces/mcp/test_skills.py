@@ -178,6 +178,7 @@ def sync_result() -> SyncSkillsResult:
                 status="active",
                 canonical_path=".umem/skills/launch-funnel-operator/SKILL.md",
                 affected_paths=[".opencode/skills/launch-funnel-operator/SKILL.md"],
+                removed_paths=[".opencode/skills/launch-funnel-operator/references/old.md"],
                 targets=[
                     {
                         "runtime": "opencode",
@@ -189,6 +190,7 @@ def sync_result() -> SyncSkillsResult:
                         "audit_reference": "audit-sync",
                         "snapshot_reference": "snapshot-sync",
                         "affected_paths": ["SKILL.md"],
+                        "removed_paths": ["references/old.md"],
                     }
                 ],
                 audit_reference="audit-sync",
@@ -196,6 +198,7 @@ def sync_result() -> SyncSkillsResult:
             )
         ],
         affected_paths=[".opencode/skills/launch-funnel-operator/SKILL.md"],
+        removed_paths=[".opencode/skills/launch-funnel-operator/references/old.md"],
         audit_reference="audit-sync",
         snapshot_reference="snapshot-sync",
     )
@@ -769,6 +772,15 @@ async def test_sync_skills_tool_uses_mcp_origin_and_success_envelope(tmp_path: P
     ]
     assert success_payload["ok"] is True
     assert success_payload["operation"] == "skills.sync"
+    assert success_payload["data"]["removed_paths"] == [
+        ".opencode/skills/launch-funnel-operator/references/old.md"
+    ]
+    assert success_payload["data"]["skills"][0]["removed_paths"] == [
+        ".opencode/skills/launch-funnel-operator/references/old.md"
+    ]
+    assert success_payload["data"]["skills"][0]["targets"][0]["removed_paths"] == [
+        "references/old.md"
+    ]
     assert success_payload["data"]["skills"][0]["targets"][0]["status"] == "synced"
 
 

@@ -333,6 +333,72 @@ def test_update_skills_json_syncs_canonical_agent_skills_from_list_result(
     assert seen_update == []
 
 
+def test_update_skills_human_separates_removed_managed_paths(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def list_skills(command: ListSkillsCommand) -> ListSkillsResult:
+        assert command.status == LatentSkillStatus.active
+        return ListSkillsResult(
+            skills=[
+                SkillListItem(
+                    id="agent-skill-1",
+                    name="Review Helper",
+                    scope="project",
+                    status="active",
+                    relative_path=".umem/skills/review-helper/SKILL.md",
+                    canonical_path=".umem/skills/review-helper/SKILL.md",
+                    created_at="2026-06-01T00:00:00Z",
+                    updated_at="2026-06-01T00:00:00Z",
+                    origin="test",
+                    audit_reference="audit-list",
+                    targets=[],
+                )
+            ]
+        )
+
+    def sync_skills(_command: SyncSkillsCommand) -> SyncSkillsResult:
+        return SyncSkillsResult(
+            skills=[
+                SyncSkillResult(
+                    skill_id="agent-skill-1",
+                    name="Review Helper",
+                    scope="project",
+                    status="active",
+                    canonical_path=".umem/skills/review-helper/SKILL.md",
+                    affected_paths=[
+                        ".agents/skills/review-helper/SKILL.md",
+                        ".agents/skills/review-helper/references/old.md",
+                    ],
+                    removed_paths=[".agents/skills/review-helper/references/old.md"],
+                    targets=[{"runtime": "codex", "path": ".agents/skills/review-helper"}],
+                )
+            ],
+            affected_paths=[
+                ".agents/skills/review-helper/SKILL.md",
+                ".agents/skills/review-helper/references/old.md",
+            ],
+            removed_paths=[".agents/skills/review-helper/references/old.md"],
+        )
+
+    exit_code = cli_main(
+        ["update", "--skills"],
+        list_skills_command=list_skills,
+        sync_skills_command=sync_skills,
+        update_skill_command=lambda _command: _update_skill_result(),
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Synced paths:" in output
+    assert "Removed managed paths:" in output
+    assert ".agents/skills/review-helper/references/old.md" in output
+    assert output.count(".agents/skills/review-helper/references/old.md") == 1
+
+
 def test_update_skills_json_updates_managed_default_umem_skill_and_reports_preserved_paths(
     tmp_path: Path,
     monkeypatch,

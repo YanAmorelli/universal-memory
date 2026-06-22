@@ -4115,12 +4115,17 @@ def _format_human_skill_create_success(result: CreateSkillResult) -> str:
 
 
 def _format_human_skill_sync_success(result: SyncSkillsResult) -> str:
+    removed_paths = set(result.removed_paths)
+    affected_paths = [path for path in result.affected_paths if path not in removed_paths]
     lines = [
         "Operation: skills.sync",
         f"Skills synced: {len(result.skills)}",
         "Affected relative paths:",
     ]
-    lines.extend(f"  - {path}" for path in result.affected_paths)
+    lines.extend(f"  - {path}" for path in affected_paths)
+    if result.removed_paths:
+        lines.append("Removed managed paths:")
+        lines.extend(f"  - {path}" for path in result.removed_paths)
     target_lines = _skill_sync_target_lines(result)
     if target_lines:
         lines.append("Native runtime targets:")
@@ -4267,9 +4272,14 @@ def _format_human_update_skills(result: UpdateSkillsRunResult) -> str:
                 lines.extend(f"  - {path}" for path in item.preserved_paths)
         elif isinstance(item, SyncSkillResult):
             lines.append(f"Canonical skill: {item.name} ({item.status})")
-            if item.affected_paths:
+            removed_paths = set(item.removed_paths)
+            synced_paths = [path for path in item.affected_paths if path not in removed_paths]
+            if synced_paths:
                 lines.append("Synced paths:")
-                lines.extend(f"  - {path}" for path in item.affected_paths)
+                lines.extend(f"  - {path}" for path in synced_paths)
+            if item.removed_paths:
+                lines.append("Removed managed paths:")
+                lines.extend(f"  - {path}" for path in item.removed_paths)
     warnings = result.warnings
     if warnings:
         lines.append("Warnings:")

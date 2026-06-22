@@ -514,6 +514,47 @@ async def test_import_cli_and_mcp_json_data_keys_match_without_other_skill_capab
 
 
 @pytest.mark.anyio
+async def test_sync_skills_cli_and_mcp_json_include_removed_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    cli_exit_code = cli_main(
+        ["skills", "sync", "TDD recorrente", "--target", "opencode", "--format", "json"],
+        sync_skills_command=sync_skills_result,
+    )
+    cli_payload = json.loads(capsys.readouterr().out)
+    server = configure_server(
+        create_mcp_server(),
+        MCPUseCases(
+            status=lambda _command: status_result(),
+            context=lambda _command: context_result(),
+            sync_skills=sync_skills_result,
+        ),
+        project_root=tmp_path,
+    )
+    mcp_payload = (
+        await server.call_tool(
+            "sync_skills",
+            {
+                "skill_id_or_name": "TDD recorrente",
+                "targets": ["opencode"],
+                "drift_decision": "keep",
+            },
+        )
+    ).structured_content
+
+    assert cli_exit_code == 0
+    assert mcp_payload is not None
+    expected = [".opencode/skills/tdd-recorrente/references/old.md"]
+    assert cli_payload["data"]["removed_paths"] == expected
+    assert cli_payload["data"]["skills"][0]["removed_paths"] == expected
+    assert mcp_payload["data"]["removed_paths"] == expected
+    assert mcp_payload["data"]["skills"][0]["removed_paths"] == expected
+
+
+@pytest.mark.anyio
 async def test_mcp_domain_errors_use_json_rpc_codes_and_sanitized_detail(tmp_path: Path) -> None:
     def remember_error(_command: RememberFactCommand) -> RememberFactResult:
         raise SecretDetectedError(f"blocked {tmp_path}: {SECRET_SENTINEL}")
@@ -755,6 +796,7 @@ def sync_skills_result(command: SyncSkillsCommand) -> SyncSkillsResult:
                 status="active",
                 canonical_path=".umem/skills/tdd-recorrente/SKILL.md",
                 affected_paths=[".opencode/skills/tdd-recorrente/SKILL.md"],
+                removed_paths=[".opencode/skills/tdd-recorrente/references/old.md"],
                 targets=[
                     {
                         "runtime": "opencode",
@@ -766,6 +808,7 @@ def sync_skills_result(command: SyncSkillsCommand) -> SyncSkillsResult:
                         "audit_reference": "audit-1",
                         "snapshot_reference": "snapshot-1",
                         "affected_paths": ["SKILL.md"],
+                        "removed_paths": ["references/old.md"],
                     }
                 ],
                 audit_reference="audit-1",
@@ -773,6 +816,7 @@ def sync_skills_result(command: SyncSkillsCommand) -> SyncSkillsResult:
             )
         ],
         affected_paths=[".opencode/skills/tdd-recorrente/SKILL.md"],
+        removed_paths=[".opencode/skills/tdd-recorrente/references/old.md"],
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
     )

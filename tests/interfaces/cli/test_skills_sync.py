@@ -22,7 +22,11 @@ def test_skills_sync_json_uses_cli_origin_targets_and_success_envelope(capsys) -
                     scope="project",
                     status="active",
                     canonical_path=".umem/skills/repair-skill/SKILL.md",
-                    affected_paths=[".opencode/skills/repair-skill/SKILL.md"],
+                    affected_paths=[
+                        ".opencode/skills/repair-skill/SKILL.md",
+                        ".opencode/skills/repair-skill/references/old.md",
+                    ],
+                    removed_paths=[".opencode/skills/repair-skill/references/old.md"],
                     targets=[
                         {
                             "runtime": "opencode",
@@ -34,13 +38,18 @@ def test_skills_sync_json_uses_cli_origin_targets_and_success_envelope(capsys) -
                             "audit_reference": "audit-1",
                             "snapshot_reference": "snapshot-1",
                             "affected_paths": ["SKILL.md"],
+                            "removed_paths": ["references/old.md"],
                         }
                     ],
                     audit_reference="audit-1",
                     snapshot_reference="snapshot-1",
                 )
             ],
-            affected_paths=[".opencode/skills/repair-skill/SKILL.md"],
+            affected_paths=[
+                ".opencode/skills/repair-skill/SKILL.md",
+                ".opencode/skills/repair-skill/references/old.md",
+            ],
+            removed_paths=[".opencode/skills/repair-skill/references/old.md"],
             audit_reference="audit-1",
             snapshot_reference="snapshot-1",
         )
@@ -69,6 +78,11 @@ def test_skills_sync_json_uses_cli_origin_targets_and_success_envelope(capsys) -
         )
     ]
     assert payload["operation"] == "skills.sync"
+    assert payload["data"]["removed_paths"] == [".opencode/skills/repair-skill/references/old.md"]
+    assert payload["data"]["skills"][0]["removed_paths"] == [
+        ".opencode/skills/repair-skill/references/old.md"
+    ]
+    assert payload["data"]["skills"][0]["targets"][0]["removed_paths"] == ["references/old.md"]
     assert payload["data"]["skills"][0]["targets"][0]["status"] == "synced"
 
 
@@ -82,7 +96,11 @@ def test_skills_sync_human_outputs_native_targets_and_worktree_note(capsys) -> N
                     scope="project",
                     status="active",
                     canonical_path=".umem/skills/repair-skill/SKILL.md",
-                    affected_paths=[".opencode/skills/repair-skill/SKILL.md"],
+                    affected_paths=[
+                        ".opencode/skills/repair-skill/SKILL.md",
+                        ".opencode/skills/repair-skill/references/old.md",
+                    ],
+                    removed_paths=[".opencode/skills/repair-skill/references/old.md"],
                     targets=[
                         {
                             "runtime": "opencode",
@@ -92,7 +110,11 @@ def test_skills_sync_human_outputs_native_targets_and_worktree_note(capsys) -> N
                     ],
                 )
             ],
-            affected_paths=[".opencode/skills/repair-skill/SKILL.md"],
+            affected_paths=[
+                ".opencode/skills/repair-skill/SKILL.md",
+                ".opencode/skills/repair-skill/references/old.md",
+            ],
+            removed_paths=[".opencode/skills/repair-skill/references/old.md"],
             audit_reference="audit-1",
             snapshot_reference="snapshot-1",
         )
@@ -103,6 +125,9 @@ def test_skills_sync_human_outputs_native_targets_and_worktree_note(capsys) -> N
     assert exit_code == 0
     assert "Native runtime targets:" in output
     assert ".opencode/skills/repair-skill (synced)" in output
+    assert "Removed managed paths:" in output
+    assert ".opencode/skills/repair-skill/references/old.md" in output
+    assert output.count(".opencode/skills/repair-skill/references/old.md") == 1
     assert "Review git status and ignore rules intentionally" in output
 
 
