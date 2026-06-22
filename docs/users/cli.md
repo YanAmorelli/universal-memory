@@ -32,7 +32,7 @@ global facts are user-level preferences and durable context.
 ```bash
 umem host setup codex
 umem host check codex
-umem host sync --apply
+umem host sync --apply --yes
 ```
 
 Host commands configure instruction targets such as `AGENTS.md`, `CLAUDE.md`,
@@ -40,18 +40,38 @@ and supported native rule or skill directories.
 
 ## Skills
 
+Use `.umem/skills/<slug>/SKILL.md` as the canonical source. Native runtime folders are
+complete synchronized copies, not the place to evolve the skill long term.
+
 ```bash
 umem skills list
 umem skills detail <skill-id-or-name>
+umem skills create --name "Review Protocol" --description "Recurring review workflow"
+umem skills import .agents/skills/review-protocol --scope project --sync
+umem skills sync review-protocol
+umem skills sync review-protocol --drift-decision overwrite
 umem skills track --name "Review Protocol" --description "Recurring review workflow"
-umem skills propose <latent-skill-id>
-umem skills generate <latent-skill-id>
+umem skills recommend --scope project
+umem skills propose <latent-skill-id> --decision yes
+umem skills promote <recommendation-id> --yes
+umem skills generate <latent-skill-id> --yes
 umem skills activate <latent-skill-id>
 umem skills deactivate <latent-skill-id>
 umem skills update <latent-skill-id> --name "Updated Skill"
+umem update --skills
 ```
 
-Skill mutations use the same safe mutation pipeline as other persistent changes.
+Use `skills create` for a new canonical skill. Use `skills import <path> --sync` when a
+skill already exists under a native directory such as `.agents/skills/...`. Use
+`skills sync <skill-id-or-name>` when validating or refreshing one skill; a bare
+`skills sync` and `umem update --skills` are project-wide maintenance operations.
+
+`skills update`, `activate`, and `deactivate` currently operate on latent/generated skill
+IDs. To change an imported canonical skill, edit `.umem/skills/<slug>/SKILL.md`, then run
+`umem skills sync <slug>`.
+
+Skill mutations use the same safe mutation pipeline as other persistent changes, including
+snapshots and audit events for managed writes and removals.
 
 ## JSON Output
 

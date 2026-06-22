@@ -26,6 +26,23 @@ approval.
 
 Skills do not replace MCP. They reduce ambiguity around tool use.
 
+## Canonical Skill Store
+
+UMEM owns Agent Skills from `.umem/skills/<slug>/SKILL.md`. Native runtime directories
+such as `.agents/skills/<slug>/`, `.opencode/skills/<slug>/`, and
+`.antigravity/rules/<slug>/` are synchronized copies for specific hosts. Agents should
+evolve the canonical skill first, then call `umem skills sync <slug>` or the equivalent
+MCP `sync_skills` tool.
+
+Use this decision rule:
+
+- new skill from scratch: `umem skills create`;
+- existing native skill directory or `SKILL.md`: `umem skills import <path> --sync`;
+- recurring workflow evidence, but no skill yet: `umem skills track`, then
+  `umem skills recommend`, then ask before proposal or generation;
+- one canonical skill changed: `umem skills sync <slug>`;
+- project-wide maintenance: `umem update --skills`.
+
 ## Normal Agent Flow
 
 ```text
@@ -36,14 +53,15 @@ Agent proposes or records durable changes through the safe mutation pipeline
 Universal Memory writes snapshots, audit events, and managed targets
 ```
 
-## SKILLS Front Integration
+## Skill References
 
-The future curated reference location is expected to be:
+The curated operational references live in:
 
 ```text
 .umem/skills/use-universal-memory/references/
 ```
 
-That directory does not exist in this worktree yet. When the SKILLS front creates
-it, this page should link to those reference files and keep this page as the
-high-level explanation.
+Those files are the detailed agent-facing procedures for startup/context, memory facts,
+host sync, skill lifecycle, CLI/MCP parity, and recording guardrails. Keep this page as
+the high-level explanation and link agents to the references when they need the exact
+workflow.

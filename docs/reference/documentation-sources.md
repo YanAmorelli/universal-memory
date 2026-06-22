@@ -27,14 +27,14 @@ Use BMad artifacts to extract stable decisions, requirements, and validated
 behavior. Do not expose raw story files in the public navigation unless a future
 documentation decision explicitly creates an implementation archive.
 
-## Future Skill References
+## Skill References
 
-The expected future integration point for the Universal Memory operating skill
-is:
+The Universal Memory operating skill references are:
 
 ```text
 .umem/skills/use-universal-memory/references/
 ```
 
-That directory is not present in this worktree yet. When it exists, this page
-should link to curated reference files from the Agents and LLMs section.
+Those files contain the agent-facing procedures for startup/context, memory facts, host
+sync, skill lifecycle, CLI/MCP parity, and recording guardrails. Public docs should
+summarize those procedures without copying every operational detail into the site.
