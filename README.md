@@ -8,6 +8,8 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/universal-memory.svg)](https://pypi.org/project/universal-memory/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/YanAmorelli/universal-memory/blob/dev/LICENSE)
 
+**Website:** [universal-memory.com](https://universal-memory.com) | **Documentation:** [docs.universal-memory.com](https://docs.universal-memory.com)
+
 A vendor-agnostic cognitive persistence layer for AI agents. Eliminate the "repetition tax" by transporting your context, preferences, guidelines, and history seamlessly across sessions, IDEs, and LLM models.
 
 To see the core idea visually, check out the [Excalidraw design](https://excalidraw.com/#json=j3XjQIWMYEnkIzHpypuBb,rNJaVOECDGZ3WSuEYcCDjQ) or the proposal structure:
