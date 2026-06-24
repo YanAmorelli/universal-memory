@@ -6,7 +6,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/universal-memory.svg)](https://pypi.org/project/universal-memory/)
 [![Python Version](https://img.shields.io/pypi/pyversions/universal-memory.svg)](https://pypi.org/project/universal-memory/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/YanAmorelli/universal-memory/blob/dev/LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/YanAmorelli/universal-memory/blob/dev/LICENSE)
 
 **Website:** [universal-memory.com](https://universal-memory.com) | **Documentation:** [docs.universal-memory.com](https://docs.universal-memory.com)
 
@@ -266,4 +266,4 @@ umem skills generate <latent-skill-id> --yes
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+Distributed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for more information.
