@@ -34,6 +34,13 @@ umem --help
 umem-mcp --help
 ```
 
+Also validate the published-package MCP launch path from a directory without a local
+`pyproject.toml`:
+
+```bash
+uvx --from universal-memory umem-mcp --help
+```
+
 ## Tester Focus
 
 Ask testers to focus on:

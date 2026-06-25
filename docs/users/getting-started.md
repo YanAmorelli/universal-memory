@@ -82,3 +82,30 @@ umem skills sync review-protocol
 umem status
 umem doctor
 ```
+
+## Run The MCP Server
+
+For Claude Desktop or another MCP host, use a launch command that does not require a
+local `pyproject.toml`:
+
+```json
+{
+  "command": "uvx",
+  "args": ["--from", "universal-memory", "umem-mcp"]
+}
+```
+
+If you installed Universal Memory persistently with `uv tool install universal-memory` or
+`pipx install universal-memory`, use the installed entrypoint:
+
+```json
+{
+  "command": "umem-mcp",
+  "args": []
+}
+```
+
+If startup fails, run `uvx --from universal-memory umem doctor` or the installed
+`umem doctor`, then check the stderr line that starts with
+`Universal Memory MCP startup failed:`. GUI-launched MCP hosts may need the absolute
+path to `uvx` if they do not inherit your shell `PATH`.

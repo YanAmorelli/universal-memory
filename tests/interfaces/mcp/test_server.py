@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from fastmcp import FastMCP
 
+import universal_memory.bootstrap.mcp as mcp_bootstrap
 from universal_memory import __version__
 from universal_memory.__main__ import main
 from universal_memory.application.diagnostics import DoctorCheck, DoctorCommand, DoctorResult
@@ -1042,3 +1043,88 @@ async def test_bootstrap_server_uses_local_dependencies_without_network(
     assert payload["data"]["initialized"] is True
     assert payload["data"]["active_rules_count"] == 0
     assert payload["data"]["registered_skills_count"] == 0
+
+
+def test_mcp_entrypoint_reports_sanitized_startup_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sensitive_value = "sk-" + "test-secret"
+
+    class BrokenServer:
+        def run(self) -> None:
+            raise RuntimeError(f"Failed at {tmp_path} with token={sensitive_value}")
+
+    monkeypatch.setattr(mcp_bootstrap, "build_server", BrokenServer)
+
+    with pytest.raises(SystemExit) as exit_info:
+        mcp_bootstrap.main()
+
+    stderr = capsys.readouterr().err
+    assert exit_info.value.code == 1
+    assert stderr.startswith("Universal Memory MCP startup failed:")
+    assert "Recovery hint:" in stderr
+    assert "Traceback" not in stderr
+    assert str(tmp_path) not in stderr
+    assert sensitive_value not in stderr
+
+
+def test_mcp_entrypoint_help_does_not_start_server(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_build_server() -> None:
+        raise AssertionError("help must not build the MCP server")
+
+    monkeypatch.setattr(mcp_bootstrap, "build_server", fail_build_server)
+
+    mcp_bootstrap.main(["--help"])
+
+    output = capsys.readouterr()
+    assert "Usage: umem-mcp [--help]" in output.out
+    assert "Run the Universal Memory MCP server over stdio." in output.out
+    assert output.err == ""
+
+
+def test_mcp_entrypoint_reports_dependency_import_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_build_server() -> None:
+        raise ImportError("No module named 'fastmcp'")
+
+    monkeypatch.setattr(mcp_bootstrap, "build_server", fail_build_server)
+
+    with pytest.raises(SystemExit) as exit_info:
+        mcp_bootstrap.main([])
+
+    stderr = capsys.readouterr().err
+    assert exit_info.value.code == 1
+    assert stderr.startswith("Universal Memory MCP startup failed:")
+    assert "No module named 'fastmcp'" in stderr
+    assert "Recovery hint:" in stderr
+    assert "Traceback" not in stderr
+
+
+def test_mcp_entrypoint_failure_handler_survives_broken_exception_str(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class BrokenError(Exception):
+        def __str__(self) -> str:
+            raise RuntimeError("string formatting failed")
+
+    def fail_build_server() -> None:
+        raise BrokenError
+
+    monkeypatch.setattr(mcp_bootstrap, "build_server", fail_build_server)
+
+    with pytest.raises(SystemExit) as exit_info:
+        mcp_bootstrap.main([])
+
+    stderr = capsys.readouterr().err
+    assert exit_info.value.code == 1
+    assert stderr.startswith("Universal Memory MCP startup failed:")
+    assert "Recovery hint:" in stderr
+    assert "Traceback" not in stderr

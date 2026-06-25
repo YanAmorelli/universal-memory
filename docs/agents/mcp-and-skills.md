@@ -18,6 +18,33 @@ targets without bypassing product guardrails.
 MCP operations should reuse the same application use cases as CLI commands.
 That parity keeps behavior consistent for humans and agents.
 
+## Launching MCP
+
+For published package usage, prefer a launch command that works outside this repository
+and outside any local `uv` project:
+
+```json
+{
+  "command": "uvx",
+  "args": ["--from", "universal-memory", "umem-mcp"]
+}
+```
+
+For persistent installs created with `uv tool install universal-memory` or
+`pipx install universal-memory`, use:
+
+```json
+{
+  "command": "umem-mcp",
+  "args": []
+}
+```
+
+If a host reports that the MCP server exited before listing tools, inspect stderr for
+`Universal Memory MCP startup failed:` and run `uvx --from universal-memory umem doctor`
+or the installed `umem doctor` from the same environment. GUI-launched hosts may need
+the absolute path to `uvx` if they do not inherit your shell `PATH`.
+
 ## Why Skills Exist
 
 Skills are procedural guidance. They tell an agent when to query memory, when to
