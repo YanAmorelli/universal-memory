@@ -361,10 +361,11 @@ def test_init_human_interactive_renders_terminal_splash(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "umem" in captured.out
-    assert "USB" in captured.out
-    assert "==" in captured.out
-    assert captured.out.index("USB") < captured.out.index(".umem/")
-    assert "\x1b[" in captured.out
+    assert "_    _ __  __" in captured.out
+    assert "persistent context for AI agents" in captured.out
+    assert "USB" not in captured.out
+    assert captured.out.index("_    _ __  __") < captured.out.index(".umem/")
+    assert "\x1b[" not in captured.out
 
 
 def test_init_json_never_renders_terminal_splash_or_ansi(
@@ -382,6 +383,7 @@ def test_init_json_never_renders_terminal_splash_or_ansi(
     assert exit_code == 0
     assert captured.out.startswith("{")
     assert json.loads(captured.out)["ok"] is True
+    assert "_    _ __  __" not in captured.out
     assert "USB" not in captured.out
     assert "\x1b[" not in captured.out
 
@@ -412,6 +414,7 @@ def test_init_non_interactive_does_not_render_terminal_splash(
 
     captured = capsys.readouterr()
     assert exit_code == 0
+    assert "_    _ __  __" not in captured.out
     assert "USB" not in captured.out
     assert "\x1b[" not in captured.out
 
@@ -434,6 +437,7 @@ def test_init_ci_environment_does_not_render_terminal_splash(
 
     captured = capsys.readouterr()
     assert exit_code == 0
+    assert "_    _ __  __" not in captured.out
     assert "USB" not in captured.out
     assert "\x1b[" not in captured.out
 
@@ -457,7 +461,8 @@ def test_init_ci_falsy_values_do_not_suppress_terminal_splash(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "USB" in captured.out
+    assert "_    _ __  __" in captured.out
+    assert "USB" not in captured.out
 
 
 def test_init_no_color_renders_plain_ascii_splash(
@@ -479,7 +484,9 @@ def test_init_no_color_renders_plain_ascii_splash(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "umem" in captured.out
-    assert "USB" in captured.out
+    assert "_    _ __  __" in captured.out
+    assert "persistent context for AI agents" in captured.out
+    assert "USB" not in captured.out
     assert "\x1b[" not in captured.out
 
 
@@ -502,7 +509,8 @@ def test_init_missing_term_renders_plain_ascii_splash(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "USB" in captured.out
+    assert "_    _ __  __" in captured.out
+    assert "USB" not in captured.out
     assert "\x1b[" not in captured.out
 
 
