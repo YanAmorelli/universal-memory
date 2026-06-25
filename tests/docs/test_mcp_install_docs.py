@@ -6,7 +6,7 @@ DOC_PATHS = (
     Path("README.md"),
     Path("docs/users/getting-started.md"),
     Path("docs/agents/mcp-and-skills.md"),
-    Path("docs/contributors/release-and-alpha.md"),
+    Path("docs/contributors/release-readiness.md"),
 )
 
 

@@ -22,7 +22,7 @@ hide:
     </div>
     <div class="umem-terminal" aria-label="Universal Memory CLI example">
       <div class="umem-terminal__bar"><span></span><span></span><span></span></div>
-      <pre><code>$ umem init --hosts codex --hosts claude_code
+      <pre><code>$ umem init --runtime codex --runtime claude_code
 $ umem remember "Prefer typed Python and clean architecture." --scope project
 $ umem context --scope project --format json
 
@@ -41,11 +41,11 @@ $ umem context --scope project --format json
   <div class="umem-grid">
     <a class="umem-card" href="users/getting-started/">
       <h3>Users</h3>
-      <p>Install the CLI, initialize a project, save facts, retrieve context, and recover safely.</p>
+      <p>Install UMEM, initialize a project, and let your agent retrieve context and persist durable learnings safely.</p>
     </a>
     <a class="umem-card" href="contributors/development/">
       <h3>Contributors</h3>
-      <p>Understand the clean architecture, validation commands, release flow, and alpha test plan.</p>
+      <p>Understand the clean architecture, validation commands, release readiness, and alpha validation flow.</p>
     </a>
     <a class="umem-card" href="agents/operating-protocol/">
       <h3>Agents and LLMs</h3>
@@ -68,7 +68,7 @@ $ umem context --scope project --format json
       </a>
       <a class="umem-card" href="reference/skill-lifecycle/">
         <h3>Reusable skills</h3>
-        <p>Recurring procedures can become canonical skills and sync into supported runtimes.</p>
+        <p>Recurring procedures become canonical skills under <code>.umem/skills/</code> and sync into supported runtimes.</p>
       </a>
     </div>
     <div class="umem-pillrow" aria-label="Product properties">
