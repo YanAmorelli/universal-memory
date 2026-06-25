@@ -1,0 +1,17 @@
+<svg width="720" height="720" viewBox="0 0 720 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Universal Memory UM core mark color</title>
+  <desc id="desc">Color version of the UM mark with green and blue memory accents.</desc>
+  <defs>
+    <mask id="um-cut">
+      <rect width="720" height="720" fill="white"/>
+      <path d="M240 428L304 314L360 404L416 314L480 428" stroke="black" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M304 314L360 404L416 314" stroke="black" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <path d="M190 152V370C190 480 260 552 360 552C460 552 530 480 530 370V152" stroke="#F8FAFC" stroke-width="96" stroke-linecap="round" mask="url(#um-cut)"/>
+  <path d="M240 428L304 314L360 404L416 314L480 428" stroke="#10B981" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="240" cy="428" r="16" fill="#10B981"/>
+  <circle cx="360" cy="404" r="16" fill="#3B82F6"/>
+  <circle cx="480" cy="428" r="16" fill="#10B981"/>
+  <circle cx="360" cy="552" r="18" fill="#F8FAFC"/>
+</svg>

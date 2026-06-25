@@ -1611,7 +1611,7 @@ dev = [
     { name = "ruff", specifier = ">=0.3.0" },
 ]
 docs = [
-    { name = "mkdocs", specifier = ">=1.6.0" },
+    { name = "mkdocs", specifier = ">=1.6.0,<2.0" },
     { name = "mkdocs-material", specifier = ">=9.5.0" },
 ]
 

@@ -8,7 +8,8 @@ theme:
   name: material
   custom_dir: docs/overrides
   language: en
-  logo: assets/umem-logo-transparent.png
+  logo: assets/umem-mark-light.svg
+  favicon: assets/umem-favicon.svg
   icon:
     repo: fontawesome/brands/github
   palette:
