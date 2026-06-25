@@ -1,60 +1,81 @@
 from __future__ import annotations
 
+import re
+import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from fastmcp import FastMCP
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
 
-from universal_memory.application.diagnostics import DoctorUseCase
-from universal_memory.application.host import (
-    ConfigureHostUseCase,
-    SyncInstructionsUseCase,
+_SECRET_PATTERNS = (
+    re.compile(r"\b(?:sk|pk)-[A-Za-z0-9_-]{6,}\b"),
+    re.compile(r"\b[A-Za-z0-9_]*api[_-]?key[A-Za-z0-9_]*\s*[:=]\s*[^\s,;]+", re.IGNORECASE),
+    re.compile(r"\b[A-Za-z0-9_]*token[A-Za-z0-9_]*\s*[:=]\s*[^\s,;]+", re.IGNORECASE),
 )
-from universal_memory.application.memory import (
-    AssembleContextSummaryUseCase,
-    GetMemoryStatusUseCase,
-    ListFactsUseCase,
-    PurgeFactUseCase,
-    RememberFactUseCase,
-)
-from universal_memory.application.onboarding.setup_project import setup_project
-from universal_memory.application.security import (
-    ListAuditLogUseCase,
-    ListSnapshotsUseCase,
-    RollbackUseCase,
-    SafeWriteUseCase,
-)
-from universal_memory.application.skills import (
-    ActivateSkillUseCase,
-    CreateSkillUseCase,
-    DeactivateSkillUseCase,
-    GenerateSkillUseCase,
-    GetSkillDetailUseCase,
-    ImportSkillUseCase,
-    ListSkillsUseCase,
-    PromoteSkillRecommendationUseCase,
-    ProposeSkillUseCase,
-    RecommendSkillsUseCase,
-    SyncSkillsUseCase,
-    TrackLatentSkillUseCase,
-    UpdateSkillUseCase,
-)
-from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
-from universal_memory.infrastructure.security import (
-    EntropySecretScanner,
-    LocalAuditLogRepository,
-    LocalSnapshotRepository,
-)
-from universal_memory.infrastructure.storage import (
-    LocalAgentSkillRepository,
-    LocalContextSummaryRepository,
-    LocalFactRepository,
-    LocalLatentSkillRepository,
-    LocalRuleRepository,
-)
-from universal_memory.interfaces.mcp import MCPUseCases, configure_server, create_mcp_server
+_UNIX_ABSOLUTE_PATH = re.compile(r"(?<![\w.-])/(?:[^/\s:]+/)+[^/\s:]+")
+_WINDOWS_ABSOLUTE_PATH = re.compile(r"(?<![\w.-])(?:[a-zA-Z]:\\|\\\\)(?:[^\\\s:]+\\)+[^\\\s:]+")
+_DEFAULT_RECOVERY_HINT = "Try again. If the problem persists, check the diagnostic logs."
 
 
-def build_server(project_root: Path | None = None) -> FastMCP:
+def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
+    from universal_memory.application.diagnostics import DoctorUseCase  # noqa: PLC0415
+    from universal_memory.application.host import (  # noqa: PLC0415
+        ConfigureHostUseCase,
+        SyncInstructionsUseCase,
+    )
+    from universal_memory.application.memory import (  # noqa: PLC0415
+        AssembleContextSummaryUseCase,
+        GetMemoryStatusUseCase,
+        ListFactsUseCase,
+        PurgeFactUseCase,
+        RememberFactUseCase,
+    )
+    from universal_memory.application.onboarding.setup_project import setup_project  # noqa: PLC0415
+    from universal_memory.application.security import (  # noqa: PLC0415
+        ListAuditLogUseCase,
+        ListSnapshotsUseCase,
+        RollbackUseCase,
+        SafeWriteUseCase,
+    )
+    from universal_memory.application.skills import (  # noqa: PLC0415
+        ActivateSkillUseCase,
+        CreateSkillUseCase,
+        DeactivateSkillUseCase,
+        GenerateSkillUseCase,
+        GetSkillDetailUseCase,
+        ImportSkillUseCase,
+        ListSkillsUseCase,
+        PromoteSkillRecommendationUseCase,
+        ProposeSkillUseCase,
+        RecommendSkillsUseCase,
+        SyncSkillsUseCase,
+        TrackLatentSkillUseCase,
+        UpdateSkillUseCase,
+    )
+    from universal_memory.infrastructure.config import (  # noqa: PLC0415
+        LocalConfigValidationPort,
+        LocalProjectLayoutPort,
+    )
+    from universal_memory.infrastructure.security import (  # noqa: PLC0415
+        EntropySecretScanner,
+        LocalAuditLogRepository,
+        LocalSnapshotRepository,
+    )
+    from universal_memory.infrastructure.storage import (  # noqa: PLC0415
+        LocalAgentSkillRepository,
+        LocalContextSummaryRepository,
+        LocalFactRepository,
+        LocalLatentSkillRepository,
+        LocalRuleRepository,
+    )
+    from universal_memory.interfaces.mcp import (  # noqa: PLC0415
+        MCPUseCases,
+        configure_server,
+        create_mcp_server,
+    )
+
     try:
         root = project_root or Path.cwd()
     except Exception:
@@ -256,8 +277,63 @@ def build_server(project_root: Path | None = None) -> FastMCP:
     )
 
 
-def main() -> None:
-    build_server().run()
+def main(argv: Sequence[str] | None = None) -> None:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if any(arg in {"-h", "--help"} for arg in args):
+        print("Usage: umem-mcp [--help]")
+        print()
+        print("Run the Universal Memory MCP server over stdio.")
+        print("Troubleshoot environment issues with: umem doctor")
+        return
+
+    try:
+        build_server().run()
+    except Exception as error:
+        _write_startup_failure(error)
+        raise SystemExit(1) from None
+
+
+def _write_startup_failure(error: Exception) -> None:
+    lines = (
+        f"Universal Memory MCP startup failed: {_safe_error_detail(error)}",
+        f"Recovery hint: {_safe_recovery_hint(error)}",
+    )
+    try:
+        print(*lines, sep="\n", file=sys.stderr)
+    except OSError:
+        return
+
+
+def _safe_error_detail(error: Exception) -> str:
+    if isinstance(error, ImportError):
+        return _fallback_sanitize_error_detail(error)
+    try:
+        from universal_memory.interfaces.errors import sanitize_error_detail  # noqa: PLC0415
+
+        return sanitize_error_detail(error)
+    except Exception:
+        return _fallback_sanitize_error_detail(error)
+
+
+def _safe_recovery_hint(error: Exception) -> str:
+    try:
+        from universal_memory.interfaces.errors import recovery_hint  # noqa: PLC0415
+
+        return recovery_hint(error)
+    except Exception:
+        return _DEFAULT_RECOVERY_HINT
+
+
+def _fallback_sanitize_error_detail(error: Exception) -> str:
+    try:
+        detail = str(error)
+    except Exception:
+        return "Unexpected error."
+    detail = _UNIX_ABSOLUTE_PATH.sub("<path>", detail)
+    detail = _WINDOWS_ABSOLUTE_PATH.sub("<path>", detail)
+    for pattern in _SECRET_PATTERNS:
+        detail = pattern.sub("<secret>", detail)
+    return detail[:240] or "Unexpected error."
 
 
 if __name__ == "__main__":

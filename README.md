@@ -191,20 +191,26 @@ umem status
 
 AI agents can interact directly with your memory over the Model Context Protocol.
 
-### CLI Launch Command
+### One-off Launch Command
+```bash
+uvx --from universal-memory umem-mcp
+```
+
+### Persistent Install Launch Command
 ```bash
 umem-mcp
 ```
 
 ### Example Config: Claude Desktop (`claude_desktop_config.json`)
+Use the `uvx` form when Universal Memory is not installed as a persistent tool:
+
 ```json
 {
   "mcpServers": {
     "universal-memory": {
-      "command": "uv",
+      "command": "uvx",
       "args": [
-        "run",
-        "--package",
+        "--from",
         "universal-memory",
         "umem-mcp"
       ]
@@ -212,6 +218,29 @@ umem-mcp
   }
 }
 ```
+
+If you installed Universal Memory with `uv tool install universal-memory` or `pipx install universal-memory`, use the stable entrypoint:
+
+```json
+{
+  "mcpServers": {
+    "universal-memory": {
+      "command": "umem-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Troubleshoot startup with:
+
+```bash
+uvx --from universal-memory umem doctor
+uvx --from universal-memory umem-mcp --help
+```
+
+For GUI-launched MCP hosts, use the absolute path to `uvx` if the host does not inherit
+your shell `PATH`.
 
 ---
 
