@@ -1,6 +1,6 @@
 [project]
 name = "universal-memory"
-version = "0.2.0"
+version = "0.2.1"
 description = "Vendor-agnostic cognitive persistence layer for AI agents."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -95,3 +95,6 @@ pythonVersion = "3.12"
 typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
