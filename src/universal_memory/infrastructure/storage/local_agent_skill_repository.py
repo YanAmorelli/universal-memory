@@ -93,6 +93,18 @@ class LocalAgentSkillRepository(AgentSkillRepository):
                 return skill
         raise StorageError(f"Agent skill not found: {id}")
 
+    def read_by_slug(
+        self,
+        slug: str,
+        *,
+        scope: LatentSkillScope | None = None,
+        status: AgentSkillStatus | None = None,
+    ) -> AgentSkill:
+        for skill in self.list(scope=scope, status=status):
+            if skill.slug == slug:
+                return skill
+        raise StorageError(f"Agent skill not found for slug: {slug}")
+
     def list(
         self, scope: LatentSkillScope | None = None, status: AgentSkillStatus | None = None
     ) -> list[AgentSkill]:
@@ -123,6 +135,33 @@ class LocalAgentSkillRepository(AgentSkillRepository):
             raise
         except OSError as exc:
             raise StorageError("Failed to write agent skills") from exc
+
+    def replace(self, entity: AgentSkill, *, origin: str = "repository") -> SafeWriteResult | None:
+        return self.write(entity, origin=origin)
+
+    def remove(
+        self,
+        id: str,
+        *,
+        scope: LatentSkillScope,
+        origin: str = "repository",
+    ) -> SafeWriteResult | None:
+        try:
+            with self._lock(scope):
+                skills = self._load_skills_unlocked(scope, raise_on_corrupt=True)
+                remaining = [skill for skill in skills if skill.id != id]
+                if len(remaining) == len(skills):
+                    raise StorageError(f"Agent skill not found: {id}")
+                return self._write_skills_unlocked(
+                    remaining,
+                    scope,
+                    action="remove_agent_skill",
+                    origin=origin,
+                )
+        except StorageError:
+            raise
+        except OSError as exc:
+            raise StorageError("Failed to remove agent skill") from exc
 
     @contextmanager
     def _lock(self, scope: LatentSkillScope) -> Generator[None, None, None]:
