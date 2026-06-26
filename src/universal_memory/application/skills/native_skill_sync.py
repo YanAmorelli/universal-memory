@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -345,6 +346,90 @@ class NativeSkillSync:
             shutil.rmtree(target_path)
         elif target_path.is_file():
             target_path.unlink()
+
+
+def managed_native_target_paths(installations: list[dict[str, Any]]) -> list[str]:
+    paths = []
+    for installation in installations:
+        path = str(installation.get("path", ""))
+        if path and installation.get("managed", True) is not False:
+            paths.append(path)
+    return sorted(set(paths))
+
+
+def planned_managed_target_cleanup(
+    *,
+    project_root: Path,
+    installations: list[dict[str, Any]],
+) -> list[str]:
+    root = project_root.resolve()
+    planned: list[str] = []
+    for relative_path in managed_native_target_paths(installations):
+        target = (root / relative_path).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            continue
+        if target.exists():
+            planned.append(relative_path)
+    return planned
+
+
+def orphan_native_target_paths(
+    *,
+    project_root: Path,
+    managed_installations: list[dict[str, Any]],
+    runtime_registry: RuntimeRegistry | None = None,
+) -> list[str]:
+    root = project_root.resolve()
+    managed = set(managed_native_target_paths(managed_installations))
+    registry = runtime_registry or default_runtime_registry()
+    orphaned: list[str] = []
+    for runtime in registry.runtimes:
+        for target in runtime.native_skill_targets:
+            base = root / target.relative_path
+            if not base.is_dir():
+                continue
+            for skill_dir in sorted(item for item in base.iterdir() if item.is_dir()):
+                relative_path = skill_dir.relative_to(root).as_posix()
+                if relative_path not in managed and (skill_dir / "SKILL.md").exists():
+                    orphaned.append(relative_path)
+    return sorted(set(orphaned))
+
+
+def collect_gitignore_warnings(project_root: Path, relative_paths: list[str]) -> list[str]:
+    warnings: list[str] = []
+    root = project_root.resolve()
+    for relative_path in sorted(set(relative_paths)):
+        if not relative_path:
+            continue
+        if _git_path_is_tracked(root, relative_path):
+            warnings.append(f"Warning: Native target is tracked by git: {relative_path}")
+        if not _git_path_is_ignored(root, relative_path):
+            warnings.append(f"Warning: Native target is not ignored by git: {relative_path}")
+    return warnings
+
+
+def _git_path_is_ignored(project_root: Path, relative_path: str) -> bool:
+    result = subprocess.run(  # noqa: S603
+        ["git", "check-ignore", "-q", "--", relative_path],  # noqa: S607
+        cwd=project_root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
+
+
+def _git_path_is_tracked(project_root: Path, relative_path: str) -> bool:
+    result = subprocess.run(  # noqa: S603
+        ["git", "ls-files", "--error-unmatch", "--", relative_path],  # noqa: S607
+        cwd=project_root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
 
 
 def merge_native_installations(

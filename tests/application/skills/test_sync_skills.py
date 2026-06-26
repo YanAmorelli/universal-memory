@@ -147,6 +147,27 @@ def test_sync_one_skill_by_exact_name_only_syncs_selected_skill(tmp_path: Path) 
     assert not (tmp_path / ".opencode" / "skills" / "second-skill").exists()
 
 
+def test_sync_one_skill_by_slug_syncs_selected_skill(tmp_path: Path) -> None:
+    safe_write, repository, first_id = _create_skill(tmp_path, name="First Skill")
+    _create_skill(tmp_path, name="Second Skill")
+
+    result = SyncSkillsUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(
+        SyncSkillsCommand(
+            skill_id_or_name="first-skill",
+            origin="test",
+            targets=["opencode"],
+        )
+    )
+
+    assert [skill.skill_id for skill in result.skills] == [first_id]
+    assert (tmp_path / ".opencode" / "skills" / "first-skill" / "SKILL.md").is_file()
+    assert not (tmp_path / ".opencode" / "skills" / "second-skill").exists()
+
+
 def test_sync_keeps_managed_drift_by_default(tmp_path: Path) -> None:
     safe_write, repository, skill_id = _create_skill(tmp_path)
     use_case = SyncSkillsUseCase(

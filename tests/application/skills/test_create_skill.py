@@ -21,7 +21,7 @@ from universal_memory.infrastructure.storage import (
 )
 
 
-def test_create_skill_directly_writes_canonical_quoted_yaml_and_syncs_native(
+def test_create_skill_directly_writes_canonical_quoted_yaml_without_native_sync(
     tmp_path: Path,
 ) -> None:
     snapshots = RecordingSnapshotRepository()
@@ -71,14 +71,9 @@ def test_create_skill_directly_writes_canonical_quoted_yaml_and_syncs_native(
     assert latent_repository.list() == []
     assert (tmp_path / ".umem" / "memory" / "skills.jsonl").is_file()
     assert not (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").is_file()
-    assert result.native_installations
-    assert (tmp_path / ".agents" / "skills" / "launch-funnel-operator" / "SKILL.md").is_file()
-    assert any(
-        installation["runtime"] == "codex"
-        and installation["path"] == ".agents/skills/launch-funnel-operator"
-        for installation in result.native_installations
-    )
-    assert "sync_native_skill" in {event.action for event in audit.written}
+    assert result.native_installations == []
+    assert not (tmp_path / ".agents" / "skills" / "launch-funnel-operator").exists()
+    assert "sync_native_skill" not in {event.action for event in audit.written}
     assert result.latent_skill.status == LatentSkillStatus.active
 
 
@@ -116,7 +111,7 @@ def test_create_global_skill_reads_canonical_content_from_global_root(tmp_path: 
     assert not (tmp_path / "skills" / "global-review-operator" / "SKILL.md").exists()
     assert result.skill_file == "skills/global-review-operator/SKILL.md"
     assert repository.read(result.agent_skill.id).scope == LatentSkillScope.global_
-    assert result.native_installations
+    assert result.native_installations == []
 
 
 class FailingAgentSkillRepository(AgentSkillRepository):
@@ -191,6 +186,7 @@ def test_create_skill_keeps_unmanaged_native_target_without_overwrite(tmp_path: 
             description="Should not overwrite unmanaged native target.",
             scope=LatentSkillScope.project,
             origin="test",
+            sync=True,
         )
     )
 
