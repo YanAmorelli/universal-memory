@@ -92,7 +92,11 @@ def test_concurrent_writes_preserve_all_jsonl_events(tmp_path: Path) -> None:
 
 
 def test_write_fails_with_typed_error_when_lock_cannot_be_acquired(tmp_path: Path) -> None:
-    repository = LocalAuditLogRepository(project_root=tmp_path, data_root=tmp_path / ".umem")
+    repository = LocalAuditLogRepository(
+        project_root=tmp_path,
+        data_root=tmp_path / ".umem",
+        lock_acquire_timeout_seconds=0.1,
+    )
     lock_path = tmp_path / ".umem" / "audit" / "events.jsonl.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
