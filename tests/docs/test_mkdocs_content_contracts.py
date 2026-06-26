@@ -119,3 +119,14 @@ def test_alpha_validation_covers_skills_and_mcp_smoke() -> None:
     assert "import_skill(path=" in docs
     assert "sync_instructions(apply=true)" in docs
     assert 'rollback_scope(scope="project", confirm=true)' in docs
+
+
+def test_readme_uses_absolute_image_urls_for_pypi_rendering() -> None:
+    readme = read("README.md")
+    image_urls = [
+        *re.findall(r"<img[^>]+src=\"([^\"]+)\"", readme),
+        *re.findall(r"!\[[^\]]*\]\(([^)]+)\)", readme),
+    ]
+
+    assert image_urls
+    assert all(url.startswith(("https://", "http://")) for url in image_urls)
