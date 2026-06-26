@@ -1,0 +1,17 @@
+<svg width="720" height="720" viewBox="0 0 720 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Universal Memory UM core mark</title>
+  <desc id="desc">A UM monogram mark: a strong U containing an M path.</desc>
+  <defs>
+    <mask id="um-cut">
+      <rect width="720" height="720" fill="white"/>
+      <path d="M240 428L304 314L360 404L416 314L480 428" stroke="black" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M304 314L360 404L416 314" stroke="black" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <path d="M190 152V370C190 480 260 552 360 552C460 552 530 480 530 370V152" stroke="currentColor" stroke-width="96" stroke-linecap="round" mask="url(#um-cut)"/>
+  <path d="M240 428L304 314L360 404L416 314L480 428" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="240" cy="428" r="16" fill="currentColor"/>
+  <circle cx="360" cy="404" r="16" fill="currentColor"/>
+  <circle cx="480" cy="428" r="16" fill="currentColor"/>
+  <circle cx="360" cy="552" r="18" fill="currentColor"/>
+</svg>

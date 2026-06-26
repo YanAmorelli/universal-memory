@@ -37,3 +37,8 @@ prevents accidental drift between hosts.
 Agents should not edit instruction files directly as the normal memory workflow.
 They should use the Universal Memory CLI or MCP surface so mutations can pass
 through validation, secret scanning, snapshots, audit logging, and rollback.
+
+Use instruction files as entrypoints: they should tell the agent how to bootstrap
+UMEM, where to retrieve current context, and which operating skill to follow.
+Durable facts belong in UMEM memory, and reusable procedures belong in canonical
+UMEM skills.

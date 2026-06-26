@@ -1,20 +1,20 @@
 <p align="center">
-  <img src="https://docs.universal-memory.com/assets/umem-logo-transparent.png" alt="Universal Memory logo" width="720">
+  <img src="docs/assets/umem-logo-lockup.svg" alt="UMem logo" width="720">
 </p>
 
-# Universal Memory (umem)
+# Universal Memory (UMem)
 
 [![PyPI version](https://img.shields.io/pypi/v/universal-memory.svg)](https://pypi.org/project/universal-memory/)
 [![Python Version](https://img.shields.io/pypi/pyversions/universal-memory.svg)](https://pypi.org/project/universal-memory/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/YanAmorelli/universal-memory/blob/dev/LICENSE)
 
-**Website:** [universal-memory.com](https://universal-memory.com) | **Documentation:** [docs.universal-memory.com](https://docs.universal-memory.com)
+**[Website](https://universal-memory.com)** | **[Documentation](https://docs.universal-memory.com)**
 
 A vendor-agnostic cognitive persistence layer for AI agents. Eliminate the "repetition tax" by transporting your context, preferences, guidelines, and history seamlessly across sessions, IDEs, and LLM models.
 
 To see the core idea visually, check out the [Excalidraw design](https://excalidraw.com/#json=j3XjQIWMYEnkIzHpypuBb,rNJaVOECDGZ3WSuEYcCDjQ) or the proposal structure:
 
-![Universal Memory MVP Proposal](https://docs.universal-memory.com/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
+![Universal Memory MVP Proposal](docs/assets/diagrams/UNIVERSAL-MEMORY-MVP-PROPOSAL.png)
 
 ### Diagram Breakdown
 
@@ -36,7 +36,7 @@ Every time you open a new session in Claude Code, start a new chat in Cursor, sp
 * Copy-pasting database connection schemas or module layouts.
 * Explaining workflow methodologies (e.g., "We follow Spec-Driven Development (SDD)").
 
-Universal Memory acts as a local "Cognitive USB Drive" that automatically connects to your AI runtimes, aligning them to your exact workflow, context, and rules with zero friction.
+Universal Memory acts as a local persistence layer that automatically connects to your AI runtimes, aligning them to your exact workflow, context, and rules with zero friction.
 
 ---
 
@@ -191,20 +191,26 @@ umem status
 
 AI agents can interact directly with your memory over the Model Context Protocol.
 
-### CLI Launch Command
+### One-off Launch Command
+```bash
+uvx --from universal-memory umem-mcp
+```
+
+### Persistent Install Launch Command
 ```bash
 umem-mcp
 ```
 
 ### Example Config: Claude Desktop (`claude_desktop_config.json`)
+Use the `uvx` form when Universal Memory is not installed as a persistent tool:
+
 ```json
 {
   "mcpServers": {
     "universal-memory": {
-      "command": "uv",
+      "command": "uvx",
       "args": [
-        "run",
-        "--package",
+        "--from",
         "universal-memory",
         "umem-mcp"
       ]
@@ -212,6 +218,29 @@ umem-mcp
   }
 }
 ```
+
+If you installed Universal Memory with `uv tool install universal-memory` or `pipx install universal-memory`, use the stable entrypoint:
+
+```json
+{
+  "mcpServers": {
+    "universal-memory": {
+      "command": "umem-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Troubleshoot startup with:
+
+```bash
+uvx --from universal-memory umem doctor
+uvx --from universal-memory umem-mcp --help
+```
+
+For GUI-launched MCP hosts, use the absolute path to `uvx` if the host does not inherit
+your shell `PATH`.
 
 ---
 

@@ -24,6 +24,9 @@ context
 list_skills
 ```
 
+After `list_skills`, inspect any relevant skill with `umem skills detail
+<skill-id-or-name> --format json` or MCP `get_skill_detail`.
+
 ## During Work
 
 Use facts only for durable information:
@@ -31,10 +34,13 @@ Use facts only for durable information:
 - stable project constraints;
 - durable user preferences;
 - architectural decisions;
-- fixed bugs or important operational learnings.
+- fixed bugs or important operational learnings;
+- obsolete fact cleanup when prior memory is no longer true;
+- recurring workflow evidence that may become a skill.
 
 Do not record transient logs, raw command output, secrets, or uncertain
-inferences.
+inferences. Do not record raw prompts, private customer data, or one-off task
+progress.
 
 ## Before Persisting Changes
 

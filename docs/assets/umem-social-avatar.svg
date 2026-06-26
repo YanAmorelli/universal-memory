@@ -1,0 +1,19 @@
+<svg width="1200" height="1200" viewBox="0 0 1200 1200" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Universal Memory social avatar</title>
+  <desc id="desc">UM core mark centered on a deep ink grid for social profiles.</desc>
+  <rect width="1200" height="1200" rx="220" fill="#0D1117"/>
+  <path d="M0 120H1200M0 240H1200M0 360H1200M0 480H1200M0 600H1200M0 720H1200M0 840H1200M0 960H1200M0 1080H1200M120 0V1200M240 0V1200M360 0V1200M480 0V1200M600 0V1200M720 0V1200M840 0V1200M960 0V1200M1080 0V1200" stroke="#1E293B" stroke-width="2" opacity=".7"/>
+  <defs>
+    <mask id="um-cut">
+      <rect width="1200" height="1200" fill="white"/>
+      <path d="M420 720L506 548L600 688L694 548L780 720" stroke="black" stroke-width="104" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M506 548L600 688L694 548" stroke="black" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <path d="M330 260V620C330 802 440 922 600 922C760 922 870 802 870 620V260" stroke="#F8FAFC" stroke-width="160" stroke-linecap="round" mask="url(#um-cut)"/>
+  <path d="M420 720L506 548L600 688L694 548L780 720" stroke="#10B981" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="420" cy="720" r="26" fill="#10B981"/>
+  <circle cx="600" cy="688" r="26" fill="#3B82F6"/>
+  <circle cx="780" cy="720" r="26" fill="#10B981"/>
+  <circle cx="600" cy="922" r="30" fill="#F8FAFC"/>
+</svg>

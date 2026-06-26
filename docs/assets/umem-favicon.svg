@@ -1,0 +1,14 @@
+<svg width="64" height="64" viewBox="0 0 720 720" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Universal Memory favicon</title>
+  <desc id="desc">Compact UM favicon on deep ink background.</desc>
+  <rect width="720" height="720" rx="156" fill="#0D1117"/>
+  <defs>
+    <mask id="um-cut">
+      <rect width="720" height="720" fill="white"/>
+      <path d="M240 428L304 314L360 404L416 314L480 428" stroke="black" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <path d="M190 152V370C190 480 260 552 360 552C460 552 530 480 530 370V152" stroke="#F8FAFC" stroke-width="104" stroke-linecap="round" mask="url(#um-cut)"/>
+  <path d="M240 428L304 314L360 404L416 314L480 428" stroke="#10B981" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="360" cy="404" r="20" fill="#3B82F6"/>
+</svg>

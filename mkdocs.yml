@@ -8,7 +8,8 @@ theme:
   name: material
   custom_dir: docs/overrides
   language: en
-  logo: assets/umem-logo-transparent.png
+  logo: assets/umem-mark-light.svg
+  favicon: assets/umem-favicon.svg
   icon:
     repo: fontawesome/brands/github
   palette:
@@ -47,8 +48,8 @@ nav:
   - Contributors:
       - Architecture: contributors/architecture.md
       - Development Guide: contributors/development.md
-      - Release And Alpha Testing: contributors/release-and-alpha.md
-      - Alpha Sandbox Test Plan: contributors/alpha-sandbox-test-plan.md
+      - Release Readiness: contributors/release-readiness.md
+      - Alpha Validation: contributors/alpha-validation.md
   - Agents And LLMs:
       - Operating Protocol: agents/operating-protocol.md
       - MCP And Skills: agents/mcp-and-skills.md

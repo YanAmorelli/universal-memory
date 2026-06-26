@@ -5,6 +5,37 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.2.0] - 2026-06-25
+
+### Added
+
+- Added a refreshed MkDocs information architecture for user, agent, and contributor
+  workflows.
+- Added contributor guidance for CLI/MCP parity expectations, release readiness, alpha
+  validation, and test requirements.
+- Added documentation tests that enforce key onboarding, agent, contributor, and
+  version metadata contracts.
+- Added packaging tests to keep package, runtime fallback, docs metadata, and lockfile
+  versions aligned.
+
+### Changed
+
+- Bumped the project version to `0.2.0` for the next alpha milestone.
+- Reworked user documentation around agent-first usage, where users give UMEM to the
+  agent and let the agent run the memory workflow.
+- Reworked agent documentation as an adoption-oriented guide covering the skills
+  repository as source of truth, short-term memory, long-term memory, host sync, and
+  MCP/CLI parity.
+- Replaced outdated contributor alpha pages with release readiness and alpha validation
+  pages.
+- Clarified supported Python guidance around the active package metadata instead of
+  implying Python 3.12 is required.
+
+### Fixed
+
+- Hardened MCP setup UX and added coverage for dependency bounds and MCP server
+  behavior.
+
 ## [0.1.5] - 2026-06-22
 
 ### Changed
@@ -136,7 +167,8 @@ corresponding Git tags when available.
 - Added secret scanning guardrails.
 - Added safe-write snapshots and audit trails before mutations.
 
-[0.1.5]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.4...HEAD
+[0.2.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.1...v0.1.2

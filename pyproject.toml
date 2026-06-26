@@ -1,6 +1,6 @@
 [project]
 name = "universal-memory"
-version = "0.1.5"
+version = "0.2.0"
 description = "Vendor-agnostic cognitive persistence layer for AI agents."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -33,11 +33,11 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "fastmcp>=0.1.0",
-    "pydantic>=2.0",
+    "fastmcp>=3.3.1,<4",
+    "pydantic>=2.13.4,<3",
     "rich>=15.0.0",
-    "tomli-w>=1.0.0",
-    "typer>=0.9.0",
+    "tomli-w>=1.2.0",
+    "typer>=0.25.1",
 ]
 
 [project.urls]
@@ -58,7 +58,7 @@ dev = [
 ]
 docs = [
     "mkdocs-material>=9.5.0",
-    "mkdocs>=1.6.0",
+    "mkdocs>=1.6.0,<2.0",
 ]
 
 [build-system]

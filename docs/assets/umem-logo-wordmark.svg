@@ -1,0 +1,19 @@
+<svg width="760" height="240" viewBox="0 0 760 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Universal Memory UMem rail wordmark</title>
+  <desc id="desc">UMem wordmark with a green U, memory nodes near the e, and a blue-to-green runtime rail underneath.</desc>
+  <defs>
+    <linearGradient id="rail" x1="92" y1="184" x2="668" y2="184" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B82F6" stop-opacity="0"/>
+      <stop offset="0.22" stop-color="#3B82F6" stop-opacity="0.82"/>
+      <stop offset="0.62" stop-color="#10B981" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#10B981" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <text x="94" y="134" fill="#34D399" font-family="Inter, Outfit, Arial, sans-serif" font-size="132" font-weight="850" letter-spacing="0">U</text>
+  <text x="190" y="134" fill="#F8FAFC" font-family="Inter, Outfit, Arial, sans-serif" font-size="132" font-weight="850" letter-spacing="0">Mem</text>
+  <path d="M416 140L440 126L464 140" stroke="#1E293B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.72"/>
+  <circle cx="416" cy="140" r="8" fill="#10B981"/>
+  <circle cx="440" cy="126" r="8" fill="#3B82F6"/>
+  <circle cx="464" cy="140" r="8" fill="#10B981"/>
+  <path d="M92 184H668" stroke="url(#rail)" stroke-width="2" stroke-linecap="round"/>
+</svg>
