@@ -23,6 +23,9 @@ from universal_memory.application.security import (
 )
 from universal_memory.application.skills import (
     ActivateSkillUseCase,
+    AdoptSkillUseCase,
+    CleanupSkillUseCase,
+    CreateSkillDraftUseCase,
     CreateSkillUseCase,
     DeactivateSkillUseCase,
     GenerateSkillUseCase,
@@ -31,10 +34,15 @@ from universal_memory.application.skills import (
     ListSkillsUseCase,
     PromoteSkillRecommendationUseCase,
     ProposeSkillUseCase,
+    PublishSkillUseCase,
     RecommendSkillsUseCase,
+    RenameSkillUseCase,
+    RepairSkillsUseCase,
     SyncSkillsUseCase,
     TrackLatentSkillUseCase,
+    UpdateCanonicalSkillUseCase,
     UpdateSkillUseCase,
+    ValidateSkillUseCase,
 )
 from universal_memory.application.update import (
     UpdateBenchmarksUseCase,
@@ -241,6 +249,51 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
             agent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    create_skill_draft_use_case = CreateSkillDraftUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
+    publish_skill_use_case = PublishSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    validate_skill_use_case = ValidateSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+    )
+    adopt_skill_use_case = AdoptSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    update_canonical_skill_use_case = UpdateCanonicalSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    rename_skill_use_case = RenameSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+    )
+    cleanup_skill_use_case = CleanupSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+    )
+    repair_skills_use_case = RepairSkillsUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+    )
     _activate_skill_use_case = ActivateSkillUseCase(
         project_root=project_root,
         repository=latent_skill_repository,
@@ -324,6 +377,14 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         track_latent_skill_command=track_latent_skill_use_case.execute,
         generate_skill_command=generate_skill_use_case.execute,
         create_skill_command=create_skill_use_case.execute,
+        create_skill_draft_command=create_skill_draft_use_case.execute,
+        publish_skill_command=publish_skill_use_case.execute,
+        validate_skill_command=validate_skill_use_case.execute,
+        adopt_skill_command=adopt_skill_use_case.execute,
+        update_canonical_skill_command=update_canonical_skill_use_case.execute,
+        rename_skill_command=rename_skill_use_case.execute,
+        cleanup_skill_command=cleanup_skill_use_case.execute,
+        repair_skills_command=repair_skills_use_case.execute,
         sync_skills_command=sync_skills_use_case.execute,
         promote_skill_recommendation_command=promote_skill_recommendation_use_case.execute,
         import_skill_command=import_skill_use_case.execute,

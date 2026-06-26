@@ -43,10 +43,16 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
+    AdoptSkillCommand,
+    AdoptSkillResult,
+    CleanupSkillCommand,
+    CleanupSkillResult,
     CreateSkillCommand,
+    CreateSkillDraftCommand,
     CreateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
+    DraftSkillResult,
     GenerateSkillCommand,
     GenerateSkillResult,
     GetSkillDetailCommand,
@@ -60,14 +66,24 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    PublishSkillCommand,
+    PublishSkillResult,
     RecommendSkillsCommand,
     RecommendSkillsResult,
+    RenameSkillCommand,
+    RenameSkillResult,
+    RepairSkillsCommand,
+    RepairSkillsResult,
     SyncSkillsCommand,
     SyncSkillsResult,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
+    UpdateCanonicalSkillCommand,
+    UpdateCanonicalSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
+    ValidateSkillCommand,
+    ValidateSkillResult,
 )
 from universal_memory.domain import StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
@@ -114,6 +130,16 @@ ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 TrackLatentSkillCommandHandler = Callable[[TrackLatentSkillCommand], TrackLatentSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 CreateSkillCommandHandler = Callable[[CreateSkillCommand], CreateSkillResult]
+CreateSkillDraftCommandHandler = Callable[[CreateSkillDraftCommand], DraftSkillResult]
+PublishSkillCommandHandler = Callable[[PublishSkillCommand], PublishSkillResult]
+ValidateSkillCommandHandler = Callable[[ValidateSkillCommand], ValidateSkillResult]
+AdoptSkillCommandHandler = Callable[[AdoptSkillCommand], AdoptSkillResult]
+UpdateCanonicalSkillCommandHandler = Callable[
+    [UpdateCanonicalSkillCommand], UpdateCanonicalSkillResult
+]
+RenameSkillCommandHandler = Callable[[RenameSkillCommand], RenameSkillResult]
+CleanupSkillCommandHandler = Callable[[CleanupSkillCommand], CleanupSkillResult]
+RepairSkillsCommandHandler = Callable[[RepairSkillsCommand], RepairSkillsResult]
 PromoteSkillRecommendationCommandHandler = Callable[
     [PromoteSkillRecommendationCommand], PromoteSkillRecommendationResult
 ]
@@ -152,6 +178,14 @@ class MCPUseCases:
     track_latent_skill: TrackLatentSkillCommandHandler = _missing_use_case
     generate_skill: GenerateSkillCommandHandler = _missing_use_case
     create_skill: CreateSkillCommandHandler = _missing_use_case
+    create_skill_draft: CreateSkillDraftCommandHandler = _missing_use_case
+    publish_skill: PublishSkillCommandHandler = _missing_use_case
+    validate_skill: ValidateSkillCommandHandler = _missing_use_case
+    adopt_skill: AdoptSkillCommandHandler = _missing_use_case
+    update_canonical_skill: UpdateCanonicalSkillCommandHandler = _missing_use_case
+    rename_skill: RenameSkillCommandHandler = _missing_use_case
+    cleanup_skill: CleanupSkillCommandHandler = _missing_use_case
+    repair_skills: RepairSkillsCommandHandler = _missing_use_case
     promote_skill_recommendation: PromoteSkillRecommendationCommandHandler = _missing_use_case
     import_skill: ImportSkillCommandHandler = _missing_use_case
     recommend_skills: RecommendSkillsCommandHandler = _missing_use_case
@@ -587,11 +621,13 @@ def configure_server(  # noqa: PLR0915
         name: str,
         description: str,
         scope: Literal["project", "global"] = "project",
+        slug: str | None = None,
+        sync: bool = False,
         triggers: list[str] | None = None,
         raw_markdown: str | None = None,
         targets: list[str] | None = None,
     ) -> ToolResponse:
-        """Directly create a canonical Agent Skill without recommendation promotion."""
+        """Create a canonical Agent Skill without native sync unless sync is explicit."""
         try:
             latent_scope = _latent_skill_scope(scope)
             if latent_scope is LatentSkillScope.project:
@@ -604,6 +640,8 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                     triggers=_normalize_triggers(triggers) or [],
                     raw_markdown=raw_markdown,
+                    slug=slug,
+                    sync=sync,
                     targets=targets,
                 )
             )
@@ -615,6 +653,90 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="skills.create", scope=_raw_scope(scope))
+
+    @server.tool(name="create_skill_draft")
+    def create_skill_draft(  # noqa: PLR0913
+        name: str,
+        description: str,
+        scope: Literal["project", "global"] = "project",
+        slug: str | None = None,
+        triggers: list[str] | None = None,
+        raw_markdown: str | None = None,
+    ) -> ToolResponse:
+        """Create an editable draft skill without canonical publish or native runtime writes."""
+        try:
+            latent_scope = _latent_skill_scope(scope)
+            if latent_scope is LatentSkillScope.project:
+                require_project_initialized()
+            result = use_cases.create_skill_draft(
+                CreateSkillDraftCommand(
+                    name=name.strip(),
+                    description=description.strip(),
+                    scope=latent_scope,
+                    origin="mcp",
+                    slug=slug,
+                    triggers=_normalize_triggers(triggers) or [],
+                    raw_markdown=raw_markdown,
+                )
+            )
+            return _success_envelope(
+                operation="skills.draft.create",
+                scope=latent_scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.draft.create", scope=_raw_scope(scope))
+
+    @server.tool(name="validate_skill")
+    def validate_skill(
+        skill_or_path: str,
+        scope: Literal["project", "global"] | None = None,
+    ) -> ToolResponse:
+        """Validate a draft, canonical skill, or local skill path without mutating files."""
+        try:
+            result = use_cases.validate_skill(
+                ValidateSkillCommand(
+                    skill_or_path=skill_or_path,
+                    scope=_latent_skill_scope_optional(scope),
+                )
+            )
+            return _success_envelope(
+                operation="skills.validate",
+                scope=_raw_scope(scope) if scope else "project",
+                data=result.to_payload(),
+                warnings=result.report.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.validate", scope="project")
+
+    @server.tool(name="publish_skill")
+    def publish_skill(
+        draft_or_path: str,
+        slug: str | None = None,
+        sync: bool = False,
+        targets: list[str] | None = None,
+    ) -> ToolResponse:
+        """Publish a validated draft as canonical and optionally sync native targets."""
+        try:
+            require_project_initialized()
+            result = use_cases.publish_skill(
+                PublishSkillCommand(
+                    draft_or_path=draft_or_path,
+                    origin="mcp",
+                    slug=slug,
+                    sync=sync,
+                    targets=targets,
+                )
+            )
+            return _success_envelope(
+                operation="skills.publish",
+                scope=result.agent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.publish", scope="project")
 
     @server.tool(name="promote_skill_recommendation")
     def promote_skill_recommendation(
@@ -655,8 +777,9 @@ def configure_server(  # noqa: PLR0915
         skill_id_or_name: str | None = None,
         targets: list[str] | None = None,
         drift_decision: Literal["keep", "overwrite"] = "keep",
+        check_gitignore: bool = False,
     ) -> ToolResponse:
-        """Synchronize canonical Agent Skills into native host targets."""
+        """Synchronize canonical Agent Skills into native targets with optional git warnings."""
         try:
             require_project_initialized()
             if drift_decision not in {"keep", "overwrite"}:
@@ -667,6 +790,7 @@ def configure_server(  # noqa: PLR0915
                     targets=targets,
                     drift_decision=drift_decision,
                     origin="mcp",
+                    check_gitignore=check_gitignore,
                 )
             )
             return _success_envelope(
@@ -707,6 +831,137 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="skills.import", scope=_raw_scope(scope))
+
+    @server.tool(name="adopt_skill")
+    def adopt_skill(
+        path: str,
+        scope: Literal["project", "global"] = "project",
+        slug: str | None = None,
+        replace_native: bool = False,
+        sync_after_adopt: bool = False,
+    ) -> ToolResponse:
+        """Adopt an existing skill directory into UMEM without creating duplicate slugs."""
+        try:
+            latent_scope = _latent_skill_scope(scope)
+            if latent_scope is LatentSkillScope.project:
+                require_project_initialized()
+            result = use_cases.adopt_skill(
+                AdoptSkillCommand(
+                    path=path,
+                    scope=latent_scope,
+                    origin="mcp",
+                    slug=slug,
+                    replace_native=replace_native,
+                    sync_after_adopt=sync_after_adopt,
+                )
+            )
+            return _success_envelope(
+                operation="skills.adopt",
+                scope=result.agent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.adopt", scope=_raw_scope(scope))
+
+    @server.tool(name="update_canonical_skill")
+    def update_canonical_skill(
+        skill_id_or_name: str,
+        raw_markdown: str,
+        sync: bool = False,
+        drift_decision: Literal["keep", "overwrite"] = "keep",
+    ) -> ToolResponse:
+        """Update canonical skill content with validation and optional native sync."""
+        try:
+            require_project_initialized()
+            result = use_cases.update_canonical_skill(
+                UpdateCanonicalSkillCommand(
+                    skill_id_or_name=skill_id_or_name,
+                    origin="mcp",
+                    raw_markdown=raw_markdown,
+                    sync=sync,
+                    drift_decision=drift_decision,
+                )
+            )
+            return _success_envelope(
+                operation="skills.canonical.update",
+                scope=result.agent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.canonical.update", scope="project")
+
+    @server.tool(name="rename_skill")
+    def rename_skill(skill_id_or_name: str, slug: str) -> ToolResponse:
+        """Rename a canonical skill slug while blocking unmanaged destination conflicts."""
+        try:
+            require_project_initialized()
+            result = use_cases.rename_skill(
+                RenameSkillCommand(
+                    skill_id_or_name=skill_id_or_name,
+                    slug=slug,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="skills.rename",
+                scope=result.agent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.rename", scope="project")
+
+    @server.tool(name="cleanup_skill")
+    def cleanup_skill(
+        skill_id_or_name: str,
+        targets: bool = True,
+        dry_run: bool = True,
+    ) -> ToolResponse:
+        """Plan or apply managed-only native target cleanup for a canonical skill."""
+        try:
+            require_project_initialized()
+            result = use_cases.cleanup_skill(
+                CleanupSkillCommand(
+                    skill_id_or_name=skill_id_or_name,
+                    origin="mcp",
+                    targets=targets,
+                    dry_run=dry_run,
+                )
+            )
+            return _success_envelope(
+                operation="skills.cleanup",
+                scope="project",
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.cleanup", scope="project")
+
+    @server.tool(name="repair_skills")
+    def repair_skills(
+        remove_orphan_targets: bool = False,
+        dry_run: bool = True,
+    ) -> ToolResponse:
+        """Plan or apply managed-only repair for orphan native skill targets."""
+        try:
+            require_project_initialized()
+            result = use_cases.repair_skills(
+                RepairSkillsCommand(
+                    origin="mcp",
+                    remove_orphan_targets=remove_orphan_targets,
+                    dry_run=dry_run,
+                )
+            )
+            return _success_envelope(
+                operation="skills.repair",
+                scope="project",
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.repair", scope="project")
 
     @server.tool(name="list_skills")
     def list_skills() -> ToolResponse:
@@ -1078,6 +1333,14 @@ def _latent_skill_scope_optional_all(
     if normalized == "project":
         return LatentSkillScope.project
     raise ValidationFailedError("scope must be 'project', 'global', or 'all'.")
+
+
+def _latent_skill_scope_optional(
+    value: Literal["project", "global"] | None,
+) -> LatentSkillScope | None:
+    if value is None:
+        return None
+    return _latent_skill_scope(value)
 
 
 def _fact_scope_optional(value: Literal["project", "global"] | None) -> FactScope | None:

@@ -41,6 +41,9 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
     )
     from universal_memory.application.skills import (  # noqa: PLC0415
         ActivateSkillUseCase,
+        AdoptSkillUseCase,
+        CleanupSkillUseCase,
+        CreateSkillDraftUseCase,
         CreateSkillUseCase,
         DeactivateSkillUseCase,
         GenerateSkillUseCase,
@@ -49,10 +52,15 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         ListSkillsUseCase,
         PromoteSkillRecommendationUseCase,
         ProposeSkillUseCase,
+        PublishSkillUseCase,
         RecommendSkillsUseCase,
+        RenameSkillUseCase,
+        RepairSkillsUseCase,
         SyncSkillsUseCase,
         TrackLatentSkillUseCase,
+        UpdateCanonicalSkillUseCase,
         UpdateSkillUseCase,
+        ValidateSkillUseCase,
     )
     from universal_memory.infrastructure.config import (  # noqa: PLC0415
         LocalConfigValidationPort,
@@ -207,6 +215,46 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             agent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    create_skill_draft_use_case = CreateSkillDraftUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
+    publish_skill_use_case = PublishSkillUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    validate_skill_use_case = ValidateSkillUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+    )
+    adopt_skill_use_case = AdoptSkillUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    update_canonical_skill_use_case = UpdateCanonicalSkillUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+        global_safe_write_use_case=getattr(
+            agent_skill_repository, "global_safe_write_use_case", None
+        ),
+    )
+    rename_skill_use_case = RenameSkillUseCase(project_root=root, repository=agent_skill_repository)
+    cleanup_skill_use_case = CleanupSkillUseCase(
+        project_root=root, repository=agent_skill_repository
+    )
+    repair_skills_use_case = RepairSkillsUseCase(
+        project_root=root, repository=agent_skill_repository
+    )
     _activate_skill_use_case = ActivateSkillUseCase(
         project_root=root,
         repository=latent_skill_repository,
@@ -263,6 +311,14 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             track_latent_skill=track_latent_skill_use_case.execute,
             generate_skill=generate_skill_use_case.execute,
             create_skill=create_skill_use_case.execute,
+            create_skill_draft=create_skill_draft_use_case.execute,
+            publish_skill=publish_skill_use_case.execute,
+            validate_skill=validate_skill_use_case.execute,
+            adopt_skill=adopt_skill_use_case.execute,
+            update_canonical_skill=update_canonical_skill_use_case.execute,
+            rename_skill=rename_skill_use_case.execute,
+            cleanup_skill=cleanup_skill_use_case.execute,
+            repair_skills=repair_skills_use_case.execute,
             sync_skills=sync_skills_use_case.execute,
             promote_skill_recommendation=promote_skill_recommendation_use_case.execute,
             import_skill=import_skill_use_case.execute,
