@@ -6,6 +6,7 @@ _bmad/
 .opencode/
 .claude/
 .cursor/
+.specify/
 .agent/
 .antigravitycli/
 AGENTS.md
