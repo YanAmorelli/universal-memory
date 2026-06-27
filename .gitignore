@@ -1,8 +1,11 @@
 # AI
 _bmad/
 .agents/
+.antigravity/
 .gemini/
 .opencode/
+.claude/
+.cursor/
 .agent/
 .antigravitycli/
 AGENTS.md
