@@ -5,29 +5,136 @@ from universal_memory.application.skills import (
     CleanupPlan,
     CleanupSkillCommand,
     CleanupSkillResult,
+    CreateSkillCommand,
+    CreateSkillResult,
+    PublishSkillCommand,
+    PublishSkillResult,
     RenameSkillCommand,
     RenameSkillResult,
     RepairSkillsCommand,
     RepairSkillsResult,
+    SkillValidationReport,
+    SyncSkillsCommand,
+    SyncSkillsResult,
+    UpdateCanonicalSkillCommand,
+    UpdateCanonicalSkillResult,
 )
 from universal_memory.interfaces.cli.init_command import main as cli_main
 
 
-def test_skills_maintenance_help_mentions_supported_commands(capsys) -> None:
-    for argv, expected in [
-        (["skills", "canonical", "update", "--help"], "--sync"),
-        (["skills", "create", "--help"], "not synced unless --sync"),
-        (["skills", "draft", "create", "--help"], "without native side effects"),
-        (["skills", "publish", "--help"], "Default is canonical-only"),
-        (["skills", "adopt", "--help"], ".agents/skills"),
-        (["skills", "rename", "--help"], "--slug"),
-        (["skills", "validate", "--help"], "Skill id"),
-        (["skills", "sync", "--help"], "does not edit .gitignore"),
-        (["skills", "cleanup", "--help"], "dry-run"),
-        (["skills", "repair", "--help"], "dry-run"),
-    ]:
-        assert cli_main(argv) == 0
-        assert expected in capsys.readouterr().out
+def test_skills_authoring_commands_preserve_safe_defaults_and_flags(capsys) -> None:
+    seen_create: list[CreateSkillCommand] = []
+    seen_publish: list[PublishSkillCommand] = []
+    seen_update: list[UpdateCanonicalSkillCommand] = []
+    seen_sync: list[SyncSkillsCommand] = []
+
+    def create(command: CreateSkillCommand) -> CreateSkillResult:
+        seen_create.append(command)
+        skill = sample_agent_skill(name=command.name, slug="review-helper")
+        return CreateSkillResult(
+            agent_skill=skill,
+            slug=skill.slug,
+            skill_dir=".umem/skills/review-helper",
+            skill_file=".umem/skills/review-helper/SKILL.md",
+            created_paths=[".umem/skills/review-helper/SKILL.md"],
+            affected_paths=[".umem/skills/review-helper/SKILL.md"],
+            audit_reference="audit-1",
+            snapshot_reference="snapshot-1",
+        )
+
+    def publish(command: PublishSkillCommand) -> PublishSkillResult:
+        seen_publish.append(command)
+        skill = sample_agent_skill(slug="review-helper")
+        return PublishSkillResult(
+            agent_skill=skill,
+            slug=skill.slug,
+            skill_dir=".umem/skills/review-helper",
+            skill_file=".umem/skills/review-helper/SKILL.md",
+            affected_paths=[".umem/skills/review-helper/SKILL.md"],
+            audit_reference="audit-1",
+            snapshot_reference="snapshot-1",
+            validation=SkillValidationReport(
+                subject="review-helper",
+                status="pass",
+                checks=[],
+                affected_paths=[".umem/skills/review-helper/SKILL.md"],
+            ),
+        )
+
+    def update(command: UpdateCanonicalSkillCommand) -> UpdateCanonicalSkillResult:
+        seen_update.append(command)
+        skill = sample_agent_skill(slug="review-helper")
+        return UpdateCanonicalSkillResult(
+            agent_skill=skill,
+            skill_file=".umem/skills/review-helper/SKILL.md",
+            validation=SkillValidationReport(
+                subject="review-helper",
+                status="pass",
+                checks=[],
+                affected_paths=[".umem/skills/review-helper/SKILL.md"],
+            ),
+            affected_paths=[".umem/skills/review-helper/SKILL.md"],
+            audit_reference="audit-1",
+            snapshot_reference="snapshot-1",
+        )
+
+    def sync(command: SyncSkillsCommand) -> SyncSkillsResult:
+        seen_sync.append(command)
+        return SyncSkillsResult(skills=[])
+
+    assert (
+        cli_main(
+            [
+                "skills",
+                "create",
+                "--name",
+                "Review Helper",
+                "--description",
+                "Review implementation changes safely.",
+                "--format",
+                "json",
+            ],
+            create_skill_command=create,
+        )
+        == 0
+    )
+    assert (
+        cli_main(
+            ["skills", "publish", "review-helper", "--format", "json"],
+            publish_skill_command=publish,
+        )
+        == 0
+    )
+    assert (
+        cli_main(
+            [
+                "skills",
+                "canonical",
+                "update",
+                "review-helper",
+                "--file",
+                ".umem/skills/review-helper/SKILL.md",
+                "--sync",
+                "--format",
+                "json",
+            ],
+            update_canonical_skill_command=update,
+        )
+        == 0
+    )
+    assert (
+        cli_main(
+            ["skills", "sync", "review-helper", "--check-gitignore", "--format", "json"],
+            sync_skills_command=sync,
+        )
+        == 0
+    )
+
+    assert seen_create[0].sync is False
+    assert seen_publish[0].sync is False
+    assert seen_update[0].sync is True
+    assert seen_sync[0].check_gitignore is True
+    capsys.readouterr()
 
 
 def test_skills_rename_and_cleanup_use_cli_origin(capsys) -> None:
