@@ -29,10 +29,17 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
+    AdoptSkillCommand,
+    AdoptSkillResult,
+    CleanupPlan,
+    CleanupSkillCommand,
+    CleanupSkillResult,
     CreateSkillCommand,
+    CreateSkillDraftCommand,
     CreateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
+    DraftSkillResult,
     ImportSkillCommand,
     ImportSkillResult,
     PromoteSkillRecommendationCommand,
@@ -40,16 +47,27 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    PublishSkillCommand,
+    PublishSkillResult,
     RecommendSkillsCommand,
     RecommendSkillsResult,
+    RenameSkillCommand,
+    RenameSkillResult,
+    RepairSkillsCommand,
+    RepairSkillsResult,
     SkillRecommendationItem,
+    SkillValidationReport,
     SyncSkillResult,
     SyncSkillsCommand,
     SyncSkillsResult,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
+    UpdateCanonicalSkillCommand,
+    UpdateCanonicalSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
+    ValidateSkillCommand,
+    ValidateSkillResult,
 )
 from universal_memory.domain import SecretDetectedError
 from universal_memory.domain.entities import (
@@ -101,6 +119,14 @@ PARITY_MATRIX = {
     "skills.propose": "propose_skill",
     "skills.track": "track_latent_skill",
     "skills.create": "create_skill",
+    "skills.draft.create": "create_skill_draft",
+    "skills.validate": "validate_skill",
+    "skills.publish": "publish_skill",
+    "skills.adopt": "adopt_skill",
+    "skills.canonical.update": "update_canonical_skill",
+    "skills.rename": "rename_skill",
+    "skills.cleanup": "cleanup_skill",
+    "skills.repair": "repair_skills",
     "skills.promote": "promote_skill_recommendation",
     "skills.sync": "sync_skills",
     "skills.import": "import_skill",
@@ -212,7 +238,7 @@ def cli_app_command_names() -> set[str]:
         ),
         rollback_preview_command=lambda _scope: pytest.fail("preview not used by parity listing"),
     )
-    return {
+    names = {
         command.name or (command.callback.__name__.replace("_", ".") if command.callback else "")
         for command in app.registered_commands
     } | {
@@ -221,6 +247,17 @@ def cli_app_command_names() -> set[str]:
         if group.typer_instance is not None
         for command in group.typer_instance.registered_commands
     }
+    for group in app.registered_groups:
+        if group.typer_instance is None:
+            continue
+        for subgroup in group.typer_instance.registered_groups:
+            if subgroup.typer_instance is None:
+                continue
+            names.update(
+                f"{group.name}.{subgroup.name}.{command.name}"
+                for command in subgroup.typer_instance.registered_commands
+            )
+    return names
 
 
 @pytest.mark.anyio
@@ -280,6 +317,87 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
                 "scope": "project",
                 "triggers": ["red green refactor"],
             },
+        ),
+        (
+            [
+                "skills",
+                "draft",
+                "create",
+                "--name",
+                "TDD recorrente",
+                "--description",
+                "Usuario pede ciclo red green refactor",
+                "--format",
+                "json",
+            ],
+            "create_skill_draft",
+            {
+                "name": "TDD recorrente",
+                "description": "Usuario pede ciclo red green refactor",
+            },
+        ),
+        (
+            ["skills", "validate", "tdd-recorrente", "--format", "json"],
+            "validate_skill",
+            {"skill_or_path": "tdd-recorrente"},
+        ),
+        (
+            ["skills", "publish", "tdd-recorrente", "--sync", "--format", "json"],
+            "publish_skill",
+            {"draft_or_path": "tdd-recorrente", "sync": True},
+        ),
+        (
+            [
+                "skills",
+                "adopt",
+                ".umem/skills/tdd-recorrente",
+                "--slug",
+                "tdd-recorrente",
+                "--format",
+                "json",
+            ],
+            "adopt_skill",
+            {"path": ".umem/skills/tdd-recorrente", "slug": "tdd-recorrente"},
+        ),
+        (
+            [
+                "skills",
+                "canonical",
+                "update",
+                "tdd-recorrente",
+                "--file",
+                "replacement-skill.md",
+                "--format",
+                "json",
+            ],
+            "update_canonical_skill",
+            {
+                "skill_id_or_name": "tdd-recorrente",
+                "raw_markdown": "---\nname: TDD recorrente\ndescription: Usuario pede ciclo\n---\n",
+            },
+        ),
+        (
+            [
+                "skills",
+                "rename",
+                "tdd-recorrente",
+                "--slug",
+                "tdd-renamed",
+                "--format",
+                "json",
+            ],
+            "rename_skill",
+            {"skill_id_or_name": "tdd-recorrente", "slug": "tdd-renamed"},
+        ),
+        (
+            ["skills", "cleanup", "tdd-recorrente", "--format", "json"],
+            "cleanup_skill",
+            {"skill_id_or_name": "tdd-recorrente", "dry_run": True},
+        ),
+        (
+            ["skills", "repair", "--remove-orphan-targets", "--format", "json"],
+            "repair_skills",
+            {"remove_orphan_targets": True, "dry_run": True},
         ),
         (
             [
@@ -454,6 +572,11 @@ async def test_cli_and_mcp_json_data_keys_match_for_public_capabilities(  # noqa
     mcp_args: dict[str, Any],
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    if "replacement-skill.md" in cli_args:
+        (tmp_path / "replacement-skill.md").write_text(
+            "---\nname: TDD recorrente\ndescription: Usuario pede ciclo\n---\n",
+            encoding="utf-8",
+        )
 
     exit_code = cli_main(cli_args, **cli_use_cases(tmp_path))
     cli_payload = json.loads(capsys.readouterr().out)
@@ -463,6 +586,30 @@ async def test_cli_and_mcp_json_data_keys_match_for_public_capabilities(  # noqa
     assert exit_code == 0
     assert mcp_payload is not None
     assert_contract_data_equivalent(cli_payload["data"], mcp_payload["data"], capability=mcp_tool)
+
+
+def test_summary_output_does_not_change_sync_json_contract(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    summary_exit = cli_main(
+        ["skills", "sync", "TDD recorrente", "--format", "summary"],
+        **cli_use_cases(tmp_path),
+    )
+    summary_output = capsys.readouterr().out
+    json_exit = cli_main(
+        ["skills", "sync", "TDD recorrente", "--format", "json"],
+        **cli_use_cases(tmp_path),
+    )
+    json_payload = json.loads(capsys.readouterr().out)
+
+    assert summary_exit == 0
+    assert json_exit == 0
+    assert "Operation: skills.sync" in summary_output
+    assert set(json_payload["data"]) >= {"skills", "affected_paths", "removed_paths"}
 
 
 @pytest.mark.anyio
@@ -600,6 +747,14 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
         "propose_skill_command": propose_skill_result,
         "track_latent_skill_command": track_latent_skill_result,
         "create_skill_command": create_skill_result,
+        "create_skill_draft_command": create_skill_draft_result,
+        "validate_skill_command": validate_skill_result,
+        "publish_skill_command": publish_skill_result,
+        "adopt_skill_command": adopt_skill_result,
+        "update_canonical_skill_command": update_canonical_skill_result,
+        "rename_skill_command": rename_skill_result,
+        "cleanup_skill_command": cleanup_skill_result,
+        "repair_skills_command": repair_skills_result,
         "promote_skill_recommendation_command": promote_skill_recommendation_result,
         "sync_skills_command": sync_skills_result,
         "import_skill_command": import_skill_result,
@@ -635,6 +790,14 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         propose_skill=propose_skill_result,
         track_latent_skill=track_latent_skill_result,
         create_skill=create_skill_result,
+        create_skill_draft=create_skill_draft_result,
+        validate_skill=validate_skill_result,
+        publish_skill=publish_skill_result,
+        adopt_skill=adopt_skill_result,
+        update_canonical_skill=update_canonical_skill_result,
+        rename_skill=rename_skill_result,
+        cleanup_skill=cleanup_skill_result,
+        repair_skills=repair_skills_result,
         promote_skill_recommendation=promote_skill_recommendation_result,
         sync_skills=sync_skills_result,
         import_skill=import_skill_result,
@@ -723,6 +886,150 @@ def create_skill_result(command: CreateSkillCommand) -> CreateSkillResult:
         affected_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
+    )
+
+
+def create_skill_draft_result(command: CreateSkillDraftCommand) -> DraftSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name=command.name,
+            description=command.description,
+            scope=command.scope,
+            origin=command.origin,
+            triggers=command.triggers,
+        )
+    )
+    draft_path = ".umem/drafts/skills/tdd-recorrente/SKILL.md"
+    return DraftSkillResult(
+        agent_skill=create.agent_skill.model_copy(
+            update={"status": AgentSkillStatus.draft, "canonical_path": draft_path}
+        ),
+        slug="tdd-recorrente",
+        draft_path=draft_path,
+        affected_paths=[draft_path],
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def validation_report(subject: str = "tdd-recorrente") -> SkillValidationReport:
+    return SkillValidationReport(
+        subject=subject,
+        status="pass",
+        checks=[],
+        affected_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
+    )
+
+
+def validate_skill_result(command: ValidateSkillCommand) -> ValidateSkillResult:
+    return ValidateSkillResult(report=validation_report(command.skill_or_path))
+
+
+def publish_skill_result(command: PublishSkillCommand) -> PublishSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="TDD recorrente",
+            description="Usuario pede ciclo red green refactor",
+            scope=LatentSkillScope.project,
+            origin=command.origin,
+        )
+    )
+    return PublishSkillResult(
+        agent_skill=create.agent_skill,
+        slug=create.slug,
+        skill_dir=create.skill_dir,
+        skill_file=create.skill_file,
+        affected_paths=create.affected_paths,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+        validation=validation_report(command.draft_or_path),
+        native_installations=[],
+    )
+
+
+def adopt_skill_result(command: AdoptSkillCommand) -> AdoptSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="TDD recorrente",
+            description="Usuario pede ciclo red green refactor",
+            scope=command.scope,
+            origin=command.origin,
+        )
+    )
+    return AdoptSkillResult(
+        agent_skill=create.agent_skill,
+        slug=command.slug or create.slug,
+        skill_dir=create.skill_dir,
+        skill_file=create.skill_file,
+        adopted_source=str(command.path),
+        affected_paths=create.affected_paths,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def update_canonical_skill_result(
+    command: UpdateCanonicalSkillCommand,
+) -> UpdateCanonicalSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="TDD recorrente",
+            description="Usuario pede ciclo",
+            scope=LatentSkillScope.project,
+            origin=command.origin,
+        )
+    )
+    return UpdateCanonicalSkillResult(
+        agent_skill=create.agent_skill,
+        skill_file=create.skill_file,
+        validation=validation_report(command.skill_id_or_name),
+        affected_paths=create.affected_paths,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def rename_skill_result(command: RenameSkillCommand) -> RenameSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="TDD recorrente",
+            description="Usuario pede ciclo red green refactor",
+            scope=LatentSkillScope.project,
+            origin=command.origin,
+        )
+    )
+    return RenameSkillResult(
+        agent_skill=create.agent_skill.model_copy(update={"slug": command.slug}),
+        old_path=".umem/skills/tdd-recorrente/SKILL.md",
+        new_path=f".umem/skills/{command.slug}/SKILL.md",
+        affected_paths=[
+            ".umem/skills/tdd-recorrente/SKILL.md",
+            f".umem/skills/{command.slug}/SKILL.md",
+        ],
+    )
+
+
+def cleanup_skill_result(command: CleanupSkillCommand) -> CleanupSkillResult:
+    return CleanupSkillResult(
+        plan=CleanupPlan(
+            skill=command.skill_id_or_name,
+            mode="targets",
+            dry_run=command.dry_run,
+            removable_paths=[".opencode/skills/tdd-recorrente"],
+        )
+    )
+
+
+def repair_skills_result(command: RepairSkillsCommand) -> RepairSkillsResult:
+    return RepairSkillsResult(
+        plans=[
+            CleanupPlan(
+                skill="all",
+                mode="orphan-targets",
+                dry_run=command.dry_run,
+                removable_paths=[".opencode/skills/orphan"],
+            )
+        ]
     )
 
 
