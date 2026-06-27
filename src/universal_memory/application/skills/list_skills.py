@@ -4,6 +4,7 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from universal_memory.application.skills.recommend_skills import (
     RecommendSkillsCommand,
     RecommendSkillsUseCase,
 )
+from universal_memory.application.skills.validate_skill import validate_skill_tree
 from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import (
     AgentSkill,
@@ -111,6 +113,7 @@ class GetSkillDetailResult:
     origin: str | None = None
     content_hash: str | None = None
     source_recommendation_id: str | None = None
+    recommended_action: str | None = None
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -134,6 +137,8 @@ class GetSkillDetailResult:
             payload["content_hash"] = self.content_hash
         if self.source_recommendation_id is not None:
             payload["source_recommendation_id"] = self.source_recommendation_id
+        if self.recommended_action is not None:
+            payload["recommended_action"] = self.recommended_action
         return payload
 
 
@@ -160,6 +165,8 @@ class ListSkillsUseCase:
                     status=agent_status,
                 )
             skills = [self._canonical_item_for(skill) for skill in canonical]
+            if command.status is None:
+                skills.extend(self._unregistered_items_for(canonical))
             skills.sort(key=lambda item: item.created_at)
             recommendations = self._recommendation_items_for(command)
             recommendations.sort(key=lambda item: item.created_at)
@@ -235,6 +242,44 @@ class ListSkillsUseCase:
             or (f"umem skills promote {skill.id}" if is_candidate else None),
         )
 
+    def _unregistered_items_for(self, registered: list[AgentSkill]) -> list[SkillListItem]:
+        registered_paths = {
+            (self.project_root / skill.canonical_path).resolve()
+            for skill in registered
+            if skill.scope == LatentSkillScope.project
+        }
+        registered_slugs = {
+            skill.slug for skill in registered if skill.scope == LatentSkillScope.project
+        }
+        items: list[SkillListItem] = []
+        for skill_file in sorted((self.project_root / ".umem" / "skills").glob("*/SKILL.md")):
+            if skill_file.resolve() in registered_paths:
+                continue
+            slug = skill_file.parent.name
+            if slug in registered_slugs:
+                continue
+            report = validate_skill_tree(skill_file, project_root=self.project_root, subject=slug)
+            if report.status == "fail":
+                continue
+            name = _read_frontmatter_name(skill_file) or slug
+            relative_path = skill_file.relative_to(self.project_root).as_posix()
+            timestamp = format_utc_iso(datetime_from_stat(skill_file.stat().st_mtime))
+            items.append(
+                SkillListItem(
+                    name=name,
+                    scope=LatentSkillScope.project.value,
+                    status="unregistered",
+                    relative_path=relative_path,
+                    canonical_path=relative_path,
+                    created_at=timestamp,
+                    updated_at=timestamp,
+                    origin="local",
+                    audit_reference="UNREGISTERED",
+                    recommended_action=f"umem skills adopt .umem/skills/{slug} --slug {slug}",
+                )
+            )
+        return items
+
 
 class GetSkillDetailUseCase:
     def __init__(
@@ -266,6 +311,21 @@ class GetSkillDetailUseCase:
                     origin=canonical.origin,
                     content_hash=canonical.content_hash,
                     source_recommendation_id=canonical.source_recommendation_id,
+                )
+            unregistered = self._find_unregistered_skill(command.name_or_id)
+            if unregistered is not None:
+                skill_file, slug = unregistered
+                return GetSkillDetailResult(
+                    name=_read_frontmatter_name(skill_file) or slug,
+                    scope=LatentSkillScope.project.value,
+                    status="unregistered",
+                    relative_path=skill_file.relative_to(self.project_root).as_posix(),
+                    canonical_path=skill_file.relative_to(self.project_root).as_posix(),
+                    triggers=_read_frontmatter_triggers(skill_file),
+                    audit_reference="UNREGISTERED",
+                    references_loaded=False,
+                    origin="local",
+                    recommended_action=f"umem skills adopt .umem/skills/{slug} --slug {slug}",
                 )
         skill = self._find_skill(command.name_or_id)
         relative_path = _relative_skill_file(self.project_root, skill)
@@ -329,6 +389,37 @@ class GetSkillDetailUseCase:
             return triggers
         return _as_clean_list(skill.metadata.get("triggers")) or [skill.name]
 
+    def _find_unregistered_skill(self, name_or_id: str) -> tuple[Path, str] | None:
+        needle = name_or_id.strip()
+        if not needle:
+            return None
+        registered = self.agent_skill_repository.list() if self.agent_skill_repository else []
+        registered_paths = {
+            (self.project_root / skill.canonical_path).resolve() for skill in registered
+        }
+        matches: list[tuple[Path, str]] = []
+        for skill_file in sorted((self.project_root / ".umem" / "skills").glob("*/SKILL.md")):
+            if skill_file.resolve() in registered_paths:
+                continue
+            slug = skill_file.parent.name
+            name = _read_frontmatter_name(skill_file)
+            if (
+                needle in {slug, skill_file.parent.as_posix()}
+                or name.casefold() == needle.casefold()
+            ):
+                report = validate_skill_tree(
+                    skill_file,
+                    project_root=self.project_root,
+                    subject=slug,
+                )
+                if report.status != "fail":
+                    matches.append((skill_file, slug))
+        if len(matches) > 1:
+            raise ValidationFailedError(
+                f"Mais de uma skill corresponde a '{name_or_id}'. Informe o slug."
+            )
+        return matches[0] if matches else None
+
 
 def _agent_status_filter(status: LatentSkillStatus | None) -> AgentSkillStatus | None:
     if status is None:
@@ -365,6 +456,10 @@ def _status_label(status: LatentSkillStatus) -> str:
     if status == LatentSkillStatus.ignored:
         return "disabled"
     return status.value
+
+
+def datetime_from_stat(timestamp: float) -> datetime:
+    return datetime.fromtimestamp(timestamp, tz=UTC)
 
 
 def _relative_skill_file(project_root: Path, skill: LatentSkill) -> str | None:

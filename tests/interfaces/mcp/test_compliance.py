@@ -26,10 +26,14 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
+    AdoptSkillResult,
+    CleanupPlan,
+    CleanupSkillResult,
     CreateSkillCommand,
     CreateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
+    DraftSkillResult,
     GenerateSkillCommand,
     GenerateSkillResult,
     GetSkillDetailCommand,
@@ -42,17 +46,23 @@ from universal_memory.application.skills import (
     PromoteSkillRecommendationResult,
     ProposeSkillCommand,
     ProposeSkillResult,
+    PublishSkillResult,
     RecommendSkillsCommand,
     RecommendSkillsResult,
+    RenameSkillResult,
+    RepairSkillsResult,
     SkillListItem,
     SkillRecommendationItem,
+    SkillValidationReport,
     SyncSkillResult,
     SyncSkillsCommand,
     SyncSkillsResult,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
+    UpdateCanonicalSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
+    ValidateSkillResult,
 )
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import (
@@ -97,11 +107,26 @@ PUBLIC_MCP_TOOLS = {
         "description": "Usuario pede ciclo red green refactor",
         "triggers": ["red green refactor"],
     },
+    "create_skill_draft": {
+        "name": "Draft Helper",
+        "description": "Draft skill.",
+        "triggers": ["draft"],
+    },
+    "validate_skill": {"skill_or_path": "tdd-recorrente"},
+    "publish_skill": {"draft_or_path": "draft-helper"},
     "import_skill": {
         "path": "native/tdd-recorrente/SKILL.md",
         "replace_native": True,
         "sync_after_import": True,
     },
+    "adopt_skill": {"path": ".umem/skills/tdd-recorrente", "slug": "tdd-recorrente"},
+    "update_canonical_skill": {
+        "skill_id_or_name": "tdd-recorrente",
+        "raw_markdown": "---\nname: TDD recorrente\ndescription: Usuario pede ciclo\n---\n",
+    },
+    "rename_skill": {"skill_id_or_name": "tdd-recorrente", "slug": "tdd-renamed"},
+    "cleanup_skill": {"skill_id_or_name": "tdd-recorrente", "dry_run": True},
+    "repair_skills": {"remove_orphan_targets": True, "dry_run": True},
     "promote_skill_recommendation": {"recommendation_id": FACT_ID, "targets": []},
     "generate_skill": {"latent_skill_id": FACT_ID},
     "sync_skills": {"skill_id_or_name": "TDD recorrente", "targets": ["opencode"]},
@@ -228,6 +253,30 @@ CONTRACT_KEYS_BY_TOOL = {
         "native_installations",
         "canonical_skill",
     },
+    "create_skill_draft": {
+        "skill_id",
+        "name",
+        "slug",
+        "draft_path",
+        "affected_paths",
+        "audit_reference",
+        "snapshot_reference",
+        "warnings",
+    },
+    "validate_skill": {"validation"},
+    "publish_skill": {
+        "skill_id",
+        "name",
+        "slug",
+        "skill_dir",
+        "skill_file",
+        "affected_paths",
+        "audit_reference",
+        "snapshot_reference",
+        "native_installations",
+        "validation",
+        "canonical_skill",
+    },
     "import_skill": {
         "skill_id",
         "name",
@@ -242,6 +291,47 @@ CONTRACT_KEYS_BY_TOOL = {
         "native_installations_note",
         "canonical_skill",
     },
+    "adopt_skill": {
+        "skill_id",
+        "name",
+        "slug",
+        "skill_dir",
+        "skill_file",
+        "adopted_source",
+        "affected_paths",
+        "audit_reference",
+        "snapshot_reference",
+        "native_installations",
+        "warnings",
+        "canonical_skill",
+    },
+    "update_canonical_skill": {
+        "skill_id",
+        "name",
+        "slug",
+        "skill_file",
+        "affected_paths",
+        "audit_reference",
+        "snapshot_reference",
+        "native_installations",
+        "warnings",
+        "validation",
+        "canonical_skill",
+    },
+    "rename_skill": {
+        "skill_id",
+        "name",
+        "slug",
+        "old_path",
+        "new_path",
+        "affected_paths",
+        "warnings",
+        "audit_reference",
+        "snapshot_reference",
+        "canonical_skill",
+    },
+    "cleanup_skill": {"plan", "removed_paths", "warnings"},
+    "repair_skills": {"plans", "removed_paths", "warnings"},
     "promote_skill_recommendation": {
         "skill_id",
         "name",
@@ -425,6 +515,30 @@ CONTRACT_TYPES_BY_TOOL = {
         "native_installations": list,
         "canonical_skill": dict,
     },
+    "create_skill_draft": {
+        "skill_id": str,
+        "name": str,
+        "slug": str,
+        "draft_path": str,
+        "affected_paths": list,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "warnings": list,
+    },
+    "validate_skill": {"validation": dict},
+    "publish_skill": {
+        "skill_id": str,
+        "name": str,
+        "slug": str,
+        "skill_dir": str,
+        "skill_file": str,
+        "affected_paths": list,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "native_installations": list,
+        "validation": dict,
+        "canonical_skill": dict,
+    },
     "import_skill": {
         "skill_id": str,
         "name": str,
@@ -438,6 +552,47 @@ CONTRACT_TYPES_BY_TOOL = {
         "native_installations": list,
         "canonical_skill": dict,
     },
+    "adopt_skill": {
+        "skill_id": str,
+        "name": str,
+        "slug": str,
+        "skill_dir": str,
+        "skill_file": str,
+        "adopted_source": str,
+        "affected_paths": list,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "native_installations": list,
+        "warnings": list,
+        "canonical_skill": dict,
+    },
+    "update_canonical_skill": {
+        "skill_id": str,
+        "name": str,
+        "slug": str,
+        "skill_file": str,
+        "affected_paths": list,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "native_installations": list,
+        "warnings": list,
+        "validation": dict,
+        "canonical_skill": dict,
+    },
+    "rename_skill": {
+        "skill_id": str,
+        "name": str,
+        "slug": str,
+        "old_path": str,
+        "new_path": str,
+        "affected_paths": list,
+        "warnings": list,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "canonical_skill": dict,
+    },
+    "cleanup_skill": {"plan": dict, "removed_paths": list, "warnings": list},
+    "repair_skills": {"plans": list, "removed_paths": list, "warnings": list},
     "promote_skill_recommendation": {
         "skill_id": str,
         "name": str,
@@ -646,7 +801,15 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         sync_instructions=lambda _command: sync_result(),
         propose_skill=propose_skill_result,
         create_skill=create_skill_result,
+        create_skill_draft=create_skill_draft_result,
+        validate_skill=validate_skill_result,
+        publish_skill=publish_skill_result,
         import_skill=import_skill_result,
+        adopt_skill=adopt_skill_result,
+        update_canonical_skill=update_canonical_skill_result,
+        rename_skill=rename_skill_result,
+        cleanup_skill=cleanup_skill_result,
+        repair_skills=repair_skills_result,
         promote_skill_recommendation=promote_skill_recommendation_result,
         generate_skill=generate_skill_result,
         sync_skills=sync_skills_result,
@@ -838,6 +1001,67 @@ def create_skill_result(command: CreateSkillCommand) -> CreateSkillResult:
     )
 
 
+def validation_report() -> SkillValidationReport:
+    return SkillValidationReport(
+        subject="tdd-recorrente",
+        status="pass",
+        checks=[],
+        affected_paths=[".umem/skills/tdd-recorrente/SKILL.md"],
+        recommended_next_steps=["Skill is ready."],
+    )
+
+
+def create_skill_draft_result(command: object) -> DraftSkillResult:
+    now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+    agent_skill = AgentSkill(
+        id=FACT_ID,
+        created_at=now,
+        updated_at=now,
+        name=getattr(command, "name", "Draft Helper"),
+        slug="draft-helper",
+        description=getattr(command, "description", "Draft skill."),
+        scope=getattr(command, "scope", LatentSkillScope.project),
+        status=AgentSkillStatus.draft,
+        canonical_path=".umem/drafts/skills/draft-helper/SKILL.md",
+        origin="mcp",
+        audit_reference="audit-1",
+        content_hash="hash-1",
+    )
+    return DraftSkillResult(
+        agent_skill=agent_skill,
+        slug="draft-helper",
+        draft_path=".umem/drafts/skills/draft-helper/SKILL.md",
+        affected_paths=[".umem/drafts/skills/draft-helper/SKILL.md"],
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def validate_skill_result(_command: object) -> ValidateSkillResult:
+    return ValidateSkillResult(report=validation_report())
+
+
+def publish_skill_result(_command: object) -> PublishSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="Draft Helper",
+            description="Draft skill.",
+            scope=LatentSkillScope.project,
+            origin="mcp",
+        )
+    )
+    return PublishSkillResult(
+        agent_skill=create.agent_skill,
+        slug=create.slug,
+        skill_dir=create.skill_dir,
+        skill_file=create.skill_file,
+        affected_paths=create.affected_paths,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+        validation=validation_report(),
+    )
+
+
 def import_skill_result(command: ImportSkillCommand) -> ImportSkillResult:
     now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
     agent_skill = AgentSkill(
@@ -864,6 +1088,88 @@ def import_skill_result(command: ImportSkillCommand) -> ImportSkillResult:
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
     )
+
+
+def adopt_skill_result(command: object) -> AdoptSkillResult:
+    imported = import_skill_result(
+        ImportSkillCommand(
+            path=getattr(command, "path", ".umem/skills/tdd-recorrente"),
+            scope=getattr(command, "scope", LatentSkillScope.project),
+            origin="mcp",
+        )
+    )
+    return AdoptSkillResult(
+        agent_skill=imported.agent_skill,
+        slug=imported.slug,
+        skill_dir=imported.skill_dir,
+        skill_file=imported.skill_file,
+        adopted_source=".umem/skills/tdd-recorrente",
+        affected_paths=imported.affected_paths,
+        audit_reference=imported.audit_reference,
+        snapshot_reference=imported.snapshot_reference,
+    )
+
+
+def update_canonical_skill_result(_command: object) -> UpdateCanonicalSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="TDD recorrente",
+            description="Usuario pede ciclo red green refactor",
+            scope=LatentSkillScope.project,
+            origin="mcp",
+        )
+    )
+    return UpdateCanonicalSkillResult(
+        agent_skill=create.agent_skill,
+        skill_file=create.skill_file,
+        validation=validation_report(),
+        affected_paths=create.affected_paths,
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def rename_skill_result(_command: object) -> RenameSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="TDD recorrente",
+            description="Usuario pede ciclo red green refactor",
+            scope=LatentSkillScope.project,
+            origin="mcp",
+        )
+    )
+    renamed = create.agent_skill.model_copy(update={"slug": "tdd-renamed"})
+    return RenameSkillResult(
+        agent_skill=renamed,
+        old_path=".umem/skills/tdd-recorrente/SKILL.md",
+        new_path=".umem/skills/tdd-renamed/SKILL.md",
+        affected_paths=[
+            ".umem/skills/tdd-recorrente/SKILL.md",
+            ".umem/skills/tdd-renamed/SKILL.md",
+        ],
+        audit_reference="audit-1",
+        snapshot_reference="snapshot-1",
+    )
+
+
+def cleanup_skill_result(_command: object) -> CleanupSkillResult:
+    plan = CleanupPlan(
+        skill="tdd-recorrente",
+        mode="targets",
+        dry_run=True,
+        removable_paths=[".agents/skills/tdd-recorrente"],
+    )
+    return CleanupSkillResult(plan=plan)
+
+
+def repair_skills_result(_command: object) -> RepairSkillsResult:
+    plan = CleanupPlan(
+        skill="all",
+        mode="orphan-targets",
+        dry_run=True,
+        removable_paths=[".agents/skills/orphan"],
+    )
+    return RepairSkillsResult(plans=[plan])
 
 
 def promote_skill_recommendation_result(

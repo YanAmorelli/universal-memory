@@ -12,6 +12,7 @@ from universal_memory.application.security import SafeWriteUseCase
 from universal_memory.application.skills.native_skill_sync import (
     NativeDriftDecision,
     NativeSkillSync,
+    collect_gitignore_warnings,
 )
 from universal_memory.application.skills.update_skill import _parse_skill_markdown
 from universal_memory.domain import ValidationFailedError
@@ -32,6 +33,7 @@ class SyncSkillsCommand:
     targets: list[str] | None = None
     drift_decision: NativeDriftDecision = "keep"
     origin: str = "sync_skills"
+    check_gitignore: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +92,7 @@ class _SyncSkillsCommandSchema(BaseModel):
     targets: list[str] | None = None
     drift_decision: NativeDriftDecision = "keep"
     origin: str = Field(min_length=1)
+    check_gitignore: bool = False
 
 
 class SyncSkillsUseCase:
@@ -137,6 +140,18 @@ class SyncSkillsUseCase:
                 targets=validated.targets,
                 allow_unmanaged_overwrite=False,
             )
+            gitignore_warnings = (
+                collect_gitignore_warnings(
+                    self.project_root,
+                    [
+                        str(installation.get("path", ""))
+                        for installation in native_result.installations
+                        if installation.get("path")
+                    ],
+                )
+                if validated.check_gitignore
+                else []
+            )
             audit_ref_candidates = [
                 ref for ref in [skill.audit_reference, *native_result.audit_references] if ref
             ]
@@ -168,12 +183,13 @@ class SyncSkillsUseCase:
                 affected_paths=native_result.affected_paths,
                 removed_paths=native_result.removed_paths,
                 targets=[_target_payload(target) for target in native_result.installations],
-                warnings=native_result.warnings,
+                warnings=[*native_result.warnings, *gitignore_warnings],
                 audit_reference=", ".join(ref for ref in skill_audit_refs if ref),
                 snapshot_reference=", ".join(ref for ref in skill_snapshot_refs if ref),
             )
             results.append(skill_result)
             warnings.extend(native_result.warnings)
+            warnings.extend(gitignore_warnings)
             affected_paths.extend(native_result.affected_paths)
             removed_paths.extend(native_result.removed_paths)
             audit_refs.extend(skill_audit_refs)
@@ -195,7 +211,7 @@ class SyncSkillsUseCase:
         normalized = selector.strip().casefold()
         if not normalized:
             raise ValidationFailedError("Skill selector must not be empty.")
-        id_matches = [skill for skill in active_skills if skill.id == selector]
+        id_matches = [skill for skill in active_skills if selector in {skill.id, skill.slug}]
         if id_matches:
             return id_matches
         name_matches = [skill for skill in active_skills if skill.name.casefold() == normalized]

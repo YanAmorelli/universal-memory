@@ -26,3 +26,13 @@ class AgentSkill(BaseEntity):
     native_installations: list[dict[str, Any]] = Field(default_factory=list)
     source_recommendation_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def draft_path(self) -> str | None:
+        value = self.metadata.get("draft_path")
+        return str(value) if value else None
+
+    @property
+    def validation(self) -> dict[str, Any] | None:
+        value = self.metadata.get("validation")
+        return value if isinstance(value, dict) else None

@@ -18,6 +18,10 @@ from universal_memory.application.skills.native_skill_sync import (
     NativeSkillSyncResult,
 )
 from universal_memory.application.skills.update_skill import _parse_skill_markdown, _slug
+from universal_memory.application.skills.validate_skill import (
+    assert_validation_passes,
+    validate_skill_tree,
+)
 from universal_memory.domain import StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AgentSkill,
@@ -47,6 +51,7 @@ class ImportSkillCommand:
     origin: str
     replace_native: bool = False
     sync_after_import: bool = False
+    slug: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +123,7 @@ class _ImportSkillSchema(BaseModel):
     origin: str = Field(min_length=1)
     replace_native: bool = False
     sync_after_import: bool = False
+    slug: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,10 +177,16 @@ class ImportSkillUseCase:
             raise ValidationFailedError(msg) from exc
 
         parsed = _parse_skill_markdown(markdown)
-        slug = _slug(parsed.name)
+        slug = _slug(validated.slug) if validated.slug else _slug(parsed.name)
         skill_dir = self._skill_dir_for(validated.scope, slug)
         canonical_skill_file = f"{skill_dir}/SKILL.md"
         self._validate_no_conflict(validated.scope, slug)
+        validation_report = validate_skill_tree(
+            skill_file,
+            project_root=self.project_root,
+            subject=slug,
+        )
+        assert_validation_passes(validation_report)
 
         files = self._source_files(source_dir)
         write = self._safe_write_for(validated.scope)
@@ -203,6 +215,7 @@ class ImportSkillUseCase:
                 "creation_flow": "import",
                 "recommendation_flow": False,
                 "import_source": import_source,
+                "validation": validation_report.to_payload(),
             }
             agent_skill = AgentSkill(
                 id=str(uuid4()),
@@ -233,7 +246,7 @@ class ImportSkillUseCase:
                 )
             )
             native_result = native_outcome.result
-            warnings = native_outcome.warnings
+            warnings = [*validation_report.warnings, *native_outcome.warnings]
             native_backup = native_outcome.backup
             warnings.extend(native_result.warnings)
             agent_skill = agent_skill.model_copy(

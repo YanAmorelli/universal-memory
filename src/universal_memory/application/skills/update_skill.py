@@ -18,13 +18,15 @@ from universal_memory.application.skills.native_skill_sync import (
 )
 from universal_memory.domain import ValidationFailedError
 from universal_memory.domain.entities import (
+    AgentSkill,
+    AgentSkillStatus,
     AuditEventScope,
     LatentSkill,
     LatentSkillScope,
     RuntimeRegistry,
 )
 from universal_memory.domain.entities.latent_skill import LatentSkillStatus
-from universal_memory.domain.ports import LatentSkillRepository
+from universal_memory.domain.ports import AgentSkillRepository, LatentSkillRepository
 
 FRONTMATTER_PART_COUNT = 3
 MIN_QUOTED_SCALAR_LENGTH = 2
@@ -81,6 +83,52 @@ class UpdateSkillResult:
     warnings: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class UpdateCanonicalSkillCommand:
+    skill_id_or_name: str
+    origin: str
+    raw_markdown: str | None = None
+    file: str | None = None
+    sync: bool = False
+    drift_decision: NativeDriftDecision = "keep"
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateCanonicalSkillResult:
+    agent_skill: AgentSkill
+    skill_file: str
+    validation: Any
+    affected_paths: list[str]
+    audit_reference: str
+    snapshot_reference: str
+    native_installations: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "skill_id": self.agent_skill.id,
+            "name": self.agent_skill.name,
+            "slug": self.agent_skill.slug,
+            "skill_file": self.skill_file,
+            "affected_paths": self.affected_paths,
+            "audit_reference": self.audit_reference,
+            "snapshot_reference": self.snapshot_reference,
+            "native_installations": self.native_installations,
+            "warnings": self.warnings,
+            "validation": self.validation.to_payload(),
+            "canonical_skill": {
+                "id": self.agent_skill.id,
+                "name": self.agent_skill.name,
+                "description": self.agent_skill.description,
+                "scope": self.agent_skill.scope.value,
+                "status": self.agent_skill.status.value,
+                "canonical_path": self.agent_skill.canonical_path,
+                "origin": self.agent_skill.origin,
+                "content_hash": self.agent_skill.content_hash,
+            },
+        }
+
+
 class _SkillIdCommandSchema(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
@@ -99,6 +147,17 @@ class _UpdateSkillCommandSchema(BaseModel):
     metadata: dict[str, Any] | None = None
     raw_markdown: str | None = None
     native_drift_decision: NativeDriftDecision | None = None
+
+
+class _UpdateCanonicalSkillCommandSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    skill_id_or_name: str = Field(min_length=1)
+    origin: str = Field(min_length=1)
+    raw_markdown: str | None = None
+    file: str | None = None
+    sync: bool = False
+    drift_decision: NativeDriftDecision = "keep"
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,6 +420,167 @@ class UpdateSkillUseCase:
         )
 
 
+class UpdateCanonicalSkillUseCase:
+    def __init__(
+        self,
+        *,
+        project_root: Path,
+        repository: AgentSkillRepository,
+        safe_write_use_case: SafeWriteUseCase,
+        global_safe_write_use_case: SafeWriteUseCase | None = None,
+        runtime_registry: RuntimeRegistry | None = None,
+    ) -> None:
+        self.project_root = project_root.resolve()
+        self.repository = repository
+        self.safe_write_use_case = safe_write_use_case
+        self.global_safe_write_use_case = global_safe_write_use_case or safe_write_use_case
+        self.native_skill_sync = NativeSkillSync(
+            project_root=self.project_root,
+            safe_write_use_case=safe_write_use_case,
+            runtime_registry=runtime_registry,
+        )
+
+    def execute(self, command: UpdateCanonicalSkillCommand) -> UpdateCanonicalSkillResult:
+        from universal_memory.application.skills.validate_skill import (  # noqa: PLC0415
+            assert_validation_passes,
+            validate_skill_tree,
+        )
+
+        validated = _UpdateCanonicalSkillCommandSchema.model_validate(command)
+        skill = self._resolve_skill(validated.skill_id_or_name)
+        if validated.raw_markdown is None and validated.file is None:
+            raise ValidationFailedError("Provide raw_markdown or --file for canonical update.")
+        if validated.raw_markdown is not None and validated.file is not None:
+            raise ValidationFailedError("Provide only one canonical update content source.")
+        content = validated.raw_markdown
+        validation_path: Path
+        temp_path: Path | None = None
+        if content is None:
+            file_path = Path(validate_project_relative_path(validated.file or ""))
+            validation_path = self.project_root / file_path
+            content = validation_path.read_text(encoding="utf-8")
+        else:
+            temp_path = self.project_root / ".umem" / "tmp" / "validation" / skill.slug / "SKILL.md"
+            temp_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path.write_text(content, encoding="utf-8")
+            validation_path = temp_path
+        parsed = _parse_skill_markdown(content)
+        report = validate_skill_tree(
+            validation_path,
+            project_root=self.project_root,
+            subject=skill.slug,
+        )
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        assert_validation_passes(report)
+        write = self._safe_write_for(skill.scope)
+        write_result = write.execute(
+            SafeWriteCommand(
+                relative_path=skill.canonical_path,
+                content=_strip_absolute_project_paths(content, self.project_root),
+                scope=_audit_scope_for(skill.scope),
+                origin=validated.origin,
+                action="update_canonical_skill",
+            )
+        )
+        updated = skill.model_copy(
+            update={
+                "updated_at": datetime.now(UTC),
+                "name": parsed.name,
+                "description": parsed.description,
+                "origin": validated.origin,
+                "content_hash": _hash_text(content),
+                "metadata": {
+                    **skill.metadata,
+                    "triggers": parsed.triggers,
+                    "validation": report.to_payload(),
+                },
+            }
+        )
+        native_result = None
+        if validated.sync:
+            native_result = self.native_skill_sync.sync(
+                skill=LatentSkill(
+                    id=updated.id,
+                    created_at=updated.created_at,
+                    updated_at=updated.updated_at,
+                    name=updated.name,
+                    description=updated.description,
+                    scope=updated.scope,
+                    status=LatentSkillStatus.active,
+                    recurrence_count=1,
+                    metadata={
+                        **updated.metadata,
+                        "native_installations": updated.native_installations,
+                    },
+                ),
+                slug=updated.slug,
+                canonical_skill_file=updated.canonical_path,
+                origin=validated.origin,
+                drift_decision=validated.drift_decision,
+                canonical_base_path=write.project_root,
+                allow_unmanaged_overwrite=False,
+            )
+            updated = updated.model_copy(
+                update={"native_installations": native_result.installations}
+            )
+        registry_write = self.repository.replace(updated, origin=validated.origin)
+        audit_refs = [
+            write_result.audit_reference,
+            *(native_result.audit_references if native_result is not None else []),
+        ]
+        snapshot_refs = [
+            write_result.snapshot_reference,
+            *(native_result.snapshot_references if native_result is not None else []),
+        ]
+        if registry_write is not None:
+            audit_refs.append(registry_write.audit_reference)
+            snapshot_refs.append(registry_write.snapshot_reference)
+        affected_paths = [
+            write_result.relative_path,
+            *(native_result.affected_paths if native_result is not None else []),
+        ]
+        warnings = [
+            *report.warnings,
+            *(native_result.warnings if native_result is not None else []),
+        ]
+        return UpdateCanonicalSkillResult(
+            agent_skill=updated,
+            skill_file=updated.canonical_path,
+            validation=report,
+            affected_paths=affected_paths,
+            audit_reference=", ".join(ref for ref in audit_refs if ref),
+            snapshot_reference=", ".join(ref for ref in snapshot_refs if ref),
+            native_installations=native_result.installations if native_result is not None else [],
+            warnings=warnings,
+        )
+
+    def _resolve_skill(self, selector: str) -> AgentSkill:
+        normalized = selector.strip().casefold()
+        matches: list[AgentSkill] = []
+        for skill in self.repository.list(status=AgentSkillStatus.active):
+            if selector in {skill.id, skill.slug}:
+                return skill
+            if skill.name.casefold() == normalized:
+                matches.append(skill)
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ValidationFailedError(f"Ambiguous skill selector: {selector}")
+        raise ValidationFailedError(
+            f"Canonical skill not found: {selector}. "
+            "Use `umem skills canonical update <skill> --file <path>`."
+        )
+
+    def _safe_write_for(self, scope: LatentSkillScope) -> SafeWriteUseCase:
+        if scope == LatentSkillScope.global_:
+            return self.global_safe_write_use_case
+        return self.safe_write_use_case
+
+
 def _replace_skill(skill: LatentSkill, **updates: Any) -> LatentSkill:
     payload = skill.model_dump()
     payload.update(updates)
@@ -592,6 +812,10 @@ def _normalize_triggers(triggers: list[str]) -> list[str]:
     return [trigger.strip() for trigger in triggers if trigger.strip()]
 
 
+def _hash_text(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
 def _slug(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value)
     ascii_value = "".join(char for char in decomposed if not unicodedata.combining(char))
@@ -600,3 +824,21 @@ def _slug(value: str) -> str:
         h = hashlib.md5(value.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
         return f"skill-{h}"
     return slug
+
+
+def validate_skill_slug(slug: str) -> str:
+    normalized = slug.strip()
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", normalized):
+        raise ValidationFailedError(
+            "Skill slug must use lowercase letters, numbers, and single hyphens."
+        )
+    return normalized
+
+
+def validate_project_relative_path(value: str) -> str:
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValidationFailedError(
+            f"Path must be project-relative and stay inside the project: {value}"
+        )
+    return path.as_posix()

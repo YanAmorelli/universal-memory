@@ -35,6 +35,8 @@ class CreateSkillCommand:
     origin: str
     triggers: list[str] | None = None
     raw_markdown: str | None = None
+    slug: str | None = None
+    sync: bool = False
     targets: list[str] | None = None
     source_recommendation_id: str | None = None
     metadata: dict[str, Any] | None = None
@@ -117,6 +119,8 @@ class _CreateSkillSchema(BaseModel):
     origin: str = Field(min_length=1)
     triggers: list[str] | None = None
     raw_markdown: str | None = None
+    slug: str | None = None
+    sync: bool = False
     targets: list[str] | None = None
     source_recommendation_id: str | None = None
     metadata: dict[str, Any] | None = None
@@ -162,7 +166,8 @@ class CreateSkillUseCase:
                 )
             triggers = parsed.triggers or triggers
 
-        slug = self._resolve_slug(validated.scope, self._slug(name))
+        requested_slug = validated.slug.strip() if validated.slug else self._slug(name)
+        slug = self._resolve_slug(validated.scope, self._validate_slug(requested_slug))
         skill_dir = self._skill_dir_for(validated.scope, slug)
         skill_file = f"{skill_dir}/SKILL.md"
         content = self._render_skill_markdown(
@@ -214,21 +219,30 @@ class CreateSkillUseCase:
                 source_recommendation_id=validated.source_recommendation_id,
                 metadata=metadata,
             )
-            native_result = self.native_skill_sync.sync(
-                skill=agent_skill,  # type: ignore[arg-type]
-                slug=slug,
-                canonical_skill_file=skill_file,
-                origin=validated.origin,
-                drift_decision="keep",
-                canonical_base_path=write.project_root,
-                targets=validated.targets,
-            )
+            if validated.sync:
+                native_result = self.native_skill_sync.sync(
+                    skill=agent_skill,  # type: ignore[arg-type]
+                    slug=slug,
+                    canonical_skill_file=skill_file,
+                    origin=validated.origin,
+                    drift_decision="keep",
+                    canonical_base_path=write.project_root,
+                    targets=validated.targets,
+                    allow_unmanaged_overwrite=False,
+                )
+            else:
+                native_result = None
             agent_skill = agent_skill.model_copy(
                 update={
-                    "native_installations": native_result.installations,
+                    "native_installations": native_result.installations
+                    if native_result is not None
+                    else [],
                     "audit_reference": ", ".join(
                         ref
-                        for ref in [write_result.audit_reference, *native_result.audit_references]
+                        for ref in [
+                            write_result.audit_reference,
+                            *(native_result.audit_references if native_result is not None else []),
+                        ]
                         if ref
                     ),
                 }
@@ -237,7 +251,7 @@ class CreateSkillUseCase:
             audit_references = [agent_skill.audit_reference]
             snapshot_references = [
                 write_result.snapshot_reference,
-                *native_result.snapshot_references,
+                *(native_result.snapshot_references if native_result is not None else []),
             ]
             if registry_write is not None:
                 audit_references.append(registry_write.audit_reference)
@@ -248,11 +262,16 @@ class CreateSkillUseCase:
                 skill_dir=skill_dir,
                 skill_file=skill_file,
                 created_paths=[write_result.relative_path],
-                affected_paths=[write_result.relative_path, *native_result.affected_paths],
+                affected_paths=[
+                    write_result.relative_path,
+                    *(native_result.affected_paths if native_result is not None else []),
+                ],
                 audit_reference=", ".join(ref for ref in audit_references if ref),
                 snapshot_reference=", ".join(ref for ref in snapshot_references if ref),
-                native_installations=native_result.installations,
-                warnings=native_result.warnings,
+                native_installations=native_result.installations
+                if native_result is not None
+                else [],
+                warnings=native_result.warnings if native_result is not None else [],
             )
         except Exception:
             if write_result is not None:
@@ -263,6 +282,9 @@ class CreateSkillUseCase:
             raise
 
     def _resolve_slug(self, scope: LatentSkillScope, base_slug: str) -> str:
+        for skill in self.repository.list(scope=scope):
+            if skill.slug == base_slug:
+                raise ValidationFailedError(f"Skill slug already exists: {base_slug}")
         base_dir = self._absolute_skill_dir_for(scope, base_slug)
         if base_dir.exists() and not base_dir.is_dir():
             raise StorageError(f"Path is occupied by a regular file: {base_dir}")
@@ -277,6 +299,14 @@ class CreateSkillUseCase:
             if not candidate_dir.exists():
                 return candidate
             suffix += 1
+
+    @staticmethod
+    def _validate_slug(slug: str) -> str:
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+            raise ValidationFailedError(
+                "Skill slug must use lowercase letters, numbers, and single hyphens."
+            )
+        return slug
 
     def _safe_write_for(self, scope: LatentSkillScope) -> SafeWriteUseCase:
         if scope == LatentSkillScope.global_:
