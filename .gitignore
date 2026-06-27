@@ -1,8 +1,12 @@
 # AI
 _bmad/
 .agents/
+.antigravity/
 .gemini/
 .opencode/
+.claude/
+.cursor/
+.specify/
 .agent/
 .antigravitycli/
 AGENTS.md
@@ -15,6 +19,7 @@ _bmad-output/**/review-prompt-*.md
 .umem/*
 !.umem/benchmarks/
 !.umem/skills/
+.umem/skills/*
 !.umem/skills/use-universal-memory/
 !.umem/skills/use-universal-memory/**
 

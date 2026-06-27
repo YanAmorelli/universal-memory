@@ -64,6 +64,7 @@ def test_skills_sync_json_uses_cli_origin_targets_and_success_envelope(capsys) -
             "opencode",
             "--format",
             "json",
+            "--check-gitignore",
         ],
         sync_skills_command=sync,
     )
@@ -76,6 +77,7 @@ def test_skills_sync_json_uses_cli_origin_targets_and_success_envelope(capsys) -
             targets=["opencode"],
             drift_decision="keep",
             origin="cli",
+            check_gitignore=True,
         )
     ]
     assert payload["operation"] == "skills.sync"

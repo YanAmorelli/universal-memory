@@ -58,10 +58,16 @@ from universal_memory.application.security import (
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
+    AdoptSkillCommand,
+    AdoptSkillResult,
+    CleanupSkillCommand,
+    CleanupSkillResult,
     CreateSkillCommand,
+    CreateSkillDraftCommand,
     CreateSkillResult,
     DeactivateSkillCommand,
     DeactivateSkillResult,
+    DraftSkillResult,
     GenerateSkillCommand,
     GenerateSkillResult,
     GetSkillDetailCommand,
@@ -75,15 +81,25 @@ from universal_memory.application.skills import (
     ProposeSkillCommand,
     ProposeSkillDecision,
     ProposeSkillResult,
+    PublishSkillCommand,
+    PublishSkillResult,
     RecommendSkillsCommand,
     RecommendSkillsResult,
+    RenameSkillCommand,
+    RenameSkillResult,
+    RepairSkillsCommand,
+    RepairSkillsResult,
     SyncSkillResult,
     SyncSkillsCommand,
     SyncSkillsResult,
     TrackLatentSkillCommand,
     TrackLatentSkillResult,
+    UpdateCanonicalSkillCommand,
+    UpdateCanonicalSkillResult,
     UpdateSkillCommand,
     UpdateSkillResult,
+    ValidateSkillCommand,
+    ValidateSkillResult,
 )
 from universal_memory.application.skills.import_skill import NO_NATIVE_INSTALLATIONS_NOTE
 from universal_memory.application.skills.native_skill_sync import DRIFT_WARNING, NativeDriftDecision
@@ -162,6 +178,16 @@ ProposeSkillCommandHandler = Callable[[ProposeSkillCommand], ProposeSkillResult]
 TrackLatentSkillCommandHandler = Callable[[TrackLatentSkillCommand], TrackLatentSkillResult]
 GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResult]
 CreateSkillCommandHandler = Callable[[CreateSkillCommand], CreateSkillResult]
+CreateSkillDraftCommandHandler = Callable[[CreateSkillDraftCommand], DraftSkillResult]
+PublishSkillCommandHandler = Callable[[PublishSkillCommand], PublishSkillResult]
+ValidateSkillCommandHandler = Callable[[ValidateSkillCommand], ValidateSkillResult]
+AdoptSkillCommandHandler = Callable[[AdoptSkillCommand], AdoptSkillResult]
+UpdateCanonicalSkillCommandHandler = Callable[
+    [UpdateCanonicalSkillCommand], UpdateCanonicalSkillResult
+]
+RenameSkillCommandHandler = Callable[[RenameSkillCommand], RenameSkillResult]
+CleanupSkillCommandHandler = Callable[[CleanupSkillCommand], CleanupSkillResult]
+RepairSkillsCommandHandler = Callable[[RepairSkillsCommand], RepairSkillsResult]
 PromoteSkillRecommendationCommandHandler = Callable[
     [PromoteSkillRecommendationCommand], PromoteSkillRecommendationResult
 ]
@@ -198,7 +224,7 @@ OutputFormatOption = Annotated[
         "-f",
         help="Output format.",
         case_sensitive=False,
-        click_type=click.Choice(["human", "json"], case_sensitive=False),
+        click_type=click.Choice(["human", "json", "summary"], case_sensitive=False),
     ),
 ]
 YesOption = Annotated[bool, typer.Option("--yes", "-y", help="Skip interactive confirmation.")]
@@ -238,6 +264,14 @@ def main(  # noqa: PLR0913
     track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     create_skill_command: CreateSkillCommandHandler | None = None,
+    create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
+    publish_skill_command: PublishSkillCommandHandler | None = None,
+    validate_skill_command: ValidateSkillCommandHandler | None = None,
+    adopt_skill_command: AdoptSkillCommandHandler | None = None,
+    update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
+    rename_skill_command: RenameSkillCommandHandler | None = None,
+    cleanup_skill_command: CleanupSkillCommandHandler | None = None,
+    repair_skills_command: RepairSkillsCommandHandler | None = None,
     promote_skill_recommendation_command: PromoteSkillRecommendationCommandHandler | None = None,
     import_skill_command: ImportSkillCommandHandler | None = None,
     recommend_skills_command: RecommendSkillsCommandHandler | None = None,
@@ -273,6 +307,14 @@ def main(  # noqa: PLR0913
         track_latent_skill_command=track_latent_skill_command,
         generate_skill_command=generate_skill_command,
         create_skill_command=create_skill_command,
+        create_skill_draft_command=create_skill_draft_command,
+        publish_skill_command=publish_skill_command,
+        validate_skill_command=validate_skill_command,
+        adopt_skill_command=adopt_skill_command,
+        update_canonical_skill_command=update_canonical_skill_command,
+        rename_skill_command=rename_skill_command,
+        cleanup_skill_command=cleanup_skill_command,
+        repair_skills_command=repair_skills_command,
         promote_skill_recommendation_command=promote_skill_recommendation_command,
         import_skill_command=import_skill_command,
         recommend_skills_command=recommend_skills_command,
@@ -354,6 +396,14 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     create_skill_command: CreateSkillCommandHandler | None = None,
+    create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
+    publish_skill_command: PublishSkillCommandHandler | None = None,
+    validate_skill_command: ValidateSkillCommandHandler | None = None,
+    adopt_skill_command: AdoptSkillCommandHandler | None = None,
+    update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
+    rename_skill_command: RenameSkillCommandHandler | None = None,
+    cleanup_skill_command: CleanupSkillCommandHandler | None = None,
+    repair_skills_command: RepairSkillsCommandHandler | None = None,
     promote_skill_recommendation_command: PromoteSkillRecommendationCommandHandler | None = None,
     import_skill_command: ImportSkillCommandHandler | None = None,
     recommend_skills_command: RecommendSkillsCommandHandler | None = None,
@@ -381,12 +431,16 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             "sync to materialize canonical skills into native runtime copies."
         )
     )
+    skills_draft_app = typer.Typer(help="Create and validate draft skills before publish.")
+    skills_canonical_app = typer.Typer(help="Maintain published canonical skills safely.")
 
     app.add_typer(facts_app, name="facts")
     app.add_typer(audit_app, name="audit")
     app.add_typer(snapshots_app, name="snapshots")
     app.add_typer(host_app, name="host")
     app.add_typer(skills_app, name="skills")
+    skills_app.add_typer(skills_draft_app, name="draft")
+    skills_app.add_typer(skills_canonical_app, name="canonical")
 
     @app.callback()
     def callback(
@@ -407,7 +461,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 "-f",
                 help="Global output format.",
                 case_sensitive=False,
-                click_type=click.Choice(["human", "json"], case_sensitive=False),
+                click_type=click.Choice(["human", "json", "summary"], case_sensitive=False),
             ),
         ] = "human",
     ) -> None:
@@ -957,11 +1011,29 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
-    @skills_app.command("create")
+    @skills_app.command(
+        "create",
+        help=(
+            "Create a canonical skill directly. Use draft create first when the content "
+            "needs review; native targets are not synced unless --sync is used."
+        ),
+    )
     def skills_create(  # noqa: PLR0913
         ctx: typer.Context,
         name: Annotated[str, typer.Option("--name", help="Skill name.")],
         description: Annotated[str, typer.Option("--description", help="Skill description.")],
+        slug: Annotated[str | None, typer.Option("--slug", help="Explicit skill slug.")] = None,
+        sync: Annotated[
+            bool,
+            typer.Option(
+                "--sync",
+                help="Also synchronize the new canonical skill into native runtime targets.",
+            ),
+        ] = False,
+        target: Annotated[
+            list[str] | None,
+            typer.Option("--target", help="Runtime target to sync. May be used multiple times."),
+        ] = None,
         trigger: Annotated[
             list[str] | None,
             typer.Option("--trigger", help="Skill trigger. May be used multiple times."),
@@ -983,6 +1055,107 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 description=description,
                 triggers=trigger,
                 scope=scope,
+                slug=slug,
+                sync=sync,
+                targets=target,
+            )
+        )
+
+    @skills_draft_app.command(
+        "create",
+        help=(
+            "Start an editable draft without native side effects. Use skills create "
+            "for a known-good skill that can become canonical immediately."
+        ),
+    )
+    def skills_draft_create(  # noqa: PLR0913
+        ctx: typer.Context,
+        name: Annotated[str, typer.Option("--name", help="Draft skill name.")],
+        description: Annotated[str, typer.Option("--description", help="Draft skill description.")],
+        slug: Annotated[str | None, typer.Option("--slug", help="Explicit draft slug.")] = None,
+        trigger: Annotated[
+            list[str] | None,
+            typer.Option("--trigger", help="Draft trigger. May be used multiple times."),
+        ] = None,
+        scope: Annotated[
+            LatentSkillScope,
+            typer.Option("--scope", help="Skill scope (project or global)."),
+        ] = LatentSkillScope.project,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if create_skill_draft_command is None:
+            msg = "CLI create_skill_draft_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_draft_create(
+                create_skill_draft_command,
+                output_format=_effective_format(ctx, output_format),
+                name=name,
+                description=description,
+                slug=slug,
+                triggers=trigger,
+                scope=scope,
+            )
+        )
+
+    @skills_draft_app.command(
+        "validate",
+        help=(
+            "Validate a draft skill before publish. Use skills validate for an already "
+            "canonical skill or an arbitrary skill path."
+        ),
+    )
+    def skills_draft_validate(
+        ctx: typer.Context,
+        draft_or_path: Annotated[str, typer.Argument(help="Draft slug, id, name, or path.")],
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if validate_skill_command is None:
+            msg = "CLI validate_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_validate(
+                validate_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                skill_or_path=draft_or_path,
+            )
+        )
+
+    @skills_app.command(
+        "publish",
+        help=(
+            "Publish a validated draft into .umem/skills. Native targets are not synced "
+            "unless --sync is used."
+        ),
+    )
+    def skills_publish(  # noqa: PLR0913
+        ctx: typer.Context,
+        draft_or_path: Annotated[str, typer.Argument(help="Draft slug, id, name, or path.")],
+        slug: Annotated[str | None, typer.Option("--slug", help="Published skill slug.")] = None,
+        sync: Annotated[
+            bool,
+            typer.Option(
+                "--sync",
+                help="Sync native targets after publish. Default is canonical-only.",
+            ),
+        ] = False,
+        target: Annotated[
+            list[str] | None,
+            typer.Option("--target", help="Runtime target to sync. May be used multiple times."),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if publish_skill_command is None:
+            msg = "CLI publish_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_publish(
+                publish_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                draft_or_path=draft_or_path,
+                slug=slug,
+                sync=sync,
+                targets=target,
             )
         )
 
@@ -1069,12 +1242,234 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             )
         )
 
-    @skills_app.command("sync")
-    def skills_sync(
+    @skills_app.command(
+        "adopt",
+        help=(
+            "Register an existing .umem/skills directory in place. Use import for "
+            "native directories such as .agents/skills or .opencode/skills."
+        ),
+    )
+    def skills_adopt(  # noqa: PLR0913
+        ctx: typer.Context,
+        path: Annotated[Path, typer.Argument(help="Existing skill directory or SKILL.md.")],
+        slug: Annotated[str | None, typer.Option("--slug", help="Slug to register.")] = None,
+        scope: Annotated[
+            LatentSkillScope,
+            typer.Option("--scope", help="Skill scope (project or global)."),
+        ] = LatentSkillScope.project,
+        replace_native: Annotated[
+            bool,
+            typer.Option(
+                "--replace-native",
+                help="Rewrite the matching managed native source after adoption.",
+            ),
+        ] = False,
+        sync_after_adopt: Annotated[
+            bool,
+            typer.Option(
+                "--sync",
+                help="Sync native targets after adoption. Default only registers canonical.",
+            ),
+        ] = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if adopt_skill_command is None:
+            msg = "CLI adopt_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_adopt(
+                adopt_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                path=path,
+                slug=slug,
+                scope=scope,
+                replace_native=replace_native,
+                sync_after_adopt=sync_after_adopt,
+            )
+        )
+
+    @skills_app.command(
+        "validate",
+        help=(
+            "Validate canonical skill content or a skill path. Use draft validate "
+            "when checking an unpublished draft."
+        ),
+    )
+    def skills_validate(
+        ctx: typer.Context,
+        skill_or_path: Annotated[str, typer.Argument(help="Skill id, slug, name, or path.")],
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if validate_skill_command is None:
+            msg = "CLI validate_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_validate(
+                validate_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                skill_or_path=skill_or_path,
+            )
+        )
+
+    @skills_canonical_app.command(
+        "update",
+        help=(
+            "Replace canonical SKILL.md content after validation. Use skills update "
+            "only for latent/generated skill metadata."
+        ),
+    )
+    def skills_canonical_update(  # noqa: PLR0913
+        ctx: typer.Context,
+        skill_id_or_name: Annotated[str, typer.Argument(help="Canonical skill id, slug, or name.")],
+        file: Annotated[Path, typer.Option("--file", help="Replacement SKILL.md path.")],
+        sync: Annotated[
+            bool,
+            typer.Option(
+                "--sync",
+                help="Sync native targets after update. Default updates canonical only.",
+            ),
+        ] = False,
+        drift_decision: Annotated[
+            str,
+            typer.Option(
+                "--drift-decision",
+                click_type=click.Choice(["keep", "overwrite"], case_sensitive=False),
+            ),
+        ] = "keep",
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if update_canonical_skill_command is None:
+            msg = "CLI update_canonical_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_canonical_update(
+                update_canonical_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                skill_id_or_name=skill_id_or_name,
+                file=file,
+                sync=sync,
+                drift_decision=drift_decision,
+            )
+        )
+
+    @skills_app.command(
+        "rename",
+        help=(
+            "Rename a canonical skill slug. Run skills sync afterward when native "
+            "runtime targets should move too."
+        ),
+    )
+    def skills_rename(
+        ctx: typer.Context,
+        skill_id_or_name: Annotated[str, typer.Argument(help="Canonical skill id, slug, or name.")],
+        slug: Annotated[str, typer.Option("--slug", help="New slug.")],
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if rename_skill_command is None:
+            msg = "CLI rename_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_rename(
+                rename_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                skill_id_or_name=skill_id_or_name,
+                slug=slug,
+            )
+        )
+
+    @skills_app.command(
+        "cleanup",
+        help=(
+            "Preview or apply managed target cleanup for one skill. Default is dry-run; "
+            "use --apply to delete removable managed paths."
+        ),
+    )
+    def skills_cleanup(  # noqa: PLR0913
+        ctx: typer.Context,
+        skill_id_or_name: Annotated[str, typer.Argument(help="Canonical skill id, slug, or name.")],
+        apply: Annotated[
+            bool,
+            typer.Option(
+                "--apply",
+                help="Delete removable managed paths. Default is dry-run preview.",
+            ),
+        ] = False,
+        targets: Annotated[
+            bool,
+            typer.Option("--targets", help="Plan native target cleanup for this skill."),
+        ] = True,
+        dry_run: Annotated[
+            bool,
+            typer.Option("--dry-run", help="Preview cleanup without deleting managed paths."),
+        ] = True,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if cleanup_skill_command is None:
+            msg = "CLI cleanup_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_cleanup(
+                cleanup_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                skill_id_or_name=skill_id_or_name,
+                targets=targets,
+                dry_run=dry_run and not apply,
+            )
+        )
+
+    @skills_app.command(
+        "repair",
+        help=(
+            "Preview or apply project-wide repair for orphan managed targets. Default "
+            "is dry-run; use --apply with --remove-orphan-targets to delete."
+        ),
+    )
+    def skills_repair(
+        ctx: typer.Context,
+        remove_orphan_targets: Annotated[
+            bool,
+            typer.Option(
+                "--remove-orphan-targets",
+                help="Plan cleanup for managed native targets without a canonical skill.",
+            ),
+        ] = False,
+        apply: Annotated[
+            bool,
+            typer.Option(
+                "--apply",
+                help="Delete removable managed orphan targets. Default is dry-run preview.",
+            ),
+        ] = False,
+        dry_run: Annotated[
+            bool,
+            typer.Option("--dry-run", help="Preview repair without deleting managed paths."),
+        ] = True,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if repair_skills_command is None:
+            msg = "CLI repair_skills_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_repair(
+                repair_skills_command,
+                output_format=_effective_format(ctx, output_format),
+                remove_orphan_targets=remove_orphan_targets,
+                dry_run=dry_run and not apply,
+            )
+        )
+
+    @skills_app.command(
+        "sync",
+        help=(
+            "Materialize canonical skills into native runtime targets. Use "
+            "--check-gitignore for diagnostics; it does not edit .gitignore."
+        ),
+    )
+    def skills_sync(  # noqa: PLR0913
         ctx: typer.Context,
         skill_id_or_name: Annotated[
             str | None,
-            typer.Argument(help="Optional canonical skill ID or exact name."),
+            typer.Argument(help="Optional canonical skill ID, slug, or exact name."),
         ] = None,
         target: Annotated[
             list[str] | None,
@@ -1088,6 +1483,16 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 click_type=click.Choice(["keep", "overwrite"], case_sensitive=False),
             ),
         ] = "keep",
+        check_gitignore: Annotated[
+            bool,
+            typer.Option(
+                "--check-gitignore",
+                help=(
+                    "After planning/writing targets, warn when generated runtime paths "
+                    "are tracked or not ignored by git. Does not edit .gitignore."
+                ),
+            ),
+        ] = False,
         output_format: OutputFormatOption = None,
     ) -> None:
         if sync_skills_command is None:
@@ -1100,6 +1505,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 skill_id_or_name=skill_id_or_name,
                 targets=target,
                 drift_decision=drift_decision,
+                check_gitignore=check_gitignore,
             )
         )
 
@@ -1224,6 +1630,14 @@ def build_main(  # noqa: PLR0913
     track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
     create_skill_command: CreateSkillCommandHandler | None = None,
+    create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
+    publish_skill_command: PublishSkillCommandHandler | None = None,
+    validate_skill_command: ValidateSkillCommandHandler | None = None,
+    adopt_skill_command: AdoptSkillCommandHandler | None = None,
+    update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
+    rename_skill_command: RenameSkillCommandHandler | None = None,
+    cleanup_skill_command: CleanupSkillCommandHandler | None = None,
+    repair_skills_command: RepairSkillsCommandHandler | None = None,
     promote_skill_recommendation_command: PromoteSkillRecommendationCommandHandler | None = None,
     import_skill_command: ImportSkillCommandHandler | None = None,
     recommend_skills_command: RecommendSkillsCommandHandler | None = None,
@@ -1266,6 +1680,14 @@ def build_main(  # noqa: PLR0913
             track_latent_skill_command=track_latent_skill_command,
             generate_skill_command=generate_skill_command,
             create_skill_command=create_skill_command,
+            create_skill_draft_command=create_skill_draft_command,
+            publish_skill_command=publish_skill_command,
+            validate_skill_command=validate_skill_command,
+            adopt_skill_command=adopt_skill_command,
+            update_canonical_skill_command=update_canonical_skill_command,
+            rename_skill_command=rename_skill_command,
+            cleanup_skill_command=cleanup_skill_command,
+            repair_skills_command=repair_skills_command,
             promote_skill_recommendation_command=promote_skill_recommendation_command,
             import_skill_command=import_skill_command,
             recommend_skills_command=recommend_skills_command,
@@ -2464,6 +2886,9 @@ def _run_skills_create(  # noqa: PLR0913
     description: str,
     triggers: list[str] | None,
     scope: LatentSkillScope,
+    slug: str | None,
+    sync: bool,
+    targets: list[str] | None,
 ) -> int:
     try:
         result = command(
@@ -2473,6 +2898,9 @@ def _run_skills_create(  # noqa: PLR0913
                 scope=scope,
                 origin="cli",
                 triggers=[trigger.strip() for trigger in triggers or [] if trigger.strip()],
+                slug=slug,
+                sync=sync,
+                targets=targets,
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -2481,8 +2909,105 @@ def _run_skills_create(  # noqa: PLR0913
 
     if output_format == "json":
         print(json.dumps(_skill_create_success_envelope(result), sort_keys=True))
+    elif output_format == "summary":
+        _stdout_console().print(
+            _format_summary_payload("skills.create", result.to_payload(), result.warnings)
+        )
     else:
         _stdout_console().print(_format_human_skill_create_success(result))
+    return 0
+
+
+def _run_skills_draft_create(  # noqa: PLR0913
+    command: CreateSkillDraftCommandHandler,
+    *,
+    output_format: str,
+    name: str,
+    description: str,
+    slug: str | None,
+    triggers: list[str] | None,
+    scope: LatentSkillScope,
+) -> int:
+    try:
+        result = command(
+            CreateSkillDraftCommand(
+                name=name.strip(),
+                description=description.strip(),
+                scope=scope,
+                origin="cli",
+                slug=slug,
+                triggers=[trigger.strip() for trigger in triggers or [] if trigger.strip()],
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, name), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope("skills.draft.create", scope.value, result)
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.draft.create", result.to_payload(), result.warnings)
+        )
+    return 0
+
+
+def _run_skills_validate(
+    command: ValidateSkillCommandHandler,
+    *,
+    output_format: str,
+    skill_or_path: str,
+) -> int:
+    try:
+        result = command(ValidateSkillCommand(skill_or_path=skill_or_path))
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, skill_or_path), output_format)
+        return 1
+    payload = result.to_payload()
+    warnings = result.report.warnings
+    envelope = {
+        "ok": True,
+        "operation": "skills.validate",
+        "scope": "project",
+        "data": payload,
+        "warnings": warnings,
+    }
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(_format_summary_payload("skills.validate", payload, warnings))
+    return 0 if result.report.status != "fail" else 1
+
+
+def _run_skills_publish(  # noqa: PLR0913
+    command: PublishSkillCommandHandler,
+    *,
+    output_format: str,
+    draft_or_path: str,
+    slug: str | None,
+    sync: bool,
+    targets: list[str] | None,
+) -> int:
+    try:
+        result = command(
+            PublishSkillCommand(
+                draft_or_path=draft_or_path,
+                origin="cli",
+                slug=slug,
+                sync=sync,
+                targets=targets,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, draft_or_path), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope("skills.publish", result.agent_skill.scope.value, result)
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.publish", result.to_payload(), result.warnings)
+        )
     return 0
 
 
@@ -2534,13 +3059,14 @@ def _run_skills_promote(  # noqa: PLR0913
     return 0
 
 
-def _run_skills_sync(
+def _run_skills_sync(  # noqa: PLR0913
     command: SyncSkillsCommandHandler,
     *,
     output_format: str,
     skill_id_or_name: str | None,
     targets: list[str] | None,
     drift_decision: str,
+    check_gitignore: bool = False,
 ) -> int:
     try:
         resolved_decision: NativeDriftDecision = (
@@ -2552,6 +3078,7 @@ def _run_skills_sync(
                 targets=targets,
                 drift_decision=resolved_decision,
                 origin="cli",
+                check_gitignore=check_gitignore,
             )
         )
         if (
@@ -2567,6 +3094,7 @@ def _run_skills_sync(
                     targets=targets,
                     drift_decision="overwrite",
                     origin="cli",
+                    check_gitignore=check_gitignore,
                 )
             )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -2577,6 +3105,10 @@ def _run_skills_sync(
 
     if output_format == "json":
         print(json.dumps(_skill_sync_success_envelope(result), sort_keys=True))
+    elif output_format == "summary":
+        _stdout_console().print(
+            _format_summary_payload("skills.sync", result.to_payload(), result.warnings)
+        )
     else:
         _stdout_console().print(_format_human_skill_sync_success(result))
     return 0
@@ -2616,6 +3148,401 @@ def _run_skills_import(  # noqa: PLR0913
     else:
         _stdout_console().print(_format_human_skill_import_success(result))
     return 0
+
+
+def _run_skills_adopt(  # noqa: PLR0913
+    command: AdoptSkillCommandHandler,
+    *,
+    output_format: str,
+    path: Path,
+    slug: str | None,
+    scope: LatentSkillScope,
+    replace_native: bool,
+    sync_after_adopt: bool,
+) -> int:
+    try:
+        result = command(
+            AdoptSkillCommand(
+                path=path,
+                scope=scope,
+                origin="cli",
+                slug=slug,
+                replace_native=replace_native,
+                sync_after_adopt=sync_after_adopt,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, str(path)), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope("skills.adopt", result.agent_skill.scope.value, result)
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.adopt", result.to_payload(), result.warnings)
+        )
+    return 0
+
+
+def _run_skills_canonical_update(  # noqa: PLR0913
+    command: UpdateCanonicalSkillCommandHandler,
+    *,
+    output_format: str,
+    skill_id_or_name: str,
+    file: Path,
+    sync: bool,
+    drift_decision: str,
+) -> int:
+    try:
+        result = command(
+            UpdateCanonicalSkillCommand(
+                skill_id_or_name=skill_id_or_name,
+                origin="cli",
+                file=file.as_posix(),
+                sync=sync,
+                drift_decision="overwrite" if drift_decision == "overwrite" else "keep",
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, skill_id_or_name), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope(
+        "skills.canonical.update", result.agent_skill.scope.value, result
+    )
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.canonical.update", result.to_payload(), result.warnings)
+        )
+    return 0
+
+
+def _run_skills_rename(
+    command: RenameSkillCommandHandler,
+    *,
+    output_format: str,
+    skill_id_or_name: str,
+    slug: str,
+) -> int:
+    try:
+        result = command(
+            RenameSkillCommand(skill_id_or_name=skill_id_or_name, slug=slug, origin="cli")
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, skill_id_or_name), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope("skills.rename", result.agent_skill.scope.value, result)
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.rename", result.to_payload(), result.warnings)
+        )
+    return 0
+
+
+def _run_skills_cleanup(
+    command: CleanupSkillCommandHandler,
+    *,
+    output_format: str,
+    skill_id_or_name: str,
+    targets: bool,
+    dry_run: bool,
+) -> int:
+    try:
+        result = command(
+            CleanupSkillCommand(
+                skill_id_or_name=skill_id_or_name,
+                origin="cli",
+                targets=targets,
+                dry_run=dry_run,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, skill_id_or_name), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope("skills.cleanup", "project", result)
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.cleanup", result.to_payload(), result.warnings)
+        )
+    return 0
+
+
+def _run_skills_repair(
+    command: RepairSkillsCommandHandler,
+    *,
+    output_format: str,
+    remove_orphan_targets: bool,
+    dry_run: bool,
+) -> int:
+    try:
+        result = command(
+            RepairSkillsCommand(
+                origin="cli",
+                remove_orphan_targets=remove_orphan_targets,
+                dry_run=dry_run,
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, "skills"), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope("skills.repair", "project", result)
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.repair", result.to_payload(), result.warnings)
+        )
+    return 0
+
+
+def _skill_lifecycle_envelope(operation: str, scope: str, result: Any) -> dict[str, Any]:
+    warnings = list(getattr(result, "warnings", []) or [])
+    return {
+        "ok": True,
+        "operation": operation,
+        "scope": scope,
+        "data": result.to_payload(),
+        "warnings": warnings,
+    }
+
+
+def _format_summary_payload(operation: str, payload: dict[str, Any], warnings: list[str]) -> str:
+    lines = [f"Operation: {operation}"]
+    for key in (
+        "skill_file",
+        "draft_path",
+        "canonical_path",
+        "old_path",
+        "new_path",
+        "adopted_source",
+    ):
+        value = payload.get(key)
+        if value:
+            label = " ".join(key.split("_")).title()
+            lines.append(f"{label}: {value}")
+    _append_summary_native_targets(lines, payload)
+    affected = payload.get("affected_paths") or payload.get("removed_paths") or []
+    if affected:
+        lines.append("Affected paths:")
+        lines.extend(f"  - {path}" for path in affected)
+    if warnings:
+        lines.append("Warnings:")
+        lines.extend(f"  - {warning}" for warning in warnings)
+    validation = payload.get("validation")
+    if isinstance(validation, dict):
+        lines.append(f"Validation: {validation.get('status', 'unknown')}")
+        for issue in validation.get("blocking_issues", [])[:3]:
+            lines.append(f"  - {issue}")
+    lines.extend(_summary_action_lines(operation, payload, warnings))
+    return "\n".join(lines)
+
+
+def _append_summary_native_targets(lines: list[str], payload: dict[str, Any]) -> None:
+    native_installations = payload.get("native_installations")
+    if isinstance(native_installations, list):
+        target_lines = _summary_target_lines(native_installations)
+        if target_lines:
+            lines.append("Native targets:")
+            lines.extend(target_lines)
+        elif not native_installations:
+            lines.append("Native targets: not synced by this command")
+
+    sync_skills = payload.get("skills")
+    if isinstance(sync_skills, list) and sync_skills:
+        target_lines = _summary_sync_target_lines(sync_skills)
+        if target_lines:
+            lines.append("Native targets:")
+            lines.extend(target_lines)
+
+
+def _summary_target_lines(targets: list[Any]) -> list[str]:
+    lines: list[str] = []
+    for target in targets[:5]:
+        if not isinstance(target, dict):
+            continue
+        path = target.get("path") or target.get("target_path")
+        status = target.get("status", "written")
+        if path:
+            lines.append(f"  - {path} ({status})")
+    return lines
+
+
+def _summary_sync_target_lines(skills: list[Any]) -> list[str]:
+    lines: list[str] = []
+    for skill in skills:
+        if isinstance(skill, dict):
+            lines.extend(_summary_target_lines(skill.get("targets", [])))
+    return lines
+
+
+def _summary_action_lines(
+    operation: str, payload: dict[str, Any], warnings: list[str]
+) -> list[str]:
+    if operation == "skills.cleanup":
+        return _cleanup_summary_action_lines(payload)
+    if operation == "skills.repair":
+        return _repair_summary_action_lines(payload)
+    if operation == "skills.sync":
+        return _sync_summary_action_lines(payload, warnings)
+
+    next_steps = _generic_skill_next_steps(operation, payload)
+    if not next_steps:
+        return []
+    return ["Next steps:", *[f"  - {step}" for step in next_steps]]
+
+
+def _generic_skill_next_steps(operation: str, payload: dict[str, Any]) -> list[str]:
+    slug = str(payload.get("slug") or payload.get("skill_id") or "<skill>")
+    if operation == "skills.validate":
+        return _validation_next_steps(payload)
+    if operation == "skills.rename":
+        new_path = payload.get("new_path")
+        renamed = Path(str(new_path)).parent.name if new_path else slug
+        return [f"Run `umem skills sync {renamed}` when native targets should move too."]
+
+    static_steps = _static_skill_next_steps(slug, payload)
+    return static_steps.get(operation, [])
+
+
+def _static_skill_next_steps(slug: str, payload: dict[str, Any]) -> dict[str, list[str]]:
+    sync_step = f"Run `umem skills sync {slug}` when native runtimes should receive it."
+    synced_step = "Review the synced native targets and git status."
+    create_steps = [synced_step] if payload.get("native_installations") else [sync_step]
+    return {
+        "skills.draft.create": [
+            f"Edit {payload.get('draft_path', 'the draft')} if needed.",
+            f"Run `umem skills draft validate {slug}` before publish.",
+        ],
+        "skills.create": create_steps,
+        "skills.publish": create_steps,
+        "skills.adopt": [synced_step]
+        if payload.get("native_installations")
+        else [
+            f"Run `umem skills detail {slug}` to inspect the canonical record.",
+            sync_step,
+        ],
+        "skills.canonical.update": create_steps,
+    }
+
+
+def _validation_next_steps(payload: dict[str, Any]) -> list[str]:
+    validation = payload.get("validation")
+    status = validation.get("status") if isinstance(validation, dict) else "unknown"
+    if status == "pass":
+        return ["Skill is ready for publish, canonical update, adopt, or sync."]
+    return ["Fix blocking validation issues before publish, update, adopt, or sync."]
+
+
+def _cleanup_summary_action_lines(payload: dict[str, Any]) -> list[str]:
+    plan = payload.get("plan")
+    if not isinstance(plan, dict):
+        return []
+    dry_run = bool(plan.get("dry_run", True))
+    removable = [str(path) for path in plan.get("removable_paths", [])]
+    blocked = [str(path) for path in plan.get("blocked_paths", [])]
+    removed = [str(path) for path in payload.get("removed_paths", [])]
+
+    lines = [f"Mode: {'dry-run preview' if dry_run else 'apply'}"]
+    if dry_run and removable:
+        lines.append("Removable managed paths:")
+        lines.extend(f"  - {path}" for path in removable)
+    if removed:
+        lines.append("Removed managed paths:")
+        lines.extend(f"  - {path}" for path in removed)
+    if blocked:
+        lines.append("Blocked paths:")
+        lines.extend(f"  - {path}" for path in blocked)
+    if not removable and not removed and not blocked:
+        lines.append("Nothing to clean up.")
+
+    lines.append("Next steps:")
+    if dry_run and removable:
+        skill = plan.get("skill", "<skill>")
+        lines.append(f"  - Re-run `umem skills cleanup {skill} --targets --apply` to delete.")
+    elif dry_run:
+        lines.append("  - No apply step is needed.")
+    elif blocked:
+        lines.append("  - Review blocked paths manually; UMEM only deletes managed targets.")
+    else:
+        lines.append("  - Review git status after the applied cleanup.")
+    return lines
+
+
+def _repair_summary_action_lines(payload: dict[str, Any]) -> list[str]:
+    plans = payload.get("plans")
+    if not isinstance(plans, list):
+        return []
+    dry_run = any(isinstance(plan, dict) and plan.get("dry_run", True) for plan in plans)
+    removable: list[str] = []
+    blocked: list[str] = []
+    for plan in plans:
+        if not isinstance(plan, dict):
+            continue
+        removable.extend(str(path) for path in plan.get("removable_paths", []))
+        blocked.extend(str(path) for path in plan.get("blocked_paths", []))
+    removed = [str(path) for path in payload.get("removed_paths", [])]
+
+    lines = [f"Mode: {'dry-run preview' if dry_run else 'apply'}"]
+    if removable:
+        lines.append("Removable orphan targets:")
+        lines.extend(f"  - {path}" for path in removable)
+    if removed:
+        lines.append("Removed orphan targets:")
+        lines.extend(f"  - {path}" for path in removed)
+    if blocked:
+        lines.append("Blocked paths:")
+        lines.extend(f"  - {path}" for path in blocked)
+    if not plans:
+        lines.append("No repair action selected.")
+    elif not removable and not removed and not blocked:
+        lines.append("Nothing to repair.")
+
+    lines.append("Next steps:")
+    if dry_run and removable:
+        lines.append("  - Re-run `umem skills repair --remove-orphan-targets --apply` to delete.")
+    elif dry_run:
+        lines.append("  - No apply step is needed.")
+    elif blocked:
+        lines.append("  - Review blocked paths manually; UMEM only deletes managed targets.")
+    else:
+        lines.append("  - Review git status after the applied repair.")
+    return lines
+
+
+def _sync_summary_action_lines(payload: dict[str, Any], warnings: list[str]) -> list[str]:
+    lines: list[str] = []
+    affected = [str(path) for path in payload.get("affected_paths", [])]
+    removed = [str(path) for path in payload.get("removed_paths", [])]
+    if removed:
+        lines.append("Removed managed paths:")
+        lines.extend(f"  - {path}" for path in removed)
+    if _has_gitignore_warning(warnings):
+        lines.extend(
+            [
+                "Gitignore check: ran after target planning/writes.",
+                "Gitignore check: diagnostic only; .gitignore was not edited.",
+            ]
+        )
+    if not affected and not removed:
+        lines.append("No native target changes were needed.")
+
+    next_steps = ["Review git status and ignore rules intentionally."]
+    if _has_gitignore_warning(warnings):
+        next_steps.append("Update .gitignore or untrack generated targets if that is policy.")
+    lines.append("Next steps:")
+    lines.extend(f"  - {step}" for step in next_steps)
+    return lines
+
+
+def _has_gitignore_warning(warnings: list[str]) -> bool:
+    return any(
+        "not ignored by git" in warning or "tracked by git" in warning for warning in warnings
+    )
 
 
 def _skill_track_success_envelope(result: TrackLatentSkillResult) -> dict[str, Any]:

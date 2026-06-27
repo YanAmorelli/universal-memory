@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.3.0] - 2026-06-27
+
+### Added
+
+- Added a draft-first skill authoring flow with `skills draft create`,
+  `skills draft validate`, and `skills publish`.
+- Added explicit canonical skill adoption, validation, canonical update, slug rename,
+  cleanup, and repair flows across CLI and MCP.
+- Added `--check-gitignore` diagnostics for native skill sync targets.
+- Added agent-facing lifecycle guidance so agents can choose between draft, create,
+  adopt, import, canonical update, cleanup, repair, and sync without relying on `--help`.
+- Added focused application, CLI, MCP, parity, docs, and quickstart coverage for the
+  skill lifecycle flow.
+
+### Changed
+
+- Changed `skills create` and `skills publish` to keep native runtime sync explicit via
+  `--sync` or `skills sync`.
+- Improved lifecycle summary output with actionable next steps, dry-run/apply clarity,
+  managed cleanup reporting, and gitignore diagnostics.
+- Improved CLI help and documentation for safe defaults and neighboring skill lifecycle
+  commands.
+
+### Fixed
+
+- Fixed canonical skill workflows that previously required manual registry or JSONL
+  surgery for adoption, slug rename, canonical updates, and accidental target cleanup.
+
 ## [0.2.0] - 2026-06-25
 
 ### Added
@@ -167,7 +195,9 @@ corresponding Git tags when available.
 - Added secret scanning guardrails.
 - Added safe-write snapshots and audit trails before mutations.
 
-[0.2.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.5...HEAD
+[0.3.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.2...v0.1.3

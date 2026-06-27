@@ -143,21 +143,37 @@ umem context --scope project
 
 ### 4. Adopt or create an Agent Skill
 
-If a skill already exists in a native runtime directory, import it into UMEM and sync it
-back out to configured runtimes:
+If a skill already exists, choose the safest adoption path first. Use `adopt` for an
+existing `.umem/skills/<slug>` directory; use `import` for native runtime directories
+such as `.agents/skills/<slug>` and sync it back out to configured runtimes:
 
 ```bash
+umem skills adopt .umem/skills/review-protocol --scope project
 umem skills import .agents/skills/review-protocol --scope project --sync
 umem skills detail review-protocol
 ```
 
-If you are starting from scratch, create the canonical skill first:
+If you are starting from scratch, draft and publish it without native side effects:
+
+```bash
+umem skills draft create \
+  --name "Review Protocol" \
+  --description "Reusable review workflow" \
+  --trigger "when reviewing code"
+umem skills draft validate review-protocol
+umem skills publish review-protocol --format summary
+```
+
+For a one-step workflow, create the canonical skill. It is canonical-only by default;
+request sync explicitly when native runtime targets should be written:
 
 ```bash
 umem skills create \
   --name "Review Protocol" \
   --description "Reusable review workflow" \
-  --trigger "when reviewing code"
+  --trigger "when reviewing code" \
+  --format summary
+umem skills sync review-protocol --check-gitignore --format summary
 ```
 
 After editing `.umem/skills/review-protocol/SKILL.md`, refresh one runtime skill with:
@@ -263,7 +279,7 @@ your shell `PATH`.
 
 ## Managing Agent Skills
 
-You can create, import, list, inspect, and sync specialized behaviors:
+You can draft, create, adopt, import, validate, maintain, and sync specialized behaviors:
 ```bash
 # List all active skills
 umem skills list
@@ -271,14 +287,30 @@ umem skills list
 # Inspect one skill
 umem skills detail review-protocol
 
-# Create a new canonical skill
-umem skills create --name "Review Protocol" --description "Reusable review workflow"
+# Draft, validate, and publish without native runtime writes
+umem skills draft create --name "Review Protocol" --description "Reusable review workflow"
+umem skills draft validate review-protocol
+umem skills publish review-protocol
 
-# Adopt an existing native skill and distribute complete runtime copies
+# Create a new canonical skill and explicitly sync native targets
+umem skills create --name "Review Protocol" --description "Reusable review workflow" --sync
+
+# Adopt existing canonical work
+umem skills adopt .umem/skills/review-protocol --scope project
+
+# Import an existing native skill and distribute complete runtime copies
 umem skills import .agents/skills/review-protocol --scope project --sync
 
+# Validate and maintain canonical skills
+umem skills validate review-protocol
+umem skills canonical update review-protocol --file .umem/skills/review-protocol/SKILL.md
+umem skills rename review-protocol --slug review-checklist
+umem skills cleanup review-checklist --targets --format summary
+umem skills cleanup review-checklist --targets --apply
+umem skills repair --remove-orphan-targets --format summary
+
 # Synchronize one canonical skill into active native runtime folders
-umem skills sync review-protocol
+umem skills sync review-protocol --check-gitignore --format summary
 
 # Synchronize all active canonical skills during maintenance
 umem update --skills
