@@ -130,3 +130,54 @@ def test_readme_uses_absolute_image_urls_for_pypi_rendering() -> None:
 
     assert image_urls
     assert all(url.startswith(("https://", "http://")) for url in image_urls)
+
+
+def test_skill_lifecycle_docs_cover_summary_and_gitignore_warnings() -> None:
+    docs = read("docs/reference/skill-lifecycle.md")
+
+    assert "--format summary" in docs
+    assert "--check-gitignore" in docs
+    assert "tracked by git" in docs
+    assert "ignore rules" in docs
+    assert "does not edit `.gitignore`" in docs
+    assert "after target planning/writes" in docs
+    assert "dry-run by default" in docs
+
+
+def test_agent_lifecycle_guidance_covers_purpose_safety_and_alternatives() -> None:
+    docs = read(".umem/skills/use-universal-memory/references/skills-lifecycle.md")
+
+    for term in (
+        "Draft a skill when content may need validation before publish",
+        "Adopt existing canonical work in place",
+        "Import an existing local or native skill directory",
+        "canonical source plus complete synchronized native copies",
+        "do not edit `.gitignore`",
+        "after target planning/writes",
+        "dry-run/apply status",
+        "skills canonical update",
+        "skills repair",
+    ):
+        assert term in docs
+
+
+def test_skill_lifecycle_docs_mention_new_mcp_tool_names() -> None:
+    docs = "\n".join(
+        read(path)
+        for path in (
+            "docs/reference/skill-lifecycle.md",
+            ".umem/skills/use-universal-memory/references/skills-lifecycle.md",
+        )
+    )
+
+    for tool in (
+        "create_skill_draft",
+        "validate_skill",
+        "publish_skill",
+        "adopt_skill",
+        "update_canonical_skill",
+        "rename_skill",
+        "cleanup_skill",
+        "repair_skills",
+    ):
+        assert tool in docs

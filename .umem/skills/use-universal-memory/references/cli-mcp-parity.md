@@ -41,6 +41,15 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | Host sync | `umem host sync --apply --yes --format json` | `sync_instructions(apply=true)` |
 | Skills list | `umem skills list --format json` | `list_skills()` |
 | Skill detail | `umem skills detail <skill-id-or-name> --format json` | `get_skill_detail(name_or_id="<skill-id-or-name>")` |
+| Skill draft create | `umem skills draft create ... --format json` | `create_skill_draft(...)` |
+| Skill validate | `umem skills validate <skill-or-path> --format json` | `validate_skill(skill_or_path="<skill-or-path>")` |
+| Skill publish | `umem skills publish <draft-or-path> --format json` | `publish_skill(draft_or_path="<draft-or-path>")` |
+| Skill create | `umem skills create ... --format json` | `create_skill(...)` |
+| Skill adopt | `umem skills adopt <path> --format json` | `adopt_skill(path="<path>")` |
+| Skill canonical update | `umem skills canonical update <skill> --file <path> --format json` | `update_canonical_skill(...)` |
+| Skill rename | `umem skills rename <skill> --slug <slug> --format json` | `rename_skill(...)` |
+| Skill cleanup | `umem skills cleanup <skill> --targets --format json` | `cleanup_skill(...)` |
+| Skill repair | `umem skills repair --remove-orphan-targets --format json` | `repair_skills(...)` |
 | Track skill | `umem skills track ... --format json` | `track_latent_skill(...)` |
 | Recommend skills | `umem skills recommend --scope project --format json` | `recommend_skills(scope="project", dry_run=true)` |
 | Propose skill | `umem skills propose <latent-skill-id> --decision yes --format json` | `propose_skill(latent_skill_id="<latent-skill-id>", decision="yes")` |
@@ -48,7 +57,7 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | Generate skill | `umem skills generate <latent-skill-id> --yes --format json` | `generate_skill(latent_skill_id="<latent-skill-id>")` |
 | Activate skill | `umem skills activate <latent-skill-id> --format json` | `activate_skill(latent_skill_id="<latent-skill-id>")` |
 | Deactivate skill | `umem skills deactivate <latent-skill-id> --format json` | `deactivate_skill(latent_skill_id="<latent-skill-id>")` |
-| Update skill | `umem skills update <latent-skill-id> ... --format json` | `update_skill(...)` |
+| Update latent/generated skill | `umem skills update <latent-skill-id> ... --format json` | `update_skill(...)` |
 
 ## Error Mapping
 

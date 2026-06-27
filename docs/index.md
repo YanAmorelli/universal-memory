@@ -68,7 +68,7 @@ $ umem context --scope project --format json
       </a>
       <a class="umem-card" href="reference/skill-lifecycle/">
         <h3>Reusable skills</h3>
-        <p>Recurring procedures become canonical skills under <code>.umem/skills/</code> and sync into supported runtimes.</p>
+        <p>Draft, validate, publish, and maintain canonical skills under <code>.umem/skills/</code>, then sync them into supported runtimes explicitly.</p>
       </a>
     </div>
     <div class="umem-pillrow" aria-label="Product properties">

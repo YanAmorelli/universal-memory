@@ -1,17 +1,20 @@
 # Skill Lifecycle
 
 Universal Memory manages canonical Agent Skills under `.umem/skills/`. Agents can
-create a new canonical skill, import an existing local/native skill, track a recurring
-workflow as a latent candidate, and sync canonical skills into native runtime targets.
+draft, validate, publish, create, adopt, import, maintain, and sync skills through
+explicit safe commands.
 
 ## Lifecycle
 
-1. Create a new canonical skill with `skills create`, or import an existing skill with
-   `skills import`.
-2. For recurring workflows that are not concrete skills yet, track them with
+1. Draft new work with `skills draft create`, validate it, then publish it with
+   `skills publish`. This path is best when a human or agent should inspect the
+   content before it becomes canonical.
+2. Create a known canonical skill with `skills create`, or adopt/import existing work
+   with `skills adopt` or `skills import`.
+3. For recurring workflows that are not concrete skills yet, track them with
    `skills track` and promote/generate only after approval.
-3. List and inspect canonical, disabled, and candidate skills.
-4. Synchronize active canonical skills into native runtime targets with `skills sync`.
+4. List and inspect canonical, disabled, draft, and candidate skills.
+5. Synchronize active canonical skills into native runtime targets with `skills sync`.
 
 ## Canonical Vs Native
 
@@ -28,9 +31,13 @@ own expected layout. For AGENTS.md/Codex/OpenAI-class hosts that support Agent S
 same sync flow as other runtime targets, not treated as a manual compatibility directory.
 Wrappers are only an explicit repository policy exception.
 
-`skills update`, `activate`, and `deactivate` currently target latent/generated skill IDs,
-not every canonical Agent Skill ID returned by `skills list`. To edit an imported canonical
-skill, modify `.umem/skills/<slug>/SKILL.md`, then run `umem skills sync <slug>`.
+`skills create` and `skills publish` are canonical-only by default. Use `--sync` or
+`skills sync` when native runtime target directories should be written. Use
+`skills adopt` for existing `.umem/skills/<slug>` work and `skills import` for native
+directories such as `.agents/skills/<slug>`. Use `skills canonical update` to replace
+canonical content through validation, `skills rename` to move a slug, `skills cleanup`
+for one skill's managed native targets, and `skills repair` for project-wide orphan
+target cleanup.
 
 ## Adopt Existing Native Skill Into UMEM
 
@@ -79,9 +86,20 @@ default migration result.
 umem skills track --name "Review Protocol" --description "Recurring review workflow"
 umem skills list
 umem skills detail <skill-id-or-name>
-umem skills create --name "Review Protocol" --description "Recurring review workflow"
+umem skills draft create --name "Review Protocol" --description "Recurring review workflow"
+umem skills draft validate review-protocol
+umem skills publish review-protocol --format summary
+umem skills create --name "Review Protocol" --description "Recurring review workflow" --format summary
+umem skills adopt .umem/skills/review-protocol --scope project
 umem skills import .agents/skills/review-protocol --scope project --sync
-umem skills sync review-protocol
+umem skills validate review-protocol
+umem skills canonical update review-protocol --file .umem/skills/review-protocol/SKILL.md
+umem skills rename review-protocol --slug review-checklist
+umem skills cleanup review-checklist --targets --format summary
+umem skills cleanup review-checklist --targets --apply
+umem skills repair --remove-orphan-targets --format summary
+umem skills repair --remove-orphan-targets --apply
+umem skills sync review-protocol --check-gitignore --format summary
 umem skills recommend --scope project
 umem skills propose <latent-skill-id> --decision yes
 umem skills promote <recommendation-id> --yes
@@ -92,7 +110,13 @@ umem skills update <latent-skill-id> --name "Updated Skill"
 umem update --skills
 ```
 
-Use `umem skills sync <skill-id-or-name>` when validating or refreshing one skill. A bare
+Use `--format summary` for concise human and agent-facing output on lifecycle commands.
+It includes relevant paths, warnings, and short next steps; JSON output remains the
+automation contract. Use `--check-gitignore` on `skills sync` to warn when generated
+native runtime targets are tracked by git or not covered by ignore rules. The warning is
+computed after target planning/writes and is diagnostic only: it does not edit `.gitignore`
+or untrack files. Use
+`umem skills sync <skill-id-or-name>` when validating or refreshing one skill. A bare
 `umem skills sync` is project-wide and may report unrelated native targets. `umem update
 --skills` is also project-wide maintenance; it preserves managed native drift with `keep`
 and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-name>
@@ -115,6 +139,9 @@ material and helper automation.
 ## Safety
 
 Skill mutations should create snapshots and audit events. Native runtime sync should warn
-before overwriting manually changed target files. When sync removes files that were
+before overwriting manually changed target files. Cleanup and repair are dry-run by default;
+they only delete removable managed paths when `--apply` is present. Blocked paths
+must be reviewed manually. `--check-gitignore` is a diagnostic warning path only; it does
+not edit `.gitignore` or untrack files for you. When sync removes files that were
 previously managed by UMEM but no longer exist in the canonical skill directory, the
 removed files should be reported separately from written paths.
