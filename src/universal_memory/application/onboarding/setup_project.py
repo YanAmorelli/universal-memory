@@ -140,7 +140,7 @@ references as the canonical behavior contract.
   `[UMEM: No new facts/skills to record]`.
 """
 DEFAULT_UMEM_SKILL_REFERENCES = {
-    '.umem/skills/use-universal-memory/references/startup-and-context.md': """# Startup And Context
+    ".umem/skills/use-universal-memory/references/startup-and-context.md": """# Startup And Context
 
 Use this reference when beginning a session or when an agent needs the current UMEM
 state before planning, editing, investigating, reviewing, or using another workflow.
@@ -191,7 +191,7 @@ umem skills detail <skill-id-or-name> --format json
 - Do not repeat the full startup sequence on every user message in the same conversation.
   Query specific UMEM state only when the task requires it.
 """,
-    '.umem/skills/use-universal-memory/references/memory-facts.md': """# Memory Facts
+    ".umem/skills/use-universal-memory/references/memory-facts.md": """# Memory Facts
 
 Use this reference for durable facts: storing useful knowledge, inspecting stored facts,
 and removing obsolete or incorrect memory.
@@ -248,7 +248,7 @@ umem host sync --apply --yes --format json
 - If a fact is uncertain, verify or ask before recording it.
 - If a fact is obsolete, purge the old fact instead of adding a contradictory one.
 """,
-    '.umem/skills/use-universal-memory/references/skills-lifecycle.md': """# Skills Lifecycle
+    ".umem/skills/use-universal-memory/references/skills-lifecycle.md": """# Skills Lifecycle
 
 Use this reference for UMEM skill discovery, direct creation, importing existing local
 or native skills, syncing canonical skills to native runtimes, latent skill tracking,
@@ -565,7 +565,7 @@ Bad examples:
 - Do not use `skills update`, `activate`, or `deactivate` on an ID returned by `skills detail`
   unless the help or payload clearly identifies that ID as a supported mutation target.
 """,
-    '.umem/skills/use-universal-memory/references/host-instructions-sync.md': """# Host Instructions Sync
+    ".umem/skills/use-universal-memory/references/host-instructions-sync.md": """# Host Instructions Sync
 
 Use this reference when UMEM needs to install, validate, or refresh host instruction
 targets such as shared agent instructions and runtime-specific files.
@@ -617,7 +617,7 @@ umem host sync --apply --yes --format json
 - If host validation fails, inspect the reported relative path and restore the managed
   UMEM block instead of duplicating instructions manually.
 """,
-    '.umem/skills/use-universal-memory/references/cli-mcp-parity.md': """# CLI MCP Parity
+    ".umem/skills/use-universal-memory/references/cli-mcp-parity.md": """# CLI MCP Parity
 
 Use this reference when documenting, testing, or implementing UMEM behavior across CLI
 and MCP surfaces.
@@ -697,7 +697,7 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
   marked internal.
 - Error output must not leak secrets, stack traces, or absolute local paths.
 """,
-    '.umem/skills/use-universal-memory/references/guardrails-and-recording.md': """# Guardrails And Recording
+    ".umem/skills/use-universal-memory/references/guardrails-and-recording.md": """# Guardrails And Recording
 
 Use this reference before finalizing a task, changing memory, or deciding whether a
 recurring workflow should become a skill.
@@ -770,6 +770,7 @@ Before completing a turn:
   than inventing context.
 """,
 }
+
 
 @dataclass(frozen=True, slots=True)
 class SetupProjectResult:

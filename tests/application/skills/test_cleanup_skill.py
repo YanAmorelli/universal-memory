@@ -32,9 +32,7 @@ def test_cleanup_dry_run_and_apply_remove_only_manifest_managed_targets(
 
     use_case = CleanupSkillUseCase(project_root=tmp_path, repository=agent_skill_repository)
     preview = use_case.execute(CleanupSkillCommand("review-helper", origin="test"))
-    applied = use_case.execute(
-        CleanupSkillCommand("review-helper", origin="test", dry_run=False)
-    )
+    applied = use_case.execute(CleanupSkillCommand("review-helper", origin="test", dry_run=False))
 
     assert preview.plan.removable_paths == [".opencode/skills/review-helper"]
     assert preview.plan.blocked_paths == [".agents/skills/review-helper"]

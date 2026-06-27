@@ -128,9 +128,7 @@ class RepairSkillsUseCase:
             )
         active_skills = self.repository.list(status=AgentSkillStatus.active)
         managed_installations = [
-            installation
-            for skill in active_skills
-            for installation in skill.native_installations
+            installation for skill in active_skills for installation in skill.native_installations
         ]
         orphan_roots = orphan_native_target_paths(
             project_root=self.project_root,

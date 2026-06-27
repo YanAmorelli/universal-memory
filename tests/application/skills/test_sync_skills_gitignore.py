@@ -41,13 +41,10 @@ def test_sync_check_gitignore_warns_for_unignored_native_target(
         project_root=tmp_path,
         repository=repository,
         safe_write_use_case=skill_safe_write,
-    ).execute(
-        SyncSkillsCommand(origin="test", targets=["opencode"], check_gitignore=True)
-    )
+    ).execute(SyncSkillsCommand(origin="test", targets=["opencode"], check_gitignore=True))
 
     assert any(
-        "not ignored by git: .opencode/skills/review-helper" in item
-        for item in result.warnings
+        "not ignored by git: .opencode/skills/review-helper" in item for item in result.warnings
     )
     assert result.skills[0].warnings == result.warnings
 
@@ -88,13 +85,9 @@ def test_sync_check_gitignore_warns_for_tracked_native_target(
         project_root=tmp_path,
         repository=repository,
         safe_write_use_case=skill_safe_write,
-    ).execute(
-        SyncSkillsCommand(origin="test", targets=["opencode"], check_gitignore=True)
-    )
+    ).execute(SyncSkillsCommand(origin="test", targets=["opencode"], check_gitignore=True))
 
-    assert any(
-        "tracked by git: .opencode/skills/review-helper" in item for item in result.warnings
-    )
+    assert any("tracked by git: .opencode/skills/review-helper" in item for item in result.warnings)
 
 
 def _git_init(path: Path) -> None:

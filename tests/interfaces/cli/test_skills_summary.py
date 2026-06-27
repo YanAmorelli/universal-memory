@@ -131,8 +131,7 @@ def test_skills_adopt_validate_sync_and_cleanup_summary(capsys) -> None:
             ],
             affected_paths=[".opencode/skills/review-helper/SKILL.md"],
             warnings=[
-                "Warning: Native target is not ignored by git: "
-                ".opencode/skills/review-helper"
+                "Warning: Native target is not ignored by git: .opencode/skills/review-helper"
             ],
         )
 
@@ -253,8 +252,7 @@ def test_skills_sync_summary_explains_gitignore_check_is_diagnostic(capsys) -> N
             ],
             affected_paths=[".opencode/skills/review-helper/SKILL.md"],
             warnings=[
-                "Warning: Native target is not ignored by git: "
-                ".opencode/skills/review-helper"
+                "Warning: Native target is not ignored by git: .opencode/skills/review-helper"
             ],
         )
 
