@@ -140,7 +140,7 @@ references as the canonical behavior contract.
   `[UMEM: No new facts/skills to record]`.
 """
 DEFAULT_UMEM_SKILL_REFERENCES = {
-    ".umem/skills/use-universal-memory/references/startup-and-context.md": """# Startup And Context
+    '.umem/skills/use-universal-memory/references/startup-and-context.md': """# Startup And Context
 
 Use this reference when beginning a session or when an agent needs the current UMEM
 state before planning, editing, investigating, reviewing, or using another workflow.
@@ -191,7 +191,7 @@ umem skills detail <skill-id-or-name> --format json
 - Do not repeat the full startup sequence on every user message in the same conversation.
   Query specific UMEM state only when the task requires it.
 """,
-    ".umem/skills/use-universal-memory/references/memory-facts.md": """# Memory Facts
+    '.umem/skills/use-universal-memory/references/memory-facts.md': """# Memory Facts
 
 Use this reference for durable facts: storing useful knowledge, inspecting stored facts,
 and removing obsolete or incorrect memory.
@@ -248,7 +248,7 @@ umem host sync --apply --yes --format json
 - If a fact is uncertain, verify or ask before recording it.
 - If a fact is obsolete, purge the old fact instead of adding a contradictory one.
 """,
-    ".umem/skills/use-universal-memory/references/skills-lifecycle.md": """# Skills Lifecycle
+    '.umem/skills/use-universal-memory/references/skills-lifecycle.md': """# Skills Lifecycle
 
 Use this reference for UMEM skill discovery, direct creation, importing existing local
 or native skills, syncing canonical skills to native runtimes, latent skill tracking,
@@ -273,7 +273,9 @@ approval, generation, activation, deactivation, and updates.
 ## Use Cases
 
 - Track a recurring workflow or methodology as a latent skill candidate.
+- Draft a skill when content may need validation before publish.
 - Create a skill directly when the user already knows the desired skill.
+- Adopt existing canonical work in place when it already lives under `.umem/skills/<slug>/`.
 - Import an existing local or native skill directory into the canonical `.umem/skills`
   registry.
 - Sync canonical skills into supported native runtime targets after import or changes.
@@ -290,8 +292,20 @@ approval, generation, activation, deactivation, and updates.
 ```bash
 umem skills list --format json
 umem skills detail <skill-id-or-name> --format json
-umem skills create --name "Skill name" --description "What the skill does." --scope project --trigger "when to use it" --format json
+umem skills draft create --name "Skill name" --description "What the skill does." --scope project --trigger "when to use it" --format json
+umem skills draft validate <draft-or-path> --format json
+umem skills publish <draft-or-path> --format summary
+umem skills create --name "Skill name" --description "What the skill does." --scope project --trigger "when to use it" --format summary
+umem skills adopt .umem/skills/<skill-name> --scope project --format summary
 umem skills import .agents/skills/<skill-name> --scope project --sync --format json
+umem skills validate <skill-id-or-name-or-path> --format json
+umem skills canonical update <skill-id-or-name> --file <relative-markdown-path> --format json
+umem skills rename <skill-id-or-name> --slug <new-slug> --format json
+umem skills cleanup <skill-id-or-name> --targets --format summary
+umem skills cleanup <skill-id-or-name> --targets --apply --format summary
+umem skills repair --remove-orphan-targets --format summary
+umem skills repair --remove-orphan-targets --apply --format summary
+umem skills sync <skill-id-or-name> --check-gitignore --format summary
 umem skills import .agents/skills/<skill-name>/SKILL.md --scope project --replace-native --sync --format json
 umem skills sync <skill-id-or-name> --format json
 umem skills track --name "Skill name" --description "What the skill does." --scope project --evidence-summary "Why this pattern recurred." --tag workflow --format json
@@ -336,13 +350,27 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
 - `--trigger <text>`: repeatable trigger used in generated skill frontmatter.
 - `--file <relative-markdown-path>`: complete replacement markdown for `SKILL.md`.
 - `--format json`: canonical automation output.
+- `--format summary`: concise human and agent-facing output with status, paths, warnings,
+  dry-run/apply status, and next steps.
+- `--check-gitignore`: sync diagnostic that warns when generated native runtime targets
+  are tracked by git or not covered by ignore rules. The check runs after target planning/writes
+  and is diagnostic only: do not edit `.gitignore` or untrack files from this warning alone.
+  In automation, report the warning and let repository policy decide whether ignore rules should change.
 
 ## MCP Equivalents
 
 - `list_skills()`
 - `get_skill_detail(name_or_id="<skill-id-or-name>")`
-- `create_skill(name="Skill name", description="What the skill does.", scope="project", raw_markdown="<complete SKILL.md content>")`
+- `create_skill_draft(name="Skill name", description="What the skill does.", scope="project")`
+- `validate_skill(skill_or_path="<skill-id-or-name-or-path>")`
+- `publish_skill(draft_or_path="<draft-or-path>", sync=false)`
+- `create_skill(name="Skill name", description="What the skill does.", scope="project", raw_markdown="<complete SKILL.md content>", sync=false)`
+- `adopt_skill(path=".umem/skills/<skill-name>", scope="project", sync_after_adopt=false)`
 - `import_skill(path=".agents/skills/<skill-name>", scope="project", replace_native=false, sync_after_import=true)`
+- `update_canonical_skill(skill_id_or_name="<skill-id-or-name>", raw_markdown="<complete SKILL.md content>", sync=false)`
+- `rename_skill(skill_id_or_name="<skill-id-or-name>", slug="<new-slug>")`
+- `cleanup_skill(skill_id_or_name="<skill-id-or-name>", targets=true, dry_run=true)`
+- `repair_skills(remove_orphan_targets=true, dry_run=true)`
 - `sync_skills(skill_id_or_name="<skill-id-or-name>", targets=null, drift_decision="keep")`
 - `track_latent_skill(name="Skill name", description="What the skill does.", scope="project", evidence_summary="Why this pattern recurred.", tags=["workflow"])`
 - `recommend_skills(scope="project", min_recurrence=null, dry_run=true)`
@@ -361,14 +389,25 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
 - `skills list` returns active, candidate, and disabled skills with relative paths when
   materialized.
 - `skills detail` returns triggers and metadata without loading large references.
-- `skills create` writes a requested canonical skill directly; use it when the user asks
-  for a known skill instead of routing through latent tracking.
+- `skills draft create` writes editable draft content only; validate and publish before sync.
+- `skills create` writes a requested canonical skill directly and does not sync native
+  targets unless `--sync` is present.
+- `skills publish` converts a draft to canonical and does not sync native targets unless
+  `--sync` is present.
+- `skills adopt` registers existing `.umem/skills/<slug>` work in place without creating a suffixed duplicate.
+- Use `skills import`, not `skills adopt`, for existing native runtime directories such
+  as `.agents/skills/<slug>` or `.opencode/skills/<slug>`.
+- `skills validate`, `skills canonical update`, `skills rename`, `skills cleanup`, and
+  `skills repair` are the supported maintenance path for canonical skills.
 - `skills import` is the normal path for an existing `.agents/skills/...`, `.opencode/skills/...`,
   or other local Agent Skills directory. It registers a canonical UMEM skill and copies
   the source directory into `.umem/skills/<slug>/`.
 - `skills sync` materializes canonical skills into configured native runtime targets;
   importing a skill does not necessarily make it available to every runtime until sync
   runs.
+- `skills sync --check-gitignore --format summary` is the preferred interactive safety
+  check when a user wants actionable warnings about tracked or unignored runtime targets.
+  It warns after sync planning/writes and never edits `.gitignore` or untracks files.
 - `skills sync` can create or update runtime directories such as `.opencode/skills/...`,
   `.agents/skills/...`, or `.antigravity/...` depending on configured runtimes. Treat these
   as intentional worktree changes and review whether repository ignore rules should include
@@ -386,10 +425,13 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
 - `skills generate` creates canonical files under `.umem/skills/` for project skills.
 - `skills deactivate` preserves files and changes status to disabled.
 - `skills activate` requires a readable, valid `SKILL.md`.
-- `skills update`, `activate`, and `deactivate` currently operate on latent/generated skill
-  IDs, not the canonical `skill_id` returned by imported Agent Skills. If you have a
-  canonical skill under `.umem/skills/<slug>/`, edit that `SKILL.md` through the normal file
-  workflow, then run `umem skills sync <slug> --format json` to refresh native targets.
+- `skills update`, `activate`, and `deactivate` operate on latent/generated skill IDs.
+  For canonical Agent Skills, use `skills canonical update`, `skills rename`, `skills cleanup`,
+  `skills repair`, and `skills sync`.
+- `skills cleanup` previews cleanup for one canonical skill by default; add `--apply`
+  only after reviewing removable and blocked paths.
+- `skills repair` previews project-wide orphan target cleanup by default; add
+  `--remove-orphan-targets --apply` only after reviewing the summary.
 - `host sync --apply` should be non-interactive in agent automation: use
   `umem host sync --apply --yes --format json`.
 
@@ -523,7 +565,7 @@ Bad examples:
 - Do not use `skills update`, `activate`, or `deactivate` on an ID returned by `skills detail`
   unless the help or payload clearly identifies that ID as a supported mutation target.
 """,
-    ".umem/skills/use-universal-memory/references/host-instructions-sync.md": """# Host Instructions Sync
+    '.umem/skills/use-universal-memory/references/host-instructions-sync.md': """# Host Instructions Sync
 
 Use this reference when UMEM needs to install, validate, or refresh host instruction
 targets such as shared agent instructions and runtime-specific files.
@@ -575,7 +617,7 @@ umem host sync --apply --yes --format json
 - If host validation fails, inspect the reported relative path and restore the managed
   UMEM block instead of duplicating instructions manually.
 """,
-    ".umem/skills/use-universal-memory/references/cli-mcp-parity.md": """# CLI MCP Parity
+    '.umem/skills/use-universal-memory/references/cli-mcp-parity.md': """# CLI MCP Parity
 
 Use this reference when documenting, testing, or implementing UMEM behavior across CLI
 and MCP surfaces.
@@ -618,6 +660,15 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | Host sync | `umem host sync --apply --yes --format json` | `sync_instructions(apply=true)` |
 | Skills list | `umem skills list --format json` | `list_skills()` |
 | Skill detail | `umem skills detail <skill-id-or-name> --format json` | `get_skill_detail(name_or_id="<skill-id-or-name>")` |
+| Skill draft create | `umem skills draft create ... --format json` | `create_skill_draft(...)` |
+| Skill validate | `umem skills validate <skill-or-path> --format json` | `validate_skill(skill_or_path="<skill-or-path>")` |
+| Skill publish | `umem skills publish <draft-or-path> --format json` | `publish_skill(draft_or_path="<draft-or-path>")` |
+| Skill create | `umem skills create ... --format json` | `create_skill(...)` |
+| Skill adopt | `umem skills adopt <path> --format json` | `adopt_skill(path="<path>")` |
+| Skill canonical update | `umem skills canonical update <skill> --file <path> --format json` | `update_canonical_skill(...)` |
+| Skill rename | `umem skills rename <skill> --slug <slug> --format json` | `rename_skill(...)` |
+| Skill cleanup | `umem skills cleanup <skill> --targets --format json` | `cleanup_skill(...)` |
+| Skill repair | `umem skills repair --remove-orphan-targets --format json` | `repair_skills(...)` |
 | Track skill | `umem skills track ... --format json` | `track_latent_skill(...)` |
 | Recommend skills | `umem skills recommend --scope project --format json` | `recommend_skills(scope="project", dry_run=true)` |
 | Propose skill | `umem skills propose <latent-skill-id> --decision yes --format json` | `propose_skill(latent_skill_id="<latent-skill-id>", decision="yes")` |
@@ -625,7 +676,7 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | Generate skill | `umem skills generate <latent-skill-id> --yes --format json` | `generate_skill(latent_skill_id="<latent-skill-id>")` |
 | Activate skill | `umem skills activate <latent-skill-id> --format json` | `activate_skill(latent_skill_id="<latent-skill-id>")` |
 | Deactivate skill | `umem skills deactivate <latent-skill-id> --format json` | `deactivate_skill(latent_skill_id="<latent-skill-id>")` |
-| Update skill | `umem skills update <latent-skill-id> ... --format json` | `update_skill(...)` |
+| Update latent/generated skill | `umem skills update <latent-skill-id> ... --format json` | `update_skill(...)` |
 
 ## Error Mapping
 
@@ -646,7 +697,7 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
   marked internal.
 - Error output must not leak secrets, stack traces, or absolute local paths.
 """,
-    ".umem/skills/use-universal-memory/references/guardrails-and-recording.md": """# Guardrails And Recording
+    '.umem/skills/use-universal-memory/references/guardrails-and-recording.md': """# Guardrails And Recording
 
 Use this reference before finalizing a task, changing memory, or deciding whether a
 recurring workflow should become a skill.
@@ -719,7 +770,6 @@ Before completing a turn:
   than inventing context.
 """,
 }
-
 
 @dataclass(frozen=True, slots=True)
 class SetupProjectResult:

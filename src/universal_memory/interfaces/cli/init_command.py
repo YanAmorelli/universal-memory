@@ -3323,7 +3323,8 @@ def _format_summary_payload(operation: str, payload: dict[str, Any], warnings: l
     ):
         value = payload.get(key)
         if value:
-            lines.append(f"{key.replace('_', ' ').title()}: {value}")
+            label = " ".join(key.split("_")).title()
+            lines.append(f"{label}: {value}")
     _append_summary_native_targets(lines, payload)
     affected = payload.get("affected_paths") or payload.get("removed_paths") or []
     if affected:
