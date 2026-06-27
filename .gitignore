@@ -19,6 +19,7 @@ _bmad-output/**/review-prompt-*.md
 .umem/*
 !.umem/benchmarks/
 !.umem/skills/
+.umem/skills/*
 !.umem/skills/use-universal-memory/
 !.umem/skills/use-universal-memory/**
 

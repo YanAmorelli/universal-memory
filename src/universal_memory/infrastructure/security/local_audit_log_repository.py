@@ -16,14 +16,23 @@ from universal_memory.domain.entities import AuditEvent, AuditEventScope
 from universal_memory.domain.ports import AuditLogRepository
 
 STALE_LOCK_SECONDS = 10.0
+LOCK_ACQUIRE_TIMEOUT_SECONDS = 10.0
+LOCK_RETRY_DELAY_SECONDS = 0.05
 
 
 class LocalAuditLogRepository(AuditLogRepository):
-    def __init__(self, *, project_root: Path, data_root: Path) -> None:
+    def __init__(
+        self,
+        *,
+        project_root: Path,
+        data_root: Path,
+        lock_acquire_timeout_seconds: float = LOCK_ACQUIRE_TIMEOUT_SECONDS,
+    ) -> None:
         self.project_root = project_root
         self.data_root = data_root
         self.audit_root = self.data_root / "audit"
         self.events_path = self.audit_root / "events.jsonl"
+        self.lock_acquire_timeout_seconds = lock_acquire_timeout_seconds
 
     @contextmanager
     def _lock(self) -> Generator[None, None, None]:
@@ -39,18 +48,17 @@ class LocalAuditLogRepository(AuditLogRepository):
             except OSError:
                 pass
 
-        max_attempts = 20
-        delay = 0.1
+        deadline = time.monotonic() + self.lock_acquire_timeout_seconds
         acquired = False
         fd: int | None = None
         try:
-            for _ in range(max_attempts):
+            while time.monotonic() <= deadline:
                 try:
                     fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                     acquired = True
                     break
                 except FileExistsError:
-                    time.sleep(delay)
+                    time.sleep(LOCK_RETRY_DELAY_SECONDS)
             if not acquired:
                 raise StorageError("Failed to acquire lock on audit log")
             yield
