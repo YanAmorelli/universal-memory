@@ -94,6 +94,115 @@ def test_write_global_fact_uses_xdg_umem_data_path(tmp_path: Path) -> None:
     assert not (data_root / "audit" / "events.jsonl").exists()
 
 
+def test_shared_layout_writes_project_facts_to_visible_root(
+    shared_project_root: Path,
+) -> None:
+    repository = LocalFactRepository(project_root=shared_project_root)
+    fact = make_fact(scope=FactScope.project)
+
+    repository.write(fact)
+
+    shared_path = shared_project_root / "umem" / "memory" / "facts.jsonl"
+    assert json.loads(shared_path.read_text(encoding="utf-8").splitlines()[0])["id"] == fact.id
+    assert not (shared_project_root / ".umem" / "memory" / "facts.jsonl").exists()
+
+
+def test_shared_layout_reads_shared_facts_before_legacy_facts(
+    shared_project_root: Path,
+) -> None:
+    repository = LocalFactRepository(project_root=shared_project_root)
+    base = make_fact(scope=FactScope.project, content="legacy")
+    shared = base.model_copy(update={"content": "shared"})
+    legacy_path = shared_project_root / ".umem" / "memory" / "facts.jsonl"
+    shared_path = shared_project_root / "umem" / "memory" / "facts.jsonl"
+    legacy_path.write_text(base.model_dump_json() + "\n", encoding="utf-8")
+    shared_path.write_text(shared.model_dump_json() + "\n", encoding="utf-8")
+
+    assert repository.list(scope=FactScope.project) == [shared]
+
+
+def test_shared_layout_write_updates_existing_legacy_fact_without_creating_shared_file(
+    shared_project_root: Path,
+) -> None:
+    repository = LocalFactRepository(project_root=shared_project_root)
+    legacy = make_fact(scope=FactScope.project, content="legacy")
+    updated = legacy.model_copy(update={"content": "updated legacy"})
+    legacy_path = shared_project_root / ".umem" / "memory" / "facts.jsonl"
+    legacy_path.write_text(legacy.model_dump_json() + "\n", encoding="utf-8")
+
+    repository.write(updated)
+
+    stored = json.loads(legacy_path.read_text(encoding="utf-8").splitlines()[0])
+    assert stored["id"] == legacy.id
+    assert stored["content"] == "updated legacy"
+    assert not (shared_project_root / "umem" / "memory" / "facts.jsonl").exists()
+
+
+def test_private_project_fact_metadata_routes_to_operational_root(
+    shared_project_root: Path,
+) -> None:
+    repository = LocalFactRepository(project_root=shared_project_root)
+    fact = make_fact(scope=FactScope.project).model_copy(
+        update={"metadata": {"visibility": "private"}}
+    )
+
+    repository.write(fact)
+
+    assert (shared_project_root / ".umem" / "memory" / "private_facts.jsonl").is_file()
+    assert not (shared_project_root / "umem" / "memory" / "facts.jsonl").exists()
+
+
+def test_shared_layout_delete_updates_private_fact_source_without_leaking(
+    shared_project_root: Path,
+) -> None:
+    repository = LocalFactRepository(project_root=shared_project_root)
+    private = make_fact(scope=FactScope.project).model_copy(
+        update={"metadata": {"visibility": "private"}}
+    )
+    repository.write(private)
+
+    repository.delete(private.id)
+
+    private_path = shared_project_root / ".umem" / "memory" / "private_facts.jsonl"
+    stored = json.loads(private_path.read_text(encoding="utf-8").splitlines()[0])
+    assert stored["status"] == "archived"
+    assert not (shared_project_root / "umem" / "memory" / "facts.jsonl").exists()
+
+
+def test_shared_layout_purge_batch_removes_legacy_source_without_leaking_shared(
+    shared_project_root: Path,
+) -> None:
+    repository = LocalFactRepository(project_root=shared_project_root)
+    legacy = make_fact(scope=FactScope.project, content="legacy")
+    legacy_path = shared_project_root / ".umem" / "memory" / "facts.jsonl"
+    legacy_path.write_text(legacy.model_dump_json() + "\n", encoding="utf-8")
+
+    repository.purge_batch([legacy.id])
+
+    assert legacy_path.read_text(encoding="utf-8") == ""
+    assert not (shared_project_root / "umem" / "memory" / "facts.jsonl").exists()
+
+
+def test_shared_layout_write_batch_preserves_private_and_shared_sources(
+    shared_project_root: Path,
+) -> None:
+    repository = LocalFactRepository(project_root=shared_project_root)
+    shared = make_fact(scope=FactScope.project, content="shared").model_copy(
+        update={"metadata": {"visibility": "shared"}}
+    )
+    private = make_fact(scope=FactScope.project, content="private").model_copy(
+        update={"metadata": {"visibility": "private"}}
+    )
+
+    repository.write_batch([shared, private])
+
+    shared_path = shared_project_root / "umem" / "memory" / "facts.jsonl"
+    private_path = shared_project_root / ".umem" / "memory" / "private_facts.jsonl"
+    assert json.loads(shared_path.read_text(encoding="utf-8").splitlines()[0])["id"] == shared.id
+    assert json.loads(private_path.read_text(encoding="utf-8").splitlines()[0])["id"] == private.id
+    assert private.id not in shared_path.read_text(encoding="utf-8")
+
+
 def test_read_returns_fact_by_id_or_raises_typed_not_found(tmp_path: Path) -> None:
     repository = LocalFactRepository(project_root=tmp_path)
     fact = make_fact()

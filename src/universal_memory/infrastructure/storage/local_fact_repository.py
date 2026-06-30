@@ -23,6 +23,8 @@ from universal_memory.application.security import (
 from universal_memory.domain import FactNotFoundError, StorageError
 from universal_memory.domain.entities import AuditEventScope, Fact, FactScope, FactStatus
 from universal_memory.domain.ports import FactRepository
+from universal_memory.domain.project_layout import ResolvedProjectLayout
+from universal_memory.infrastructure.config.project_layout import resolve_project_layout
 from universal_memory.infrastructure.security import (
     LocalAuditLogRepository,
     LocalSnapshotRepository,
@@ -45,7 +47,10 @@ class LocalFactRepository(FactRepository):
         self.project_root = project_root
         self.data_root = data_root or project_root / ".umem"
         self.memory_root = self.data_root / "memory"
-        self.facts_path = facts_path or self.memory_root / "facts.jsonl"
+        self.layout = resolve_project_layout(project_root)
+        self.facts_path = facts_path or self._default_project_facts_path(self.layout)
+        self.legacy_facts_path = self.layout.legacy_facts_path
+        self.private_facts_path = self.layout.private_facts_path
 
         # Determine global home safely with complete test isolation
         is_test = (
@@ -84,8 +89,9 @@ class LocalFactRepository(FactRepository):
     @contextmanager
     def _lock(self, scope: FactScope) -> Generator[None, None, None]:
         facts_path = self.global_facts_path if scope == FactScope.global_ else self.facts_path
-        lock_path = facts_path.with_suffix(".jsonl.lock")
+        lock_path = self._lock_path_for(scope, facts_path)
         facts_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
 
         lock_id = str(uuid4())
 
@@ -188,11 +194,18 @@ class LocalFactRepository(FactRepository):
 
     def write(self, entity: Fact) -> SafeWriteResult | None:
         try:
-            with self._lock(entity.scope):
-                unlocked_facts = self._load_facts_unlocked(entity.scope, raise_on_corrupt=True)
+            target_path = self._path_for_existing_id(entity.scope, entity.id)
+            if target_path is None:
+                target_path = self._path_for_write(entity)
+            with self._lock_for_path(entity.scope, target_path):
+                unlocked_facts = self._load_facts_unlocked(
+                    entity.scope,
+                    raise_on_corrupt=True,
+                    path=target_path,
+                )
                 facts = [fact for fact in unlocked_facts if fact.id != entity.id]
                 facts.append(entity)
-                return self._write_facts_unlocked(facts, entity.scope)
+                return self._write_facts_unlocked(facts, entity.scope, path=target_path)
         except StorageError:
             raise
         except OSError as exc:
@@ -202,9 +215,10 @@ class LocalFactRepository(FactRepository):
         # Read to find scope first, then update under transactional lock
         fact = self.read(id)
         scope = fact.scope
+        path = self._path_for_existing_id(scope, id) or self._path_for_write(fact)
         try:
-            with self._lock(scope):
-                facts = self._load_facts_unlocked(scope, raise_on_corrupt=True)
+            with self._lock_for_path(scope, path):
+                facts = self._load_facts_unlocked(scope, raise_on_corrupt=True, path=path)
                 found = False
                 updated_facts = []
                 for f in facts:
@@ -224,7 +238,7 @@ class LocalFactRepository(FactRepository):
                 if not found:
                     raise FactNotFoundError(f"Fact not found: {id}")
 
-                self._write_facts_unlocked(updated_facts, scope)
+                self._write_facts_unlocked(updated_facts, scope, path=path)
         except (FactNotFoundError, StorageError):
             raise
         except OSError as exc:
@@ -233,12 +247,13 @@ class LocalFactRepository(FactRepository):
     def purge(self, id: str) -> None:
         fact = self.read(id)
         scope = fact.scope
+        path = self._path_for_existing_id(scope, id) or self._path_for_write(fact)
         try:
-            with self._lock(scope):
-                facts = self._load_facts_unlocked(scope, raise_on_corrupt=True)
+            with self._lock_for_path(scope, path):
+                facts = self._load_facts_unlocked(scope, raise_on_corrupt=True, path=path)
                 if not any(f.id == id for f in facts):
                     raise FactNotFoundError(f"Fact not found: {id}")
-                self._write_facts_unlocked([f for f in facts if f.id != id], scope)
+                self._write_facts_unlocked([f for f in facts if f.id != id], scope, path=path)
         except (FactNotFoundError, StorageError):
             raise
         except OSError as exc:
@@ -247,19 +262,30 @@ class LocalFactRepository(FactRepository):
     def write_batch(self, entities: list[Fact]) -> SafeWriteResult | None:
         if not entities:
             return None
-        by_scope = defaultdict(list)
+        by_target: dict[tuple[FactScope, Path], list[Fact]] = defaultdict(list)
         for entity in entities:
-            by_scope[entity.scope].append(entity)
+            target_path = self._path_for_existing_id(entity.scope, entity.id)
+            if target_path is None:
+                target_path = self._path_for_write(entity)
+            by_target[(entity.scope, target_path)].append(entity)
 
         last_result = None
-        for scope, scope_entities in by_scope.items():
+        for (scope, target_path), scope_entities in by_target.items():
             try:
-                with self._lock(scope):
-                    unlocked_facts = self._load_facts_unlocked(scope, raise_on_corrupt=True)
+                with self._lock_for_path(scope, target_path):
+                    unlocked_facts = self._load_facts_unlocked(
+                        scope,
+                        raise_on_corrupt=True,
+                        path=target_path,
+                    )
                     facts_dict = {fact.id: fact for fact in unlocked_facts}
                     for entity in scope_entities:
                         facts_dict[entity.id] = entity
-                    last_result = self._write_facts_unlocked(list(facts_dict.values()), scope)
+                    last_result = self._write_facts_unlocked(
+                        list(facts_dict.values()),
+                        scope,
+                        path=target_path,
+                    )
             except StorageError:
                 raise
             except OSError as exc:
@@ -273,16 +299,22 @@ class LocalFactRepository(FactRepository):
         if not facts_to_purge:
             return
 
-        by_scope = defaultdict(list)
+        by_target: dict[tuple[FactScope, Path], list[str]] = defaultdict(list)
         for fact in facts_to_purge:
-            by_scope[fact.scope].append(fact.id)
+            target_path = self._path_for_existing_id(fact.scope, fact.id)
+            if target_path is not None:
+                by_target[(fact.scope, target_path)].append(fact.id)
 
-        for scope, scope_ids in by_scope.items():
+        for (scope, target_path), scope_ids in by_target.items():
             try:
-                with self._lock(scope):
-                    facts = self._load_facts_unlocked(scope, raise_on_corrupt=True)
+                with self._lock_for_path(scope, target_path):
+                    facts = self._load_facts_unlocked(
+                        scope,
+                        raise_on_corrupt=True,
+                        path=target_path,
+                    )
                     updated_facts = [f for f in facts if f.id not in scope_ids]
-                    self._write_facts_unlocked(updated_facts, scope)
+                    self._write_facts_unlocked(updated_facts, scope, path=target_path)
             except StorageError:
                 raise
             except OSError as exc:
@@ -295,8 +327,29 @@ class LocalFactRepository(FactRepository):
     def _load_facts(self, scope: FactScope) -> list[Fact]:
         return self._load_facts_unlocked(scope, raise_on_corrupt=False)
 
-    def _load_facts_unlocked(self, scope: FactScope, raise_on_corrupt: bool = False) -> list[Fact]:
-        facts_path = self.global_facts_path if scope == FactScope.global_ else self.facts_path
+    def _load_facts_unlocked(
+        self,
+        scope: FactScope,
+        raise_on_corrupt: bool = False,
+        *,
+        path: Path | None = None,
+    ) -> list[Fact]:
+        if path is not None:
+            return self._load_facts_file(path, raise_on_corrupt)
+        return self._load_facts_from_paths(self._paths_for_read(scope), raise_on_corrupt)
+
+    def _load_facts_from_paths(
+        self,
+        paths: list[Path],
+        raise_on_corrupt: bool,
+    ) -> list[Fact]:
+        by_id: dict[str, Fact] = {}
+        for facts_path in paths:
+            for fact in self._load_facts_file(facts_path, raise_on_corrupt):
+                by_id.setdefault(fact.id, fact)
+        return list(by_id.values())
+
+    def _load_facts_file(self, facts_path: Path, raise_on_corrupt: bool) -> list[Fact]:
         if not facts_path.exists():
             return []
         try:
@@ -315,13 +368,21 @@ class LocalFactRepository(FactRepository):
         except OSError as exc:
             raise StorageError("Failed to read facts") from exc
 
-    def _write_facts_unlocked(self, facts: list[Fact], scope: FactScope) -> SafeWriteResult | None:
+    def _write_facts_unlocked(
+        self,
+        facts: list[Fact],
+        scope: FactScope,
+        *,
+        path: Path | None = None,
+    ) -> SafeWriteResult | None:
         content = self._render_facts(facts)
 
         is_global = scope == FactScope.global_
         safe_write = self.global_safe_write_use_case if is_global else self.safe_write_use_case
         if safe_write is not None:
-            relative_path = "memory/facts.jsonl" if is_global else ".umem/memory/facts.jsonl"
+            relative_path = (
+                "memory/facts.jsonl" if is_global else self._relative_path(path or self.facts_path)
+            )
             return safe_write.execute(
                 SafeWriteCommand(
                     relative_path=relative_path,
@@ -332,7 +393,9 @@ class LocalFactRepository(FactRepository):
                 )
             )
         else:
-            facts_path = self.global_facts_path if scope == FactScope.global_ else self.facts_path
+            facts_path = path or (
+                self.global_facts_path if scope == FactScope.global_ else self.facts_path
+            )
             facts_path.parent.mkdir(parents=True, exist_ok=True)
             temp_path = facts_path.with_name(f"{facts_path.name}.{uuid4()}.tmp")
             try:
@@ -357,6 +420,91 @@ class LocalFactRepository(FactRepository):
                 return Path(local_appdata) / "umem"
             return global_home / "AppData" / "Local" / "umem"
         return global_home / ".local" / "share" / "umem"
+
+    def _paths_for_read(self, scope: FactScope) -> list[Path]:
+        if scope == FactScope.global_:
+            return [self.global_facts_path]
+        if not self.layout.is_shared:
+            return [self.facts_path]
+        return [
+            self.layout.shared_facts_path,
+            self.layout.private_facts_path,
+            self.layout.legacy_facts_path,
+        ]
+
+    def _path_for_write(self, entity: Fact) -> Path:
+        if entity.scope == FactScope.global_:
+            return self.global_facts_path
+        if entity.metadata.get("visibility") == "private" and self.layout.is_shared:
+            return self.layout.private_facts_path
+        return self.facts_path
+
+    def _path_for_existing_id(self, scope: FactScope, id: str) -> Path | None:
+        for path in self._paths_for_read(scope):
+            if any(fact.id == id for fact in self._load_facts_file(path, raise_on_corrupt=False)):
+                return path
+        return None
+
+    def _default_project_facts_path(self, layout: ResolvedProjectLayout) -> Path:
+        return layout.shared_facts_path if layout.is_shared else self.memory_root / "facts.jsonl"
+
+    def _relative_path(self, path: Path) -> str:
+        try:
+            return path.resolve().relative_to(self.project_root.resolve()).as_posix()
+        except ValueError:
+            return path.as_posix()
+
+    @contextmanager
+    def _lock_for_path(self, scope: FactScope, facts_path: Path) -> Generator[None, None, None]:
+        lock_path = self._lock_path_for(scope, facts_path)
+        facts_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        lock_id = str(uuid4())
+        if lock_path.exists():
+            try:
+                mtime = os.path.getmtime(lock_path)
+                if time.time() - mtime > STALE_LOCK_SECONDS:
+                    lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        max_attempts = 20
+        delay = 0.1
+        acquired = False
+        fd: int | None = None
+        try:
+            for _ in range(max_attempts):
+                try:
+                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.write(fd, lock_id.encode("utf-8"))
+                    acquired = True
+                    break
+                except FileExistsError:
+                    time.sleep(delay)
+            if not acquired:
+                raise StorageError(
+                    f"Failed to acquire lock on facts storage for scope {scope.value}"
+                )
+            yield
+        finally:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            if acquired:
+                try:
+                    lock_content = lock_path.read_text(encoding="utf-8").strip()
+                    if lock_path.exists() and lock_content == lock_id:
+                        lock_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    def _lock_path_for(self, scope: FactScope, facts_path: Path) -> Path:
+        if scope == FactScope.project and self.layout.is_shared:
+            return self.layout.operational_locks_root / f"{facts_path.stem}.jsonl.lock"
+        return facts_path.with_suffix(".jsonl.lock")
 
     @classmethod
     def _render_facts(cls, facts: list[Fact]) -> str:

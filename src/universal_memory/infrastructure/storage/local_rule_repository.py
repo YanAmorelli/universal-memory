@@ -19,6 +19,8 @@ from universal_memory.application.security import (
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import AuditEventScope, Rule, RuleScope, RuleStatus
 from universal_memory.domain.ports import RuleRepository
+from universal_memory.domain.project_layout import ResolvedProjectLayout
+from universal_memory.infrastructure.config.project_layout import resolve_project_layout
 from universal_memory.infrastructure.security import (
     LocalAuditLogRepository,
     LocalSnapshotRepository,
@@ -44,7 +46,10 @@ class LocalRuleRepository(RuleRepository):
         self.project_root = project_root
         self.data_root = data_root or project_root / ".umem"
         self.memory_root = self.data_root / "memory"
-        self.rules_path = rules_path or self.memory_root / "rules.jsonl"
+        self.layout = resolve_project_layout(project_root)
+        self.rules_path = rules_path or self._default_project_rules_path(self.layout)
+        self.legacy_rules_path = self.layout.legacy_rules_path
+        self.private_rules_path = self.layout.private_rules_path
 
         is_test = (
             "pytest" in sys.modules
@@ -79,10 +84,20 @@ class LocalRuleRepository(RuleRepository):
             )
 
     @contextmanager
-    def _lock(self, scope: RuleScope) -> Generator[None, None, None]:
-        rules_path = self.global_rules_path if scope == RuleScope.global_ else self.rules_path
+    def _lock(  # noqa: PLR0912
+        self,
+        scope: RuleScope,
+        *,
+        path: Path | None = None,
+    ) -> Generator[None, None, None]:
+        rules_path = path or (
+            self.global_rules_path if scope == RuleScope.global_ else self.rules_path
+        )
         lock_path = rules_path.with_suffix(".jsonl.lock")
+        if scope == RuleScope.project and self.layout.is_shared:
+            lock_path = self.layout.operational_locks_root / "rules.jsonl.lock"
         rules_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
 
         lock_id = str(uuid4())
 
@@ -144,20 +159,28 @@ class LocalRuleRepository(RuleRepository):
 
     def write(self, entity: Rule) -> None:
         try:
-            with self._lock(entity.scope):
-                rules = self._load_rules_unlocked(entity.scope, raise_on_corrupt=True)
+            path = self._path_for_existing_id(entity.scope, entity.id)
+            if path is None:
+                path = self._path_for_write(entity)
+            with self._lock(entity.scope, path=path):
+                rules = self._load_rules_unlocked(
+                    entity.scope,
+                    raise_on_corrupt=True,
+                    path=path,
+                )
                 rules_dict = {r.id: r for r in rules}
                 rules_dict[entity.id] = entity
-                self._write_rules_unlocked(list(rules_dict.values()), entity.scope)
+                self._write_rules_unlocked(list(rules_dict.values()), entity.scope, path=path)
         except OSError as exc:
             raise StorageError("Failed to write rule") from exc
 
     def delete(self, id: str) -> None:
         rule = self.read(id)
         scope = rule.scope
+        path = self._path_for_existing_id(scope, id) or self._path_for_write(rule)
         try:
-            with self._lock(scope):
-                rules = self._load_rules_unlocked(scope, raise_on_corrupt=True)
+            with self._lock(scope, path=path):
+                rules = self._load_rules_unlocked(scope, raise_on_corrupt=True, path=path)
                 updated_rules = []
                 found = False
                 for r in rules:
@@ -177,7 +200,7 @@ class LocalRuleRepository(RuleRepository):
                 if not found:
                     raise RuleNotFoundError(f"Rule not found: {id}")
 
-                self._write_rules_unlocked(updated_rules, scope)
+                self._write_rules_unlocked(updated_rules, scope, path=path)
         except (RuleNotFoundError, StorageError):
             raise
         except OSError as exc:
@@ -195,8 +218,25 @@ class LocalRuleRepository(RuleRepository):
         except OSError as exc:
             raise StorageError("Failed to read rules") from exc
 
-    def _load_rules_unlocked(self, scope: RuleScope, raise_on_corrupt: bool = False) -> list[Rule]:
-        rules_path = self.global_rules_path if scope == RuleScope.global_ else self.rules_path
+    def _load_rules_unlocked(
+        self,
+        scope: RuleScope,
+        raise_on_corrupt: bool = False,
+        *,
+        path: Path | None = None,
+    ) -> list[Rule]:
+        if path is not None:
+            return self._load_rules_file(path, raise_on_corrupt)
+        return self._load_rules_from_paths(self._paths_for_read(scope), raise_on_corrupt)
+
+    def _load_rules_from_paths(self, paths: list[Path], raise_on_corrupt: bool) -> list[Rule]:
+        by_id: dict[str, Rule] = {}
+        for rules_path in paths:
+            for rule in self._load_rules_file(rules_path, raise_on_corrupt):
+                by_id.setdefault(rule.id, rule)
+        return list(by_id.values())
+
+    def _load_rules_file(self, rules_path: Path, raise_on_corrupt: bool) -> list[Rule]:
         if not rules_path.exists():
             return []
         try:
@@ -215,13 +255,21 @@ class LocalRuleRepository(RuleRepository):
         except OSError as exc:
             raise StorageError("Failed to read rules") from exc
 
-    def _write_rules_unlocked(self, rules: list[Rule], scope: RuleScope) -> None:
+    def _write_rules_unlocked(
+        self,
+        rules: list[Rule],
+        scope: RuleScope,
+        *,
+        path: Path | None = None,
+    ) -> None:
         content = "".join(json.dumps(r.model_dump(mode="json")) + "\n" for r in rules)
 
         is_global = scope == RuleScope.global_
         safe_write = self.global_safe_write_use_case if is_global else self.safe_write_use_case
         if safe_write is not None:
-            relative_path = "memory/rules.jsonl" if is_global else ".umem/memory/rules.jsonl"
+            relative_path = (
+                "memory/rules.jsonl" if is_global else self._relative_path(path or self.rules_path)
+            )
             safe_write.execute(
                 SafeWriteCommand(
                     relative_path=relative_path,
@@ -232,7 +280,9 @@ class LocalRuleRepository(RuleRepository):
                 )
             )
         else:
-            rules_path = self.global_rules_path if scope == RuleScope.global_ else self.rules_path
+            rules_path = path or (
+                self.global_rules_path if scope == RuleScope.global_ else self.rules_path
+            )
             rules_path.parent.mkdir(parents=True, exist_ok=True)
             temp_path = rules_path.with_name(f"{rules_path.name}.{uuid4()}.tmp")
             try:
@@ -244,6 +294,39 @@ class LocalRuleRepository(RuleRepository):
 
     def _audit_scope_for(self, scope: RuleScope) -> AuditEventScope:
         return AuditEventScope.global_ if scope == RuleScope.global_ else AuditEventScope.project
+
+    def _paths_for_read(self, scope: RuleScope) -> list[Path]:
+        if scope == RuleScope.global_:
+            return [self.global_rules_path]
+        if not self.layout.is_shared:
+            return [self.rules_path]
+        return [
+            self.layout.shared_rules_path,
+            self.layout.private_rules_path,
+            self.layout.legacy_rules_path,
+        ]
+
+    def _path_for_write(self, entity: Rule) -> Path:
+        if entity.scope == RuleScope.global_:
+            return self.global_rules_path
+        if entity.metadata.get("visibility") == "private" and self.layout.is_shared:
+            return self.layout.private_rules_path
+        return self.rules_path
+
+    def _path_for_existing_id(self, scope: RuleScope, id: str) -> Path | None:
+        for path in self._paths_for_read(scope):
+            if any(rule.id == id for rule in self._load_rules_file(path, raise_on_corrupt=False)):
+                return path
+        return None
+
+    def _default_project_rules_path(self, layout: ResolvedProjectLayout) -> Path:
+        return layout.shared_rules_path if layout.is_shared else self.memory_root / "rules.jsonl"
+
+    def _relative_path(self, path: Path) -> str:
+        try:
+            return path.resolve().relative_to(self.project_root.resolve()).as_posix()
+        except ValueError:
+            return path.as_posix()
 
     @staticmethod
     def _global_data_root(global_home: Path) -> Path:
