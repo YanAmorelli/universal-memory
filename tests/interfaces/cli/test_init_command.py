@@ -23,12 +23,18 @@ from universal_memory.infrastructure.config import (
 from universal_memory.interfaces.cli import main as cli_main
 
 
-def _setup_project_command(project_root: Path, enabled_runtime_ids: list[str] | None = None):
+def _setup_project_command(
+    project_root: Path,
+    enabled_runtime_ids: list[str] | None = None,
+    *,
+    layout: str = "legacy",
+):
     return setup_project(
         project_root,
         layout_port=LocalProjectLayoutPort(),
         config_validation_port=LocalConfigValidationPort(),
         enabled_runtime_ids=enabled_runtime_ids,
+        layout=layout,
     )
 
 
@@ -183,6 +189,40 @@ def test_init_json_outputs_pure_parseable_payload_with_required_keys(
         "codex": ["AGENTS.md"],
     }
     assert payload["manual_steps_pending"] == []
+
+
+def test_init_shared_layout_json_outputs_shared_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = cli_main(
+        ["init", "--layout", "shared", "--yes", "--format", "json"],
+        setup_project_command=_setup_project_command,
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["ok"] is True
+    assert payload["data"]["layout"] == "shared"
+    assert payload["data"]["shared_root"] == "umem"
+    assert payload["data"]["operational_root"] == ".umem"
+    assert payload["data"]["shared_paths"] == ["umem/project.toml", "umem/memory", "umem/skills"]
+    assert payload["data"]["operational_paths"] == [
+        ".umem/config.toml",
+        ".umem/memory",
+        ".umem/audit/events.jsonl",
+        ".umem/snapshots",
+        ".umem/skills",
+        ".umem/benchmarks",
+    ]
+    assert (tmp_path / "umem" / "project.toml").is_file()
+    assert (tmp_path / "umem" / "memory").is_dir()
+    assert (tmp_path / "umem" / "skills").is_dir()
+    assert (tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md").is_file()
+    assert not (tmp_path / "umem" / "skills" / "use-universal-memory").exists()
 
 
 def test_init_json_runtime_option_persists_selection_and_runs_selected_runtime_setup(
@@ -592,6 +632,11 @@ def test_init_json_data_contains_required_keys(
         "created",
         "already_initialized",
         "audit_reference",
+        "layout",
+        "shared_root",
+        "operational_root",
+        "shared_paths",
+        "operational_paths",
     }
 
 

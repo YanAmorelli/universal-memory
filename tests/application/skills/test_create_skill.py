@@ -12,13 +12,23 @@ from universal_memory.application.skills import (
     CreateSkillCommand,
     CreateSkillUseCase,
 )
-from universal_memory.domain import StorageError
+from universal_memory.domain import StorageError, ValidationFailedError
 from universal_memory.domain.entities import AgentSkillStatus, LatentSkillScope, LatentSkillStatus
 from universal_memory.domain.ports import AgentSkillRepository
 from universal_memory.infrastructure.storage import (
     LocalAgentSkillRepository,
     LocalLatentSkillRepository,
 )
+
+
+def make_shared_project_root(tmp_path: Path) -> Path:
+    (tmp_path / ".umem").mkdir()
+    (tmp_path / "umem").mkdir()
+    (tmp_path / "umem" / "project.toml").write_text(
+        "[project]\nlayout = \"shared\"\nversion = \"1\"\n",
+        encoding="utf-8",
+    )
+    return tmp_path
 
 
 def test_create_skill_directly_writes_canonical_quoted_yaml_without_native_sync(
@@ -75,6 +85,124 @@ def test_create_skill_directly_writes_canonical_quoted_yaml_without_native_sync(
     assert not (tmp_path / ".agents" / "skills" / "launch-funnel-operator").exists()
     assert "sync_native_skill" not in {event.action for event in audit.written}
     assert result.latent_skill.status == LatentSkillStatus.active
+
+
+def test_create_project_skill_defaults_to_shared_canonical_path_in_shared_layout(
+    tmp_path: Path,
+) -> None:
+    shared_project_root = make_shared_project_root(tmp_path)
+    snapshots = RecordingSnapshotRepository()
+    audit = RecordingAuditRepository()
+    safe_write = SafeWriteUseCase(
+        project_root=shared_project_root,
+        secret_scanner=RecordingScanner(),
+        snapshot_repository=snapshots,
+        audit_log_repository=audit,
+    )
+    repository = LocalAgentSkillRepository(
+        project_root=shared_project_root,
+        safe_write_use_case=safe_write,
+    )
+    use_case = CreateSkillUseCase(
+        project_root=shared_project_root,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    )
+
+    result = use_case.execute(
+        CreateSkillCommand(
+            name="Review Helper",
+            description="Guide repository reviews.",
+            scope=LatentSkillScope.project,
+            origin="test",
+        )
+    )
+
+    assert result.skill_file == "umem/skills/review-helper/SKILL.md"
+    assert result.agent_skill.canonical_path == "umem/skills/review-helper/SKILL.md"
+    assert result.agent_skill.metadata["visibility"] == "shared"
+    assert result.agent_skill.metadata["category"] == "user-facing"
+    assert (shared_project_root / "umem" / "skills" / "review-helper" / "SKILL.md").is_file()
+    assert (shared_project_root / "umem" / "skills" / "skills.jsonl").is_file()
+    assert not (shared_project_root / ".umem" / "skills" / "review-helper").exists()
+
+
+def test_create_operational_project_skill_stays_private_in_shared_layout(
+    tmp_path: Path,
+) -> None:
+    shared_project_root = make_shared_project_root(tmp_path)
+    safe_write = SafeWriteUseCase(
+        project_root=shared_project_root,
+        secret_scanner=RecordingScanner(),
+        snapshot_repository=RecordingSnapshotRepository(),
+        audit_log_repository=RecordingAuditRepository(),
+    )
+    repository = LocalAgentSkillRepository(
+        project_root=shared_project_root,
+        safe_write_use_case=safe_write,
+    )
+    use_case = CreateSkillUseCase(
+        project_root=shared_project_root,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    )
+
+    result = use_case.execute(
+        CreateSkillCommand(
+            name="Local Bootstrap Helper",
+            description="Local agent bootstrap.",
+            scope=LatentSkillScope.project,
+            origin="test",
+            category="operational",
+        )
+    )
+
+    assert result.skill_file == ".umem/skills/local-bootstrap-helper/SKILL.md"
+    assert result.agent_skill.metadata["visibility"] == "private"
+    assert result.agent_skill.metadata["category"] == "operational"
+    assert (
+        shared_project_root / ".umem" / "skills" / "local-bootstrap-helper" / "SKILL.md"
+    ).is_file()
+    assert not (shared_project_root / "umem" / "skills" / "local-bootstrap-helper").exists()
+
+
+def test_create_operational_project_skill_rejects_shared_visibility_in_shared_layout(
+    tmp_path: Path,
+) -> None:
+    shared_project_root = make_shared_project_root(tmp_path)
+    safe_write = SafeWriteUseCase(
+        project_root=shared_project_root,
+        secret_scanner=RecordingScanner(),
+        snapshot_repository=RecordingSnapshotRepository(),
+        audit_log_repository=RecordingAuditRepository(),
+    )
+    repository = LocalAgentSkillRepository(
+        project_root=shared_project_root,
+        safe_write_use_case=safe_write,
+    )
+    use_case = CreateSkillUseCase(
+        project_root=shared_project_root,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    )
+
+    try:
+        use_case.execute(
+            CreateSkillCommand(
+                name="Shared Bootstrap Helper",
+                description="Local agent bootstrap.",
+                scope=LatentSkillScope.project,
+                origin="test",
+                visibility="shared",
+                category="operational",
+            )
+        )
+    except ValidationFailedError as error:
+        assert "operational skills cannot be shared by create" in str(error)
+    else:
+        raise AssertionError("expected validation error for shared operational skill create")
+
+    assert not (shared_project_root / "umem" / "skills" / "shared-bootstrap-helper").exists()
 
 
 def test_create_global_skill_reads_canonical_content_from_global_root(tmp_path: Path) -> None:

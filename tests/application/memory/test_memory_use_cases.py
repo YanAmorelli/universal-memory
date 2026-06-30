@@ -256,6 +256,88 @@ def test_remember_fact_blocks_secret_and_records_safe_block_audit(tmp_path: Path
     assert audit.written[0].status == "blocked"
 
 
+def test_remember_project_fact_records_shared_visibility_and_storage_path(tmp_path: Path) -> None:
+    (tmp_path / "umem").mkdir()
+    (tmp_path / "umem" / "project.toml").write_text(
+        'schema_version = "1"\nlayout = "shared"\n', encoding="utf-8"
+    )
+    repository = LocalFactRepository(project_root=tmp_path)
+    safe_write, _scanner, _snapshots, _audit = build_safe_write(tmp_path)
+    use_case = RememberFactUseCase(fact_repository=repository, safe_write_use_case=safe_write)
+
+    result = use_case.execute(
+        RememberFactCommand(
+            content="Project uses shared root.",
+            scope=FactScope.project,
+            source="test",
+            visibility="shared",
+        )
+    )
+
+    assert result.fact.metadata["visibility"] == "shared"
+    assert result.fact.metadata["storage_path"] == "umem/memory/facts.jsonl"
+    assert (tmp_path / "umem" / "memory" / "facts.jsonl").is_file()
+
+
+def test_remember_project_fact_records_private_visibility_and_storage_path(tmp_path: Path) -> None:
+    (tmp_path / "umem").mkdir()
+    (tmp_path / "umem" / "project.toml").write_text(
+        'schema_version = "1"\nlayout = "shared"\n', encoding="utf-8"
+    )
+    repository = LocalFactRepository(project_root=tmp_path)
+    safe_write, _scanner, _snapshots, _audit = build_safe_write(tmp_path)
+    use_case = RememberFactUseCase(fact_repository=repository, safe_write_use_case=safe_write)
+
+    result = use_case.execute(
+        RememberFactCommand(
+            content="Private project note.",
+            scope=FactScope.project,
+            source="test",
+            visibility="private",
+        )
+    )
+
+    assert result.fact.metadata["visibility"] == "private"
+    assert result.fact.metadata["storage_path"] == ".umem/memory/private_facts.jsonl"
+    assert (tmp_path / ".umem" / "memory" / "private_facts.jsonl").is_file()
+
+
+def test_remember_rejects_visibility_for_global_facts() -> None:
+    use_case = RememberFactUseCase(fact_repository=RecordingFactRepository())
+
+    with pytest.raises(ValueError, match="visibility"):
+        use_case.execute(
+            RememberFactCommand(
+                content="Global preference.",
+                scope=FactScope.global_,
+                source="test",
+                visibility="shared",
+            )
+        )
+
+
+def test_remember_legacy_layout_reports_legacy_storage_path_for_requested_visibility(
+    tmp_path: Path,
+) -> None:
+    repository = LocalFactRepository(project_root=tmp_path)
+    safe_write, _scanner, _snapshots, _audit = build_safe_write(tmp_path)
+    use_case = RememberFactUseCase(fact_repository=repository, safe_write_use_case=safe_write)
+
+    result = use_case.execute(
+        RememberFactCommand(
+            content="Legacy project fact.",
+            scope=FactScope.project,
+            source="test",
+            visibility="private",
+        )
+    )
+
+    assert result.fact.metadata["visibility"] == "private"
+    assert result.fact.metadata["storage_path"] == ".umem/memory/facts.jsonl"
+    assert (tmp_path / ".umem" / "memory" / "facts.jsonl").is_file()
+    assert not (tmp_path / ".umem" / "memory" / "private_facts.jsonl").exists()
+
+
 def test_list_facts_delegates_filters_to_repository() -> None:
     base = datetime(2026, 5, 26, tzinfo=UTC)
     project_active = make_fact(scope=FactScope.project, status=FactStatus.active, created_at=base)
@@ -272,6 +354,23 @@ def test_list_facts_delegates_filters_to_repository() -> None:
 
     assert repository.filters == [(FactScope.project, FactStatus.active)]
     assert result.facts == [project_active]
+
+
+def test_list_facts_filters_by_visibility() -> None:
+    shared = make_fact(content="Shared").model_copy(
+        update={"metadata": {"visibility": "shared"}}
+    )
+    private = make_fact(content="Private").model_copy(
+        update={"metadata": {"visibility": "private"}}
+    )
+    repository = RecordingFactRepository([private, shared])
+    use_case = ListFactsUseCase(fact_repository=repository)
+
+    result = use_case.execute(
+        ListFactsCommand(scope=FactScope.project, status=FactStatus.active, visibility="shared")
+    )
+
+    assert result.facts == [shared]
 
 
 def test_list_facts_returns_explicit_empty_list() -> None:

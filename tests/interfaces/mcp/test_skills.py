@@ -582,6 +582,8 @@ async def test_create_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: 
             "description": " Operate launch funnel: CTAs and UTMs. ",
             "scope": "project",
             "triggers": [" when creating launch schedules ", ""],
+            "visibility": "shared",
+            "category": "user-facing",
         },
     )
     payload = result.structured_content
@@ -597,6 +599,8 @@ async def test_create_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: 
             origin="mcp",
             triggers=["when creating launch schedules"],
             raw_markdown=None,
+            visibility="shared",
+            category="user-facing",
         )
     ]
     assert success_payload["ok"] is True

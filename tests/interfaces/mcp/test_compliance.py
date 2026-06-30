@@ -89,6 +89,7 @@ from universal_memory.interfaces.mcp.server import (
 FACT_ID = "11111111-1111-4111-8111-111111111111"
 PUBLIC_MCP_TOOLS = {
     "initialize_project": {},
+    "inspect_project_layout": {},
     "status": {},
     "doctor": {},
     "context": {},
@@ -156,6 +157,20 @@ CONTRACT_KEYS_BY_TOOL = {
         "created",
         "already_initialized",
         "audit_reference",
+        "layout",
+        "shared_root",
+        "operational_root",
+        "shared_paths",
+        "operational_paths",
+    },
+    "inspect_project_layout": {
+        "operation",
+        "layout",
+        "shared_root",
+        "operational_root",
+        "precedence",
+        "warnings",
+        "recommended_actions",
     },
     "status": {
         "initialized",
@@ -167,6 +182,10 @@ CONTRACT_KEYS_BY_TOOL = {
         "approximate_size_bytes",
         "last_health_check",
         "host_validation",
+        "layout",
+        "shared_root",
+        "operational_root",
+        "path_counts",
     },
     "doctor": {"checks", "summary"},
     "context": {
@@ -178,7 +197,16 @@ CONTRACT_KEYS_BY_TOOL = {
         "token_estimate",
         "last_read_at",
     },
-    "remember_fact": {"fact_id", "scope", "status", "tags", "created_at", "audit_reference"},
+    "remember_fact": {
+        "fact_id",
+        "scope",
+        "status",
+        "tags",
+        "visibility",
+        "storage_path",
+        "created_at",
+        "audit_reference",
+    },
     "list_facts": {"facts"},
     "purge_fact": {"purged_count", "affected_ids", "audit_reference"},
     "list_audit_events": {"events"},
@@ -251,6 +279,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "audit_reference",
         "snapshot_reference",
         "native_installations",
+        "visibility",
+        "category",
         "canonical_skill",
     },
     "create_skill_draft": {
@@ -343,6 +373,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "audit_reference",
         "snapshot_reference",
         "native_installations",
+        "visibility",
+        "category",
         "canonical_skill",
         "source_recommendation_id",
         "promotion",
@@ -404,6 +436,20 @@ CONTRACT_TYPES_BY_TOOL = {
         "created": list,
         "already_initialized": bool,
         "audit_reference": str,
+        "layout": str,
+        "shared_root": (str, type(None)),
+        "operational_root": str,
+        "shared_paths": list,
+        "operational_paths": list,
+    },
+    "inspect_project_layout": {
+        "operation": str,
+        "layout": str,
+        "shared_root": str,
+        "operational_root": str,
+        "precedence": str,
+        "warnings": list,
+        "recommended_actions": list,
     },
     "status": {
         "initialized": bool,
@@ -415,6 +461,10 @@ CONTRACT_TYPES_BY_TOOL = {
         "approximate_size_bytes": int,
         "last_health_check": str,
         "host_validation": dict,
+        "layout": str,
+        "shared_root": str,
+        "operational_root": str,
+        "path_counts": dict,
     },
     "doctor": {
         "checks": list,
@@ -434,6 +484,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "scope": str,
         "status": str,
         "tags": list,
+        "visibility": (str, type(None)),
+        "storage_path": (str, type(None)),
         "created_at": str,
         "audit_reference": str,
     },
@@ -513,6 +565,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "audit_reference": str,
         "snapshot_reference": str,
         "native_installations": list,
+        "visibility": str,
+        "category": str,
         "canonical_skill": dict,
     },
     "create_skill_draft": {
@@ -604,6 +658,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "audit_reference": str,
         "snapshot_reference": str,
         "native_installations": list,
+        "visibility": str,
+        "category": str,
         "canonical_skill": dict,
         "source_recommendation_id": str,
         "promotion": dict,
@@ -754,6 +810,48 @@ async def test_mcp_compliance_blocks_destructive_tools_without_confirmation(
         assert payload["ok"] is False, f"{tool_name}: destructive call should fail without confirm"
         assert payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
         assert "destructive" in payload["error"]["data"]["detail"]
+
+
+@pytest.mark.anyio
+async def test_mcp_initialize_project_accepts_shared_layout(tmp_path: Path) -> None:
+    seen: list[str] = []
+
+    def initialize_project(project_root: Path, *, layout: str = "legacy") -> SetupProjectResult:
+        seen.append(layout)
+        return SetupProjectResult(
+            project_path=project_root,
+            config_path=project_root / ".umem" / "config.toml",
+            memory_path=project_root / ".umem" / "memory",
+            audit_path=project_root / ".umem" / "audit" / "events.jsonl",
+            snapshots_path=project_root / ".umem" / "snapshots",
+            skills_path=project_root / ".umem" / "skills",
+            benchmarks_path=project_root / ".umem" / "benchmarks",
+            created=True,
+            created_paths=[".umem/config.toml", "umem/project.toml"],
+            existing_paths=[],
+            already_initialized=False,
+            layout="shared",
+            shared_root=Path("umem"),
+            operational_root=Path(".umem"),
+            shared_paths=["umem/project.toml", "umem/memory", "umem/skills"],
+            operational_paths=[".umem/config.toml", ".umem/memory"],
+        )
+
+    use_cases = mcp_use_cases(tmp_path)
+    use_cases = replace(use_cases, initialize_project=initialize_project)
+    server = configure_server(create_mcp_server(), use_cases, project_root=tmp_path)
+
+    payload = (
+        await server.call_tool("initialize_project", {"layout": "shared"})
+    ).structured_content
+
+    assert payload is not None
+    assert payload["ok"] is True
+    assert payload["data"]["layout"] == "shared"
+    assert payload["data"]["shared_root"] == "umem"
+    assert payload["data"]["operational_root"] == ".umem"
+    assert payload["data"]["shared_paths"] == ["umem/project.toml", "umem/memory", "umem/skills"]
+    assert seen == ["shared"]
 
 
 def _assert_contract_types(tool_name: str, data: dict[str, Any]) -> None:
@@ -988,6 +1086,10 @@ def create_skill_result(command: CreateSkillCommand) -> CreateSkillResult:
         origin="mcp",
         audit_reference="audit-1",
         content_hash="hash-1",
+        metadata={
+            "visibility": command.visibility or "private",
+            "category": command.category,
+        },
     )
     return CreateSkillResult(
         agent_skill=agent_skill,

@@ -19,6 +19,7 @@ class RememberFactCommand:
     tags: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     origin: str = "application"
+    visibility: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +53,24 @@ class RememberFactUseCase:
                 local_repository.global_safe_write_use_case = global_use_case
 
     def execute(self, command: RememberFactCommand) -> RememberFactResult:
+        if command.visibility is not None and command.scope == FactScope.global_:
+            raise ValueError("visibility is only supported for project-scoped facts")
         timestamp = datetime.now(UTC)
+        metadata = dict(command.metadata)
+        if command.scope == FactScope.project:
+            layout = getattr(self.fact_repository, "layout", None)
+            uses_shared_layout = bool(getattr(layout, "is_shared", False))
+            visibility = command.visibility or str(metadata.get("visibility") or "")
+            if visibility or uses_shared_layout:
+                resolved_visibility = visibility or "shared"
+                metadata["visibility"] = resolved_visibility
+                metadata.setdefault(
+                    "storage_path",
+                    self._project_storage_path(
+                        resolved_visibility,
+                        uses_shared_layout=uses_shared_layout,
+                    ),
+                )
         fact = Fact(
             id=str(uuid4()),
             created_at=timestamp,
@@ -62,7 +80,7 @@ class RememberFactUseCase:
             source=command.source,
             status=FactStatus.active,
             tags=command.tags,
-            metadata=command.metadata,
+            metadata=metadata,
         )
 
         # Delegate entirely to the locked Repository to prevent race conditions
@@ -83,3 +101,11 @@ class RememberFactUseCase:
             audit_reference=audit_ref,
             snapshot_reference=snapshot_ref,
         )
+
+    @staticmethod
+    def _project_storage_path(visibility: str, *, uses_shared_layout: bool) -> str:
+        if not uses_shared_layout:
+            return ".umem/memory/facts.jsonl"
+        if visibility == "private":
+            return ".umem/memory/private_facts.jsonl"
+        return "umem/memory/facts.jsonl"

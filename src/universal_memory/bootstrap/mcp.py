@@ -284,11 +284,12 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         agent_skill_repository=agent_skill_repository,
     )
 
-    def initialize_project(project_root: Path):
+    def initialize_project(project_root: Path, *, layout: str = "legacy"):
         return setup_project(
             project_root,
             layout_port=layout_port,
             config_validation_port=LocalConfigValidationPort(),
+            layout=layout,
         )
 
     return configure_server(

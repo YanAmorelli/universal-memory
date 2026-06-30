@@ -8,6 +8,7 @@ from universal_memory.domain.ports import FactRepository
 class ListFactsCommand:
     scope: FactScope | None = None
     status: FactStatus | None = None
+    visibility: str = "all"
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,4 +22,10 @@ class ListFactsUseCase:
 
     def execute(self, command: ListFactsCommand) -> ListFactsResult:
         facts = self.fact_repository.list(scope=command.scope, status=command.status)
+        if command.visibility != "all":
+            facts = [
+                fact
+                for fact in facts
+                if str(fact.metadata.get("visibility") or "legacy") == command.visibility
+            ]
         return ListFactsResult(facts=facts)

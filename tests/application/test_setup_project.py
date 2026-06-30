@@ -161,6 +161,27 @@ def test_setup_project_persists_selected_runtimes(tmp_path: Path) -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_setup_project_shared_layout_creates_visible_root_and_keeps_umem_skill_private(
+    tmp_path: Path,
+) -> None:
+    result = setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+        layout="shared",
+    )
+
+    assert result.layout == "shared"
+    assert result.shared_root == Path("umem")
+    assert result.operational_root == Path(".umem")
+    assert result.shared_paths == ["umem/project.toml", "umem/memory", "umem/skills"]
+    assert (tmp_path / "umem" / "project.toml").is_file()
+    assert (tmp_path / "umem" / "memory").is_dir()
+    assert (tmp_path / "umem" / "skills").is_dir()
+    assert (tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md").is_file()
+    assert not (tmp_path / "umem" / "skills" / "use-universal-memory").exists()
+
+
 def test_setup_project_accepts_runtime_aliases_and_rejects_unknown_runtime(
     tmp_path: Path,
 ) -> None:

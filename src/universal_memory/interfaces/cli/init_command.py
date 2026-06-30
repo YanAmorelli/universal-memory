@@ -27,6 +27,7 @@ from universal_memory.application.host import (
     SyncInstructionsCommand,
     SyncInstructionsResult,
 )
+from universal_memory.application.layout import InspectProjectLayoutUseCase
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -134,6 +135,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.entities.runtime import RuntimeAdapter, default_runtime_registry
+from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.interfaces.cli.message_catalog import (
     DEFAULT_LOCALE,
     human_message,
@@ -157,9 +159,7 @@ INIT_SPLASH_LINES = (
     " \\____/|_|  |_|\\___|_| |_| |_|",
     "  persistent context for AI agents",
 )
-SetupProjectCommand = (
-    Callable[[Path, list[str] | None], SetupProjectResult] | Callable[[Path], SetupProjectResult]
-)
+SetupProjectCommand = Callable[..., SetupProjectResult]
 LEGACY_CONFIGURABLE_RUNTIME_IDS = {"claude_code", "codex"}
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
@@ -424,6 +424,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     audit_app = typer.Typer(help="Inspect audit events")
     snapshots_app = typer.Typer(help="Inspect snapshots")
     host_app = typer.Typer(help="Configure agent hosts")
+    layout_app = typer.Typer(help="Inspect and migrate project layout")
     skills_app = typer.Typer(
         help=(
             "Manage skills. Use create for new canonical skills, import for existing "
@@ -438,6 +439,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     app.add_typer(audit_app, name="audit")
     app.add_typer(snapshots_app, name="snapshots")
     app.add_typer(host_app, name="host")
+    app.add_typer(layout_app, name="layout")
     app.add_typer(skills_app, name="skills")
     skills_app.add_typer(skills_draft_app, name="draft")
     skills_app.add_typer(skills_canonical_app, name="canonical")
@@ -469,7 +471,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         ctx.obj = {"output_format": output_format.lower()}
 
     @app.command("init")
-    def init_command(
+    def init_command(  # noqa: PLR0913
         ctx: typer.Context,
         runtimes: Annotated[
             list[str] | None,
@@ -479,6 +481,15 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             list[str] | None,
             typer.Option("--hosts", help="Legacy host option. Prefer --runtime."),
         ] = None,
+        layout: Annotated[
+            str,
+            typer.Option(
+                "--layout",
+                help="Project storage layout.",
+                case_sensitive=False,
+                click_type=click.Choice(["legacy", "shared"], case_sensitive=False),
+            ),
+        ] = "legacy",
         yes: YesOption = False,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -491,6 +502,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 _effective_format(ctx, output_format),
                 selected_runtimes=runtimes,
                 selected_hosts=hosts,
+                layout=layout.lower(),
                 yes=yes,
                 host_setup_command=host_setup_command,
                 host_check_command=host_check_command,
@@ -506,6 +518,36 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         raise typer.Exit(
             code=_run_status(status_command, output_format=_effective_format(ctx, output_format))
         )
+
+    @layout_app.command("status")
+    def layout_status(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
+        result = InspectProjectLayoutUseCase(
+            project_root=Path.cwd(),
+            layout_port=LocalProjectLayoutPort(),
+        ).execute()
+        report = result["data"]
+        payload = {
+            "ok": True,
+            "operation": result["operation"],
+            "scope": "project",
+            "data": report,
+            "warnings": report["warnings"],
+        }
+        resolved_format = _effective_format(ctx, output_format)
+        if resolved_format == "json":
+            print(json.dumps(payload, sort_keys=True))
+        elif resolved_format == "summary":
+            _stdout_console().print(
+                f"{report['layout']}: shared={report['shared_root']} "
+                f"operational={report['operational_root']}"
+            )
+        else:
+            table = Table(title="Project Layout")
+            table.add_column("Field")
+            table.add_column("Value")
+            for key, value in report.items():
+                table.add_row(key, json.dumps(value) if isinstance(value, list) else str(value))
+            _stdout_console().print(table)
 
     @app.command("doctor")
     def doctor(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
@@ -597,7 +639,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         )
 
     @app.command("remember")
-    def remember(
+    def remember(  # noqa: PLR0913
         ctx: typer.Context,
         content: Annotated[str, typer.Argument(help="Fact content to store.")],
         scope: Annotated[
@@ -612,6 +654,18 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             list[str] | None,
             typer.Option("--tag", help="Fact tag. May be used multiple times."),
         ] = None,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project fact visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        private: Annotated[
+            bool,
+            typer.Option("--private", help="Store the project fact in private local storage."),
+        ] = False,
         output_format: OutputFormatOption = None,
     ) -> None:
         if remember_command is None:
@@ -624,6 +678,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 content=content,
                 scope=_fact_scope(scope) or FactScope.project,
                 tags=tags or [],
+                visibility="private" if private else visibility,
             )
         )
 
@@ -648,6 +703,14 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 ),
             ),
         ] = None,
+        visibility: Annotated[
+            str,
+            typer.Option(
+                "--visibility",
+                help="Project fact visibility filter.",
+                click_type=click.Choice(["shared", "private", "all"], case_sensitive=False),
+            ),
+        ] = "all",
         output_format: OutputFormatOption = None,
     ) -> None:
         if facts_list_command is None:
@@ -659,6 +722,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 output_format=_effective_format(ctx, output_format),
                 scope=_fact_scope(scope),
                 status=_fact_status(status) if status is not None else FactStatus.active,
+                visibility=visibility.lower(),
             )
         )
 
@@ -1042,6 +1106,22 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             LatentSkillScope,
             typer.Option("--scope", help="Skill scope (project or global)."),
         ] = LatentSkillScope.project,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project skill visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
         output_format: OutputFormatOption = None,
     ) -> None:
         if create_skill_command is None:
@@ -1058,6 +1138,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 slug=slug,
                 sync=sync,
                 targets=target,
+                visibility=visibility,
+                category=category,
             )
         )
 
@@ -1715,12 +1797,15 @@ def _build_setup_project_command(
     def command(
         project_root: Path,
         enabled_host_ids: list[str] | None = None,
+        *,
+        layout: str = "legacy",
     ) -> SetupProjectResult:
         return setup_project(
             project_root,
             layout_port=layout_port,
             config_validation_port=config_validation_port,
             enabled_host_ids=enabled_host_ids,
+            layout=layout,
         )
 
     return command
@@ -1794,6 +1879,7 @@ def _run_init(  # noqa: PLR0913
     *,
     selected_runtimes: list[str] | None = None,
     selected_hosts: list[str] | None = None,
+    layout: str = "legacy",
     yes: bool = False,
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
@@ -1812,12 +1898,12 @@ def _run_init(  # noqa: PLR0913
             locale=locale,
         )
         if output_format == "json":
-            result = _execute_setup_project(command, Path.cwd(), runtime_ids)
+            result = _execute_setup_project(command, Path.cwd(), runtime_ids, layout=layout)
         else:
             with _stderr_console().status(
                 human_message("Initializing project scaffold...", locale=locale), spinner="dots"
             ):
-                result = _execute_setup_project(command, Path.cwd(), runtime_ids)
+                result = _execute_setup_project(command, Path.cwd(), runtime_ids, layout=layout)
             locale = resolve_locale()
         host_results = _configure_init_hosts(
             runtime_ids,
@@ -1854,6 +1940,8 @@ def _execute_setup_project(
     command: SetupProjectCommand,
     project_root: Path,
     enabled_runtime_ids: list[str],
+    *,
+    layout: str = "legacy",
 ) -> SetupProjectResult:
     try:
         sig = signature(command)
@@ -1868,8 +1956,16 @@ def _execute_setup_project(
             or has_var_args
             or "enabled_runtime_ids" in sig.parameters
             or "enabled_host_ids" in sig.parameters
+            or "layout" in sig.parameters
         ):
-            return command(project_root, enabled_runtime_ids)  # type: ignore
+            if "enabled_runtime_ids" in sig.parameters:
+                kwargs: dict[str, Any] = {"enabled_runtime_ids": enabled_runtime_ids}
+                if "layout" in sig.parameters:
+                    kwargs["layout"] = layout
+                return command(project_root, **kwargs)
+            if "layout" in sig.parameters:
+                return command(project_root, enabled_runtime_ids, layout=layout)
+            return command(project_root, enabled_runtime_ids)
     except (ValueError, TypeError):
         pass
     return command(project_root)  # type: ignore
@@ -2121,13 +2217,14 @@ def _run_context(
     return 0
 
 
-def _run_remember(
+def _run_remember(  # noqa: PLR0913
     command: RememberFactCommandHandler,
     *,
     output_format: str,
     content: str,
     scope: FactScope,
     tags: list[str],
+    visibility: str | None = None,
 ) -> int:
     try:
         result = command(
@@ -2137,6 +2234,7 @@ def _run_remember(
                 source="cli",
                 tags=tags,
                 origin="cli",
+                visibility=visibility,
             )
         )
     except OSError as error:
@@ -2166,9 +2264,10 @@ def _run_facts_list(
     output_format: str,
     scope: FactScope | None,
     status: FactStatus,
+    visibility: str = "all",
 ) -> int:
     try:
-        result = command(ListFactsCommand(scope=scope, status=status))
+        result = command(ListFactsCommand(scope=scope, status=status, visibility=visibility))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
@@ -2889,6 +2988,8 @@ def _run_skills_create(  # noqa: PLR0913
     slug: str | None,
     sync: bool,
     targets: list[str] | None,
+    visibility: str | None = None,
+    category: str = "user-facing",
 ) -> int:
     try:
         result = command(
@@ -2901,6 +3002,8 @@ def _run_skills_create(  # noqa: PLR0913
                 slug=slug,
                 sync=sync,
                 targets=targets,
+                visibility=visibility.lower() if visibility is not None else None,
+                category=category.lower(),
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -4365,7 +4468,7 @@ def _update_apply_success_envelope(
 
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
     project_root = result.project_path
-    return {
+    payload = {
         "project_path": _relative_path(result.project_path, project_root),
         "config_path": _relative_path(result.config_path, project_root),
         "memory_path": _relative_path(result.memory_path, project_root),
@@ -4375,6 +4478,20 @@ def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
         "already_initialized": result.already_initialized,
         "audit_reference": AUDIT_REFERENCE_PLACEHOLDER,
     }
+    payload.update(
+        {
+            "layout": result.layout,
+            "shared_root": (
+                _relative_path(result.shared_root, project_root)
+                if result.shared_root is not None
+                else None
+            ),
+            "operational_root": _relative_path(result.operational_root, project_root),
+            "shared_paths": result.shared_paths or [],
+            "operational_paths": result.operational_paths or [],
+        }
+    )
+    return payload
 
 
 def _fact_payload(fact: Fact) -> dict[str, Any]:
@@ -4387,6 +4504,8 @@ def _fact_payload(fact: Fact) -> dict[str, Any]:
         "recurrence_count": fact.recurrence_count,
         "tags": fact.tags,
         "metadata": fact.metadata,
+        "visibility": fact.metadata.get("visibility", "legacy"),
+        "storage_path": fact.metadata.get("storage_path"),
         "created_at": format_utc_iso(fact.created_at),
         "updated_at": format_utc_iso(fact.updated_at),
     }
@@ -4399,6 +4518,10 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
             "project_path": result.project_path,
             "installed_version": result.installed_version,
             "recommended_action": result.recommended_action,
+            "layout": result.layout,
+            "shared_root": result.shared_root,
+            "operational_root": result.operational_root,
+            "path_counts": result.path_counts or {},
         }
 
     return {
@@ -4411,6 +4534,10 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
         "approximate_size_bytes": result.approximate_size_bytes,
         "last_health_check": result.last_health_check,
         "host_validation": result.host_validation,
+        "layout": result.layout,
+        "shared_root": result.shared_root,
+        "operational_root": result.operational_root,
+        "path_counts": result.path_counts or {},
     }
 
 
@@ -4439,6 +4566,8 @@ def _remember_payload(result: RememberFactResult) -> dict[str, Any]:
         "scope": fact.scope.value,
         "status": fact.status.value,
         "tags": fact.tags,
+        "visibility": fact.metadata.get("visibility"),
+        "storage_path": fact.metadata.get("storage_path"),
         "created_at": format_utc_iso(fact.created_at),
         "audit_reference": result.audit_reference,
     }
