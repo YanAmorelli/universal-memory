@@ -105,3 +105,19 @@ class ProjectLayoutInspection:
     precedence: str
     warnings: list[str]
     recommended_actions: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectLayoutMigrationReport:
+    operation: str
+    source_layout: str
+    target_layout: str
+    dry_run: bool
+    copied: list[dict[str, str]]
+    already_shared: list[dict[str, str]]
+    skipped: list[dict[str, str]]
+    conflicts: list[dict[str, str]]
+    remaining_local: list[str]
+    affected_paths: list[str]
+    next_steps: list[str]
+    warnings: list[str]

@@ -84,7 +84,14 @@ def test_shared_layout_reads_shared_rules_before_legacy_rules(shared_project_roo
     legacy_path.write_text(base.model_dump_json() + "\n", encoding="utf-8")
     shared_path.write_text(shared.model_dump_json() + "\n", encoding="utf-8")
 
-    assert repository.list(scope=RuleScope.project) == [shared]
+    rules = repository.list(scope=RuleScope.project)
+    assert len(rules) == 1
+    assert rules[0].model_dump(exclude={"metadata"}) == shared.model_dump(exclude={"metadata"})
+    assert rules[0].metadata["layout_overlap"] == {
+        "active_path": "umem/memory/rules.jsonl",
+        "shadowed_path": ".umem/memory/rules.jsonl",
+        "active_precedence": "shared_over_legacy",
+    }
 
 
 def test_shared_layout_write_updates_existing_legacy_rule_without_creating_shared_file(

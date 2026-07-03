@@ -118,7 +118,14 @@ def test_shared_layout_reads_shared_facts_before_legacy_facts(
     legacy_path.write_text(base.model_dump_json() + "\n", encoding="utf-8")
     shared_path.write_text(shared.model_dump_json() + "\n", encoding="utf-8")
 
-    assert repository.list(scope=FactScope.project) == [shared]
+    facts = repository.list(scope=FactScope.project)
+    assert len(facts) == 1
+    assert facts[0].model_dump(exclude={"metadata"}) == shared.model_dump(exclude={"metadata"})
+    assert facts[0].metadata["layout_overlap"] == {
+        "active_path": "umem/memory/facts.jsonl",
+        "shadowed_path": ".umem/memory/facts.jsonl",
+        "active_precedence": "shared_over_legacy",
+    }
 
 
 def test_shared_layout_write_updates_existing_legacy_fact_without_creating_shared_file(

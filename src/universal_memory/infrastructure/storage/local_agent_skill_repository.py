@@ -250,9 +250,18 @@ class LocalAgentSkillRepository(AgentSkillRepository):
         raise_on_corrupt: bool,
     ) -> list[AgentSkill]:
         by_slug: dict[str, AgentSkill] = {}
+        source_paths: dict[str, Path] = {}
         for storage_path in paths:
             for skill in self._load_skills_file(storage_path, raise_on_corrupt=raise_on_corrupt):
+                if skill.slug in by_slug:
+                    by_slug[skill.slug] = self._with_layout_overlap(
+                        by_slug[skill.slug],
+                        active_path=source_paths[skill.slug],
+                        shadowed_path=storage_path,
+                    )
+                    continue
                 by_slug.setdefault(skill.slug, skill)
+                source_paths.setdefault(skill.slug, storage_path)
         return list(by_slug.values())
 
     def _load_skills_file(
@@ -350,6 +359,21 @@ class LocalAgentSkillRepository(AgentSkillRepository):
             return path.resolve().relative_to(self.project_root.resolve()).as_posix()
         except ValueError:
             return path.as_posix()
+
+    def _with_layout_overlap(
+        self,
+        skill: AgentSkill,
+        *,
+        active_path: Path,
+        shadowed_path: Path,
+    ) -> AgentSkill:
+        metadata = dict(skill.metadata)
+        metadata["layout_overlap"] = {
+            "active_path": self._relative_path(active_path),
+            "shadowed_path": self._relative_path(shadowed_path),
+            "active_precedence": self.layout.policy.precedence.value,
+        }
+        return skill.model_copy(update={"metadata": metadata})
 
     @classmethod
     def _render_skills(cls, skills: list[AgentSkill]) -> str:

@@ -231,9 +231,18 @@ class LocalRuleRepository(RuleRepository):
 
     def _load_rules_from_paths(self, paths: list[Path], raise_on_corrupt: bool) -> list[Rule]:
         by_id: dict[str, Rule] = {}
+        source_paths: dict[str, Path] = {}
         for rules_path in paths:
             for rule in self._load_rules_file(rules_path, raise_on_corrupt):
+                if rule.id in by_id:
+                    by_id[rule.id] = self._with_layout_overlap(
+                        by_id[rule.id],
+                        active_path=source_paths[rule.id],
+                        shadowed_path=rules_path,
+                    )
+                    continue
                 by_id.setdefault(rule.id, rule)
+                source_paths.setdefault(rule.id, rules_path)
         return list(by_id.values())
 
     def _load_rules_file(self, rules_path: Path, raise_on_corrupt: bool) -> list[Rule]:
@@ -327,6 +336,21 @@ class LocalRuleRepository(RuleRepository):
             return path.resolve().relative_to(self.project_root.resolve()).as_posix()
         except ValueError:
             return path.as_posix()
+
+    def _with_layout_overlap(
+        self,
+        rule: Rule,
+        *,
+        active_path: Path,
+        shadowed_path: Path,
+    ) -> Rule:
+        metadata = dict(rule.metadata)
+        metadata["layout_overlap"] = {
+            "active_path": self._relative_path(active_path),
+            "shadowed_path": self._relative_path(shadowed_path),
+            "active_precedence": self.layout.policy.precedence.value,
+        }
+        return rule.model_copy(update={"metadata": metadata})
 
     @staticmethod
     def _global_data_root(global_home: Path) -> Path:

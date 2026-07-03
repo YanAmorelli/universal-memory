@@ -344,9 +344,18 @@ class LocalFactRepository(FactRepository):
         raise_on_corrupt: bool,
     ) -> list[Fact]:
         by_id: dict[str, Fact] = {}
+        source_paths: dict[str, Path] = {}
         for facts_path in paths:
             for fact in self._load_facts_file(facts_path, raise_on_corrupt):
+                if fact.id in by_id:
+                    by_id[fact.id] = self._with_layout_overlap(
+                        by_id[fact.id],
+                        active_path=source_paths[fact.id],
+                        shadowed_path=facts_path,
+                    )
+                    continue
                 by_id.setdefault(fact.id, fact)
+                source_paths.setdefault(fact.id, facts_path)
         return list(by_id.values())
 
     def _load_facts_file(self, facts_path: Path, raise_on_corrupt: bool) -> list[Fact]:
@@ -453,6 +462,21 @@ class LocalFactRepository(FactRepository):
             return path.resolve().relative_to(self.project_root.resolve()).as_posix()
         except ValueError:
             return path.as_posix()
+
+    def _with_layout_overlap(
+        self,
+        fact: Fact,
+        *,
+        active_path: Path,
+        shadowed_path: Path,
+    ) -> Fact:
+        metadata = dict(fact.metadata)
+        metadata["layout_overlap"] = {
+            "active_path": self._relative_path(active_path),
+            "shadowed_path": self._relative_path(shadowed_path),
+            "active_precedence": self.layout.policy.precedence.value,
+        }
+        return fact.model_copy(update={"metadata": metadata})
 
     @contextmanager
     def _lock_for_path(self, scope: FactScope, facts_path: Path) -> Generator[None, None, None]:

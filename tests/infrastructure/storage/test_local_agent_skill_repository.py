@@ -123,6 +123,61 @@ def test_shared_layout_operational_skill_registry_stays_private(
     assert not (shared_project_root / "umem" / "skills" / "skills.jsonl").exists()
 
 
+def test_shared_layout_reads_shared_skill_before_legacy_with_overlap_label(
+    shared_project_root: Path,
+) -> None:
+    safe_write = SafeWriteUseCase(
+        project_root=shared_project_root,
+        secret_scanner=RecordingScanner(),
+        snapshot_repository=RecordingSnapshotRepository(),
+        audit_log_repository=RecordingAuditRepository(),
+    )
+    repository = LocalAgentSkillRepository(
+        project_root=shared_project_root,
+        safe_write_use_case=safe_write,
+    )
+    now = datetime(2026, 6, 10, 12, 0, tzinfo=UTC)
+    legacy = AgentSkill(
+        id=str(uuid4()),
+        created_at=now,
+        updated_at=now,
+        name="Review Helper",
+        slug="review-helper",
+        description="Legacy helper.",
+        scope=LatentSkillScope.project,
+        status=AgentSkillStatus.active,
+        canonical_path=".umem/skills/review-helper/SKILL.md",
+        origin="test",
+        audit_reference="audit-1",
+        content_hash="hash-legacy",
+        native_installations=[],
+        metadata={"visibility": "private", "category": "user-facing"},
+    )
+    shared = legacy.model_copy(
+        update={
+            "id": str(uuid4()),
+            "description": "Shared helper.",
+            "canonical_path": "umem/skills/review-helper/SKILL.md",
+            "content_hash": "hash-shared",
+            "metadata": {"visibility": "shared", "category": "user-facing"},
+        }
+    )
+    private_path = shared_project_root / ".umem" / "memory" / "skills.jsonl"
+    shared_path = shared_project_root / "umem" / "skills" / "skills.jsonl"
+    private_path.write_text(legacy.model_dump_json() + "\n", encoding="utf-8")
+    shared_path.write_text(shared.model_dump_json() + "\n", encoding="utf-8")
+
+    skills = repository.list(scope=LatentSkillScope.project)
+
+    assert len(skills) == 1
+    assert skills[0].model_dump(exclude={"metadata"}) == shared.model_dump(exclude={"metadata"})
+    assert skills[0].metadata["layout_overlap"] == {
+        "active_path": "umem/skills/skills.jsonl",
+        "shadowed_path": ".umem/memory/skills.jsonl",
+        "active_precedence": "shared_over_legacy",
+    }
+
+
 def test_shared_layout_remove_operational_skill_updates_private_registry_only(
     shared_project_root: Path,
 ) -> None:
