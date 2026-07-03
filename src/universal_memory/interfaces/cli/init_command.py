@@ -27,7 +27,11 @@ from universal_memory.application.host import (
     SyncInstructionsCommand,
     SyncInstructionsResult,
 )
-from universal_memory.application.layout import InspectProjectLayoutUseCase
+from universal_memory.application.layout import (
+    InspectProjectLayoutUseCase,
+    MigrateProjectLayoutCommand,
+    MigrateProjectLayoutUseCase,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -205,6 +209,7 @@ UpdateManagedSkillsCommandHandler = Callable[
 ]
 UpdateMigrateCommandHandler = Callable[[UpdateMigrateCommand], UpdateMigrateResult]
 UpdateBenchmarksCommandHandler = Callable[[UpdateBenchmarksCommand], UpdateBenchmarksResult]
+LayoutMigrateCommandHandler = Callable[[MigrateProjectLayoutCommand], dict[str, Any]]
 UpdateSkillsItem = UpdateSkillResult | UpdateManagedSkillTemplateResult | SyncSkillResult
 
 
@@ -285,6 +290,7 @@ def main(  # noqa: PLR0913
     update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    layout_migrate_command: LayoutMigrateCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
 ) -> int:
     app = create_typer_app(
@@ -328,6 +334,7 @@ def main(  # noqa: PLR0913
         update_managed_skills_command=update_managed_skills_command,
         update_migrate_command=update_migrate_command,
         update_benchmarks_command=update_benchmarks_command,
+        layout_migrate_command=layout_migrate_command,
         locale_resolver=locale_resolver,
     )
     try:
@@ -417,6 +424,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    layout_migrate_command: LayoutMigrateCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
@@ -547,6 +555,100 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             table.add_column("Value")
             for key, value in report.items():
                 table.add_row(key, json.dumps(value) if isinstance(value, list) else str(value))
+            _stdout_console().print(table)
+
+    @layout_app.command("migrate")
+    def layout_migrate(  # noqa: PLR0913
+        ctx: typer.Context,
+        target_layout: Annotated[
+            str,
+            typer.Option(
+                "--to",
+                help="Target project layout.",
+                case_sensitive=False,
+                click_type=click.Choice(["shared"], case_sensitive=False),
+            ),
+        ] = "shared",
+        dry_run: Annotated[
+            bool,
+            typer.Option("--dry-run", help="Preview migration without writing shared content."),
+        ] = False,
+        apply_changes: Annotated[
+            bool,
+            typer.Option("--apply", help="Apply migration writes."),
+        ] = False,
+        include: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--include",
+                help="Content category to migrate. May be used multiple times.",
+                click_type=click.Choice(["facts", "rules", "skills"], case_sensitive=False),
+            ),
+        ] = None,
+        private_fact_ids: Annotated[
+            list[str] | None,
+            typer.Option("--private-fact", help="Legacy project fact ID to keep local."),
+        ] = None,
+        private_skill_slugs: Annotated[
+            list[str] | None,
+            typer.Option("--private-skill", help="Legacy project skill slug to keep local."),
+        ] = None,
+        shared_operational_skill_slugs: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--share-operational-skill",
+                help="Operational skill slug explicitly approved for sharing.",
+            ),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        command_handler = layout_migrate_command or MigrateProjectLayoutUseCase(
+            project_root=Path.cwd()
+        ).execute
+        _ = target_layout
+        if dry_run and apply_changes:
+            _print_expected_error(
+                ValidationFailedError("Use either --dry-run or --apply, not both."),
+                output_format=_effective_format(ctx, output_format),
+            )
+            raise typer.Exit(code=1)
+        result = command_handler(
+            MigrateProjectLayoutCommand(
+                target_layout="shared",
+                dry_run=not apply_changes,
+                include=tuple(
+                    value.lower() for value in (include or ["facts", "rules", "skills"])
+                ),
+                private_fact_ids=tuple(private_fact_ids or []),
+                private_skill_slugs=tuple(private_skill_slugs or []),
+                shared_operational_skill_slugs=tuple(shared_operational_skill_slugs or []),
+            )
+        )
+        payload = {
+            "ok": True,
+            "operation": result["operation"],
+            "scope": "project",
+            "data": result["data"],
+            "warnings": result.get("warnings", []),
+        }
+        resolved_format = _effective_format(ctx, output_format)
+        if resolved_format == "json":
+            print(json.dumps(payload, sort_keys=True))
+        elif resolved_format == "summary":
+            data = result["data"]
+            _stdout_console().print(
+                f"layout.migrate dry_run={data['dry_run']} copied={len(data['copied'])} "
+                f"already_shared={len(data['already_shared'])} conflicts={len(data['conflicts'])}"
+            )
+        else:
+            data = result["data"]
+            table = Table(title="Project Layout Migration")
+            table.add_column("Field")
+            table.add_column("Value")
+            for key in ("source_layout", "target_layout", "dry_run"):
+                table.add_row(key, str(data[key]))
+            for key in ("copied", "already_shared", "skipped", "conflicts"):
+                table.add_row(key, str(len(data[key])))
             _stdout_console().print(table)
 
     @app.command("doctor")
@@ -1733,6 +1835,7 @@ def build_main(  # noqa: PLR0913
     update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    layout_migrate_command: LayoutMigrateCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
@@ -1783,6 +1886,7 @@ def build_main(  # noqa: PLR0913
             update_managed_skills_command=update_managed_skills_command,
             update_migrate_command=update_migrate_command,
             update_benchmarks_command=update_benchmarks_command,
+            layout_migrate_command=layout_migrate_command,
             locale_resolver=locale_resolver,
         )
 

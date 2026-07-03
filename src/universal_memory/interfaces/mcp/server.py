@@ -20,7 +20,11 @@ from universal_memory.application.host import (
     SyncInstructionsCommand,
     SyncInstructionsResult,
 )
-from universal_memory.application.layout import InspectProjectLayoutUseCase
+from universal_memory.application.layout import (
+    InspectProjectLayoutUseCase,
+    MigrateProjectLayoutCommand,
+    MigrateProjectLayoutUseCase,
+)
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -155,6 +159,7 @@ ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResu
 DeactivateSkillCommandHandler = Callable[[DeactivateSkillCommand], DeactivateSkillResult]
 UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
 ToolResponse = dict[str, Any]
+LayoutMigrateCommandHandler = Callable[[MigrateProjectLayoutCommand], dict[str, Any]]
 
 
 def _missing_use_case(_command: Any) -> Any:
@@ -213,6 +218,7 @@ class MCPUseCases:
     activate_skill: ActivateSkillCommandHandler = _missing_use_case
     deactivate_skill: DeactivateSkillCommandHandler = _missing_use_case
     update_skill: UpdateSkillCommandHandler = _missing_use_case
+    migrate_project_layout: LayoutMigrateCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -284,6 +290,39 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="layout.status", scope="project")
+
+    @server.tool(name="migrate_project_layout")
+    def migrate_project_layout(  # noqa: PLR0913
+        target_layout: Literal["shared"] = "shared",
+        dry_run: bool = True,
+        include: list[Literal["facts", "rules", "skills"]] | None = None,
+        private_fact_ids: list[str] | None = None,
+        private_skill_slugs: list[str] | None = None,
+        shared_operational_skill_slugs: list[str] | None = None,
+    ) -> ToolResponse:
+        """Copy curated legacy project content into visible shared project storage."""
+        try:
+            command_handler = use_cases.migrate_project_layout
+            if command_handler is _missing_use_case:
+                command_handler = MigrateProjectLayoutUseCase(project_root=root).execute
+            result = command_handler(
+                MigrateProjectLayoutCommand(
+                    target_layout=target_layout,
+                    dry_run=dry_run,
+                    include=tuple(include or ["facts", "rules", "skills"]),
+                    private_fact_ids=tuple(private_fact_ids or []),
+                    private_skill_slugs=tuple(private_skill_slugs or []),
+                    shared_operational_skill_slugs=tuple(shared_operational_skill_slugs or []),
+                )
+            )
+            return _success_envelope(
+                operation=result["operation"],
+                scope="project",
+                data=result["data"],
+                warnings=result.get("warnings", []),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="layout.migrate", scope="project")
 
     @server.tool(name="doctor")
     def doctor() -> ToolResponse:

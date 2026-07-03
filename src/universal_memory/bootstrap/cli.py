@@ -7,6 +7,7 @@ from universal_memory.application.host import (
     ConfigureHostUseCase,
     SyncInstructionsUseCase,
 )
+from universal_memory.application.layout import MigrateProjectLayoutUseCase
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     ContextHygieneUseCase,
@@ -330,6 +331,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     update_benchmarks_use_case = UpdateBenchmarksUseCase(
         safe_write_use_case=safe_write_use_case,
     )
+    layout_migrate_use_case = MigrateProjectLayoutUseCase(
+        project_root=project_root,
+        safe_write_use_case=safe_write_use_case,
+    )
 
     def locale_resolver() -> str:
         try:
@@ -398,6 +403,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         update_managed_skills_command=update_managed_skills_use_case.execute,
         update_migrate_command=update_migrate_use_case.execute,
         update_benchmarks_command=update_benchmarks_use_case.execute,
+        layout_migrate_command=layout_migrate_use_case.execute,
         locale_resolver=locale_resolver,
     )
     return configured_main(argv)

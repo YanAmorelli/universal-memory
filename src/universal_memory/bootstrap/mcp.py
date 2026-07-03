@@ -25,6 +25,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         ConfigureHostUseCase,
         SyncInstructionsUseCase,
     )
+    from universal_memory.application.layout import MigrateProjectLayoutUseCase  # noqa: PLC0415
     from universal_memory.application.memory import (  # noqa: PLC0415
         AssembleContextSummaryUseCase,
         GetMemoryStatusUseCase,
@@ -283,6 +284,10 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         repository=latent_skill_repository,
         agent_skill_repository=agent_skill_repository,
     )
+    layout_migrate_use_case = MigrateProjectLayoutUseCase(
+        project_root=root,
+        safe_write_use_case=safe_write_use_case,
+    )
 
     def initialize_project(project_root: Path, *, layout: str = "legacy"):
         return setup_project(
@@ -329,6 +334,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             activate_skill=_activate_skill_use_case.execute,
             deactivate_skill=_deactivate_skill_use_case.execute,
             update_skill=_update_skill_use_case.execute,
+            migrate_project_layout=layout_migrate_use_case.execute,
         ),
         project_root=root,
     )

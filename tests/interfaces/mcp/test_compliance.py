@@ -146,6 +146,7 @@ PUBLIC_MCP_TOOLS = {
         "name": "TDD recorrente",
         "description": "Usuario pede ciclo red green refactor",
     },
+    "migrate_project_layout": {"target_layout": "shared", "dry_run": True},
 }
 CONTRACT_KEYS_BY_TOOL = {
     "initialize_project": {
@@ -171,6 +172,20 @@ CONTRACT_KEYS_BY_TOOL = {
         "precedence",
         "warnings",
         "recommended_actions",
+    },
+    "migrate_project_layout": {
+        "operation",
+        "source_layout",
+        "target_layout",
+        "dry_run",
+        "copied",
+        "already_shared",
+        "skipped",
+        "conflicts",
+        "remaining_local",
+        "affected_paths",
+        "next_steps",
+        "warnings",
     },
     "status": {
         "initialized",
@@ -450,6 +465,20 @@ CONTRACT_TYPES_BY_TOOL = {
         "precedence": str,
         "warnings": list,
         "recommended_actions": list,
+    },
+    "migrate_project_layout": {
+        "operation": str,
+        "source_layout": str,
+        "target_layout": str,
+        "dry_run": bool,
+        "copied": list,
+        "already_shared": list,
+        "skipped": list,
+        "conflicts": list,
+        "remaining_local": list,
+        "affected_paths": list,
+        "next_steps": list,
+        "warnings": list,
     },
     "status": {
         "initialized": bool,
@@ -854,6 +883,38 @@ async def test_mcp_initialize_project_accepts_shared_layout(tmp_path: Path) -> N
     assert seen == ["shared"]
 
 
+@pytest.mark.anyio
+async def test_mcp_migrate_project_layout_accepts_dry_run_and_apply(tmp_path: Path) -> None:
+    seen: list[bool] = []
+
+    def migrate(command) -> dict[str, Any]:
+        seen.append(command.dry_run)
+        return migration_payload(dry_run=command.dry_run)
+
+    use_cases = replace(mcp_use_cases(tmp_path), migrate_project_layout=migrate)
+    server = configure_server(create_mcp_server(), use_cases, project_root=tmp_path)
+
+    dry_run_payload = (
+        await server.call_tool(
+            "migrate_project_layout",
+            {"target_layout": "shared", "dry_run": True},
+        )
+    ).structured_content
+    apply_payload = (
+        await server.call_tool(
+            "migrate_project_layout",
+            {"target_layout": "shared", "dry_run": False},
+        )
+    ).structured_content
+
+    assert dry_run_payload is not None
+    assert apply_payload is not None
+    assert dry_run_payload["operation"] == "layout.migrate"
+    assert dry_run_payload["data"]["dry_run"] is True
+    assert apply_payload["data"]["dry_run"] is False
+    assert seen == [True, False]
+
+
 def _assert_contract_types(tool_name: str, data: dict[str, Any]) -> None:
     for key, expected_type in CONTRACT_TYPES_BY_TOOL[tool_name].items():
         assert key in data, f"{tool_name}: missing contract key {key!r}"
@@ -918,7 +979,33 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         deactivate_skill=deactivate_skill_result,
         update_skill=update_skill_result,
         track_latent_skill=track_latent_skill_result,
+        migrate_project_layout=lambda command: migration_payload(dry_run=command.dry_run),
     )
+
+
+def migration_payload(*, dry_run: bool) -> dict[str, Any]:
+    data = {
+        "operation": "layout.migrate",
+        "source_layout": "legacy",
+        "target_layout": "shared",
+        "dry_run": dry_run,
+        "copied": [
+            {
+                "kind": "fact",
+                "id": "fact-1",
+                "reason": "copied",
+                "path": "umem/memory/facts.jsonl",
+            }
+        ],
+        "already_shared": [],
+        "skipped": [],
+        "conflicts": [],
+        "remaining_local": [],
+        "affected_paths": ["umem/project.toml", "umem/memory/facts.jsonl"],
+        "next_steps": [],
+        "warnings": [],
+    }
+    return {"operation": "layout.migrate", "scope": "project", "data": data, "warnings": []}
 
 
 def mutation_skill(
