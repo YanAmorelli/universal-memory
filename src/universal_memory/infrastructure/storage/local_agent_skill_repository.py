@@ -332,13 +332,8 @@ class LocalAgentSkillRepository(AgentSkillRepository):
         if not self.layout.is_shared:
             return self.skills_path
         visibility = entity.metadata.get("visibility")
-        category = entity.metadata.get("category")
         canonical_path = entity.canonical_path.replace("\\", "/")
-        if (
-            visibility == "private"
-            or category == "operational"
-            or canonical_path.startswith(".umem/")
-        ):
+        if visibility == "private" or canonical_path.startswith(".umem/"):
             return self.layout.legacy_skills_registry_path
         return self.layout.shared_skills_registry_path
 

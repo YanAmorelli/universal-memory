@@ -80,6 +80,8 @@ from universal_memory.application.skills import (
     RenameSkillResult,
     RepairSkillsCommand,
     RepairSkillsResult,
+    ShareSkillCommand,
+    ShareSkillResult,
     SyncSkillsCommand,
     SyncSkillsResult,
     TrackLatentSkillCommand,
@@ -139,6 +141,7 @@ GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResu
 CreateSkillCommandHandler = Callable[[CreateSkillCommand], CreateSkillResult]
 CreateSkillDraftCommandHandler = Callable[[CreateSkillDraftCommand], DraftSkillResult]
 PublishSkillCommandHandler = Callable[[PublishSkillCommand], PublishSkillResult]
+ShareSkillCommandHandler = Callable[[ShareSkillCommand], ShareSkillResult]
 ValidateSkillCommandHandler = Callable[[ValidateSkillCommand], ValidateSkillResult]
 AdoptSkillCommandHandler = Callable[[AdoptSkillCommand], AdoptSkillResult]
 UpdateCanonicalSkillCommandHandler = Callable[
@@ -203,6 +206,7 @@ class MCPUseCases:
     create_skill: CreateSkillCommandHandler = _missing_use_case
     create_skill_draft: CreateSkillDraftCommandHandler = _missing_use_case
     publish_skill: PublishSkillCommandHandler = _missing_use_case
+    share_skill: ShareSkillCommandHandler = _missing_use_case
     validate_skill: ValidateSkillCommandHandler = _missing_use_case
     adopt_skill: AdoptSkillCommandHandler = _missing_use_case
     update_canonical_skill: UpdateCanonicalSkillCommandHandler = _missing_use_case
@@ -793,11 +797,13 @@ def configure_server(  # noqa: PLR0915
             return _mcp_tool_error(error, operation="skills.validate", scope="project")
 
     @server.tool(name="publish_skill")
-    def publish_skill(
+    def publish_skill(  # noqa: PLR0913
         draft_or_path: str,
         slug: str | None = None,
         sync: bool = False,
         targets: list[str] | None = None,
+        visibility: Literal["shared", "private"] | None = None,
+        category: Literal["user-facing", "operational"] = "user-facing",
     ) -> ToolResponse:
         """Publish a validated draft as canonical and optionally sync native targets."""
         try:
@@ -809,6 +815,8 @@ def configure_server(  # noqa: PLR0915
                     slug=slug,
                     sync=sync,
                     targets=targets,
+                    visibility=visibility,
+                    category=category,
                 )
             )
             return _success_envelope(
@@ -819,6 +827,32 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="skills.publish", scope="project")
+
+    @server.tool(name="share_skill")
+    def share_skill(
+        skill_id_or_name: str,
+        category: Literal["user-facing", "operational"] = "user-facing",
+        confirm_operational: bool = False,
+    ) -> ToolResponse:
+        """Explicitly copy a project skill into shared repository content."""
+        try:
+            require_project_initialized()
+            result = use_cases.share_skill(
+                ShareSkillCommand(
+                    skill_id_or_name=skill_id_or_name,
+                    category=category,
+                    confirm_operational=confirm_operational,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="skills.share",
+                scope=result.agent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.share", scope="project")
 
     @server.tool(name="promote_skill_recommendation")
     def promote_skill_recommendation(
@@ -885,11 +919,13 @@ def configure_server(  # noqa: PLR0915
             return _mcp_tool_error(error, operation="skills.sync", scope="all")
 
     @server.tool(name="import_skill")
-    def import_skill(
+    def import_skill(  # noqa: PLR0913
         path: str,
         scope: Literal["project", "global"] = "project",
         replace_native: bool = False,
         sync_after_import: bool = False,
+        visibility: Literal["shared", "private"] | None = None,
+        category: Literal["user-facing", "operational"] = "user-facing",
     ) -> ToolResponse:
         """Import an existing native or local Agent Skill directory into canonical UMEM storage."""
         try:
@@ -903,6 +939,8 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                     replace_native=replace_native,
                     sync_after_import=sync_after_import,
+                    visibility=visibility,
+                    category=category,
                 )
             )
             return _success_envelope(
@@ -915,12 +953,14 @@ def configure_server(  # noqa: PLR0915
             return _mcp_tool_error(error, operation="skills.import", scope=_raw_scope(scope))
 
     @server.tool(name="adopt_skill")
-    def adopt_skill(
+    def adopt_skill(  # noqa: PLR0913
         path: str,
         scope: Literal["project", "global"] = "project",
         slug: str | None = None,
         replace_native: bool = False,
         sync_after_adopt: bool = False,
+        visibility: Literal["shared", "private"] | None = None,
+        category: Literal["user-facing", "operational"] = "user-facing",
     ) -> ToolResponse:
         """Adopt an existing skill directory into UMEM without creating duplicate slugs."""
         try:
@@ -935,6 +975,8 @@ def configure_server(  # noqa: PLR0915
                     slug=slug,
                     replace_native=replace_native,
                     sync_after_adopt=sync_after_adopt,
+                    visibility=visibility,
+                    category=category,
                 )
             )
             return _success_envelope(

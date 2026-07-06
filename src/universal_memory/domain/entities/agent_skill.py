@@ -36,3 +36,21 @@ class AgentSkill(BaseEntity):
     def validation(self) -> dict[str, Any] | None:
         value = self.metadata.get("validation")
         return value if isinstance(value, dict) else None
+
+    @property
+    def visibility(self) -> str | None:
+        value = self.metadata.get("visibility")
+        return str(value) if value else None
+
+    @property
+    def category(self) -> str | None:
+        value = self.metadata.get("category")
+        return str(value) if value else None
+
+    @property
+    def is_operational(self) -> bool:
+        return self.category == "operational"
+
+    @property
+    def is_shared(self) -> bool:
+        return self.visibility == "shared"

@@ -94,6 +94,8 @@ from universal_memory.application.skills import (
     RenameSkillResult,
     RepairSkillsCommand,
     RepairSkillsResult,
+    ShareSkillCommand,
+    ShareSkillResult,
     SyncSkillResult,
     SyncSkillsCommand,
     SyncSkillsResult,
@@ -184,6 +186,7 @@ GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResu
 CreateSkillCommandHandler = Callable[[CreateSkillCommand], CreateSkillResult]
 CreateSkillDraftCommandHandler = Callable[[CreateSkillDraftCommand], DraftSkillResult]
 PublishSkillCommandHandler = Callable[[PublishSkillCommand], PublishSkillResult]
+ShareSkillCommandHandler = Callable[[ShareSkillCommand], ShareSkillResult]
 ValidateSkillCommandHandler = Callable[[ValidateSkillCommand], ValidateSkillResult]
 AdoptSkillCommandHandler = Callable[[AdoptSkillCommand], AdoptSkillResult]
 UpdateCanonicalSkillCommandHandler = Callable[
@@ -271,6 +274,7 @@ def main(  # noqa: PLR0913
     create_skill_command: CreateSkillCommandHandler | None = None,
     create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
     publish_skill_command: PublishSkillCommandHandler | None = None,
+    share_skill_command: ShareSkillCommandHandler | None = None,
     validate_skill_command: ValidateSkillCommandHandler | None = None,
     adopt_skill_command: AdoptSkillCommandHandler | None = None,
     update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
@@ -315,6 +319,7 @@ def main(  # noqa: PLR0913
         create_skill_command=create_skill_command,
         create_skill_draft_command=create_skill_draft_command,
         publish_skill_command=publish_skill_command,
+        share_skill_command=share_skill_command,
         validate_skill_command=validate_skill_command,
         adopt_skill_command=adopt_skill_command,
         update_canonical_skill_command=update_canonical_skill_command,
@@ -405,6 +410,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     create_skill_command: CreateSkillCommandHandler | None = None,
     create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
     publish_skill_command: PublishSkillCommandHandler | None = None,
+    share_skill_command: ShareSkillCommandHandler | None = None,
     validate_skill_command: ValidateSkillCommandHandler | None = None,
     adopt_skill_command: AdoptSkillCommandHandler | None = None,
     update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
@@ -1327,6 +1333,22 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             list[str] | None,
             typer.Option("--target", help="Runtime target to sync. May be used multiple times."),
         ] = None,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project skill visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
         output_format: OutputFormatOption = None,
     ) -> None:
         if publish_skill_command is None:
@@ -1340,6 +1362,41 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 slug=slug,
                 sync=sync,
                 targets=target,
+                visibility=visibility,
+                category=category,
+            )
+        )
+
+    @skills_app.command(
+        "share",
+        help=(
+            "Copy an existing project skill into umem/skills. Operational skills require --yes."
+        ),
+    )
+    def skills_share(
+        ctx: typer.Context,
+        skill_id_or_name: Annotated[str, typer.Argument(help="Skill id, slug, or name.")],
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if share_skill_command is None:
+            msg = "CLI share_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_share(
+                share_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                skill_id_or_name=skill_id_or_name,
+                category=category,
+                yes=yes,
             )
         )
 
@@ -1410,6 +1467,22 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 ),
             ),
         ] = False,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project skill visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
         output_format: OutputFormatOption = None,
     ) -> None:
         if import_skill_command is None:
@@ -1423,6 +1496,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 scope=scope,
                 replace_native=replace_native,
                 sync_after_import=sync_after_import,
+                visibility=visibility,
+                category=category,
             )
         )
 
@@ -1455,6 +1530,22 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 help="Sync native targets after adoption. Default only registers canonical.",
             ),
         ] = False,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project skill visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
         output_format: OutputFormatOption = None,
     ) -> None:
         if adopt_skill_command is None:
@@ -1469,6 +1560,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 scope=scope,
                 replace_native=replace_native,
                 sync_after_adopt=sync_after_adopt,
+                visibility=visibility,
+                category=category,
             )
         )
 
@@ -1816,6 +1909,7 @@ def build_main(  # noqa: PLR0913
     create_skill_command: CreateSkillCommandHandler | None = None,
     create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
     publish_skill_command: PublishSkillCommandHandler | None = None,
+    share_skill_command: ShareSkillCommandHandler | None = None,
     validate_skill_command: ValidateSkillCommandHandler | None = None,
     adopt_skill_command: AdoptSkillCommandHandler | None = None,
     update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
@@ -1867,6 +1961,7 @@ def build_main(  # noqa: PLR0913
             create_skill_command=create_skill_command,
             create_skill_draft_command=create_skill_draft_command,
             publish_skill_command=publish_skill_command,
+            share_skill_command=share_skill_command,
             validate_skill_command=validate_skill_command,
             adopt_skill_command=adopt_skill_command,
             update_canonical_skill_command=update_canonical_skill_command,
@@ -3194,6 +3289,8 @@ def _run_skills_publish(  # noqa: PLR0913
     slug: str | None,
     sync: bool,
     targets: list[str] | None,
+    visibility: str | None,
+    category: str,
 ) -> int:
     try:
         result = command(
@@ -3203,6 +3300,8 @@ def _run_skills_publish(  # noqa: PLR0913
                 slug=slug,
                 sync=sync,
                 targets=targets,
+                visibility=visibility,
+                category=category,
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -3214,6 +3313,36 @@ def _run_skills_publish(  # noqa: PLR0913
     else:
         _stdout_console().print(
             _format_summary_payload("skills.publish", result.to_payload(), result.warnings)
+        )
+    return 0
+
+
+def _run_skills_share(
+    command: ShareSkillCommandHandler,
+    *,
+    output_format: str,
+    skill_id_or_name: str,
+    category: str,
+    yes: bool,
+) -> int:
+    try:
+        result = command(
+            ShareSkillCommand(
+                skill_id_or_name=skill_id_or_name,
+                category=category,
+                confirm_operational=yes,
+                origin="cli",
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, skill_id_or_name), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope("skills.share", result.agent_skill.scope.value, result)
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.share", result.to_payload(), result.warnings)
         )
     return 0
 
@@ -3335,6 +3464,8 @@ def _run_skills_import(  # noqa: PLR0913
     scope: LatentSkillScope,
     replace_native: bool,
     sync_after_import: bool,
+    visibility: str | None,
+    category: str,
 ) -> int:
     try:
         result = command(
@@ -3344,6 +3475,8 @@ def _run_skills_import(  # noqa: PLR0913
                 origin="cli",
                 replace_native=replace_native,
                 sync_after_import=sync_after_import,
+                visibility=visibility,
+                category=category,
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -3366,6 +3499,8 @@ def _run_skills_adopt(  # noqa: PLR0913
     scope: LatentSkillScope,
     replace_native: bool,
     sync_after_adopt: bool,
+    visibility: str | None,
+    category: str,
 ) -> int:
     try:
         result = command(
@@ -3376,6 +3511,8 @@ def _run_skills_adopt(  # noqa: PLR0913
                 slug=slug,
                 replace_native=replace_native,
                 sync_after_adopt=sync_after_adopt,
+                visibility=visibility,
+                category=category,
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:

@@ -39,6 +39,7 @@ from universal_memory.application.skills import (
     RecommendSkillsUseCase,
     RenameSkillUseCase,
     RepairSkillsUseCase,
+    ShareSkillUseCase,
     SyncSkillsUseCase,
     TrackLatentSkillUseCase,
     UpdateCanonicalSkillUseCase,
@@ -263,6 +264,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
             agent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    share_skill_use_case = ShareSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
     validate_skill_use_case = ValidateSkillUseCase(
         project_root=project_root,
         repository=agent_skill_repository,
@@ -384,6 +390,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         create_skill_command=create_skill_use_case.execute,
         create_skill_draft_command=create_skill_draft_use_case.execute,
         publish_skill_command=publish_skill_use_case.execute,
+        share_skill_command=share_skill_use_case.execute,
         validate_skill_command=validate_skill_use_case.execute,
         adopt_skill_command=adopt_skill_use_case.execute,
         update_canonical_skill_command=update_canonical_skill_use_case.execute,

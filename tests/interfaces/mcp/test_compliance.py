@@ -51,6 +51,7 @@ from universal_memory.application.skills import (
     RecommendSkillsResult,
     RenameSkillResult,
     RepairSkillsResult,
+    ShareSkillResult,
     SkillListItem,
     SkillRecommendationItem,
     SkillValidationReport,
@@ -115,6 +116,11 @@ PUBLIC_MCP_TOOLS = {
     },
     "validate_skill": {"skill_or_path": "tdd-recorrente"},
     "publish_skill": {"draft_or_path": "draft-helper"},
+    "share_skill": {
+        "skill_id_or_name": "use-universal-memory",
+        "category": "operational",
+        "confirm_operational": True,
+    },
     "import_skill": {
         "path": "native/tdd-recorrente/SKILL.md",
         "replace_native": True,
@@ -321,6 +327,24 @@ CONTRACT_KEYS_BY_TOOL = {
         "native_installations",
         "validation",
         "canonical_skill",
+        "visibility",
+        "category",
+    },
+    "share_skill": {
+        "skill_id",
+        "name",
+        "slug",
+        "skill_dir",
+        "skill_file",
+        "old_canonical_path",
+        "new_canonical_path",
+        "affected_paths",
+        "audit_reference",
+        "snapshot_reference",
+        "recommended_actions",
+        "canonical_skill",
+        "visibility",
+        "category",
     },
     "import_skill": {
         "skill_id",
@@ -335,6 +359,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "native_installations",
         "native_installations_note",
         "canonical_skill",
+        "visibility",
+        "category",
     },
     "adopt_skill": {
         "skill_id",
@@ -349,6 +375,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "native_installations",
         "warnings",
         "canonical_skill",
+        "visibility",
+        "category",
     },
     "update_canonical_skill": {
         "skill_id",
@@ -594,8 +622,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "audit_reference": str,
         "snapshot_reference": str,
         "native_installations": list,
-        "visibility": str,
-        "category": str,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
         "canonical_skill": dict,
     },
     "create_skill_draft": {
@@ -621,6 +649,24 @@ CONTRACT_TYPES_BY_TOOL = {
         "native_installations": list,
         "validation": dict,
         "canonical_skill": dict,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
+    },
+    "share_skill": {
+        "skill_id": str,
+        "name": str,
+        "slug": str,
+        "skill_dir": str,
+        "skill_file": str,
+        "old_canonical_path": str,
+        "new_canonical_path": str,
+        "affected_paths": list,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "recommended_actions": list,
+        "canonical_skill": dict,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
     },
     "import_skill": {
         "skill_id": str,
@@ -634,6 +680,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "snapshot_reference": str,
         "native_installations": list,
         "canonical_skill": dict,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
     },
     "adopt_skill": {
         "skill_id": str,
@@ -648,6 +696,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "native_installations": list,
         "warnings": list,
         "canonical_skill": dict,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
     },
     "update_canonical_skill": {
         "skill_id": str,
@@ -963,6 +1013,7 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         create_skill_draft=create_skill_draft_result,
         validate_skill=validate_skill_result,
         publish_skill=publish_skill_result,
+        share_skill=share_skill_result,
         import_skill=import_skill_result,
         adopt_skill=adopt_skill_result,
         update_canonical_skill=update_canonical_skill_result,
@@ -1248,6 +1299,37 @@ def publish_skill_result(_command: object) -> PublishSkillResult:
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
         validation=validation_report(),
+    )
+
+
+def share_skill_result(_command: object) -> ShareSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="Use Universal Memory",
+            description="Operational bootstrap guidance.",
+            scope=LatentSkillScope.project,
+            origin="mcp",
+            slug="use-universal-memory",
+            category="operational",
+        )
+    )
+    skill = create.agent_skill.model_copy(
+        update={
+            "canonical_path": "umem/skills/use-universal-memory/SKILL.md",
+            "metadata": {"visibility": "shared", "category": "operational"},
+        }
+    )
+    return ShareSkillResult(
+        agent_skill=skill,
+        old_canonical_path=".umem/skills/use-universal-memory/SKILL.md",
+        new_canonical_path="umem/skills/use-universal-memory/SKILL.md",
+        affected_paths=[
+            "umem/skills/use-universal-memory/SKILL.md",
+            "umem/project.toml",
+        ],
+        audit_reference="audit-share",
+        snapshot_reference="snapshot-share",
+        recommended_actions=["Review umem/project.toml and commit the shared skill."],
     )
 
 

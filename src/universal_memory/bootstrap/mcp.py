@@ -57,6 +57,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         RecommendSkillsUseCase,
         RenameSkillUseCase,
         RepairSkillsUseCase,
+        ShareSkillUseCase,
         SyncSkillsUseCase,
         TrackLatentSkillUseCase,
         UpdateCanonicalSkillUseCase,
@@ -229,6 +230,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             agent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    share_skill_use_case = ShareSkillUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
     validate_skill_use_case = ValidateSkillUseCase(
         project_root=root,
         repository=agent_skill_repository,
@@ -319,6 +325,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             create_skill=create_skill_use_case.execute,
             create_skill_draft=create_skill_draft_use_case.execute,
             publish_skill=publish_skill_use_case.execute,
+            share_skill=share_skill_use_case.execute,
             validate_skill=validate_skill_use_case.execute,
             adopt_skill=adopt_skill_use_case.execute,
             update_canonical_skill=update_canonical_skill_use_case.execute,

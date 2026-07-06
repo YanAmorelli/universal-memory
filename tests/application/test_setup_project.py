@@ -180,6 +180,9 @@ def test_setup_project_shared_layout_creates_visible_root_and_keeps_umem_skill_p
     assert (tmp_path / "umem" / "skills").is_dir()
     assert (tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md").is_file()
     assert not (tmp_path / "umem" / "skills" / "use-universal-memory").exists()
+    policy = tomllib.loads((tmp_path / "umem" / "project.toml").read_text(encoding="utf-8"))
+    assert policy["visibility_defaults"]["operational_skills"] == "private"
+    assert policy["shared_operational_skills"] == []
 
 
 def test_setup_project_accepts_runtime_aliases_and_rejects_unknown_runtime(
