@@ -105,6 +105,10 @@ class ProjectLayoutInspection:
     precedence: str
     warnings: list[str]
     recommended_actions: list[str]
+    git_status_available: bool = False
+    ignored_shared_paths: list[str] | None = None
+    tracked_operational_paths: list[str] | None = None
+    overlaps: list[dict[str, str]] | None = None
 
 
 @dataclass(frozen=True, slots=True)

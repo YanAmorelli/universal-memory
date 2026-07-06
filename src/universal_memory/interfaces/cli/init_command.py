@@ -4900,7 +4900,7 @@ def _format_human_doctor_output(result: DoctorResult) -> str:
         "",
     ]
     for check in result.checks:
-        marker = "[OK]" if check.status == "success" else "[FAIL]"
+        marker = {"success": "[OK]", "warning": "[WARN]"}.get(check.status, "[FAIL]")
         label = " ".join(check.name.split("_")).title()
         detail = f" - {check.detail}" if check.detail else ""
         lines.append(f"{marker} {label}{detail}")
@@ -4915,8 +4915,13 @@ def _format_human_doctor_output(result: DoctorResult) -> str:
             "",
             (
                 "Final status: all checks passed."
-                if result.ok
-                else f"Final status: {summary.failed} failure(s) found."
+                if summary.failed == 0 and summary.warnings == 0
+                else (
+                    f"Final status: {summary.warnings} warning(s), no failure(s) found."
+                    if summary.failed == 0
+                    else f"Final status: {summary.failed} failure(s), "
+                    f"{summary.warnings} warning(s) found."
+                )
             ),
         ]
     )

@@ -166,18 +166,18 @@
 
 ### Tests for User Story 4
 
-- [ ] T074 [P] [US4] Add doctor use case tests for layout mode, healthy shared layout, partial layout, and missing shared metadata in `tests/application/diagnostics/test_doctor_use_case.py`
-- [ ] T075 [P] [US4] Add doctor use case tests for ignored `umem/`, tracked `.umem` operational paths, and non-Git warning behavior in `tests/application/diagnostics/test_doctor_use_case.py`
-- [ ] T076 [P] [US4] Add CLI doctor output tests for shared layout checks and warning rendering in `tests/interfaces/cli/test_doctor_command.py`
-- [ ] T077 [P] [US4] Add MCP doctor payload tests for `project_layout_mode`, `shared_root_visibility`, `operational_root_privacy`, and `layout_overlaps` in `tests/interfaces/mcp/test_compliance.py`
+- [X] T074 [P] [US4] Add doctor use case tests for layout mode, healthy shared layout, partial layout, and missing shared metadata in `tests/application/diagnostics/test_doctor_use_case.py`
+- [X] T075 [P] [US4] Add doctor use case tests for ignored `umem/`, tracked `.umem` operational paths, and non-Git warning behavior in `tests/application/diagnostics/test_doctor_use_case.py`
+- [X] T076 [P] [US4] Add CLI doctor output tests for shared layout checks and warning rendering in `tests/interfaces/cli/test_doctor_command.py`
+- [X] T077 [P] [US4] Add MCP doctor payload tests for `project_layout_mode`, `shared_root_visibility`, `operational_root_privacy`, and `layout_overlaps` in `tests/interfaces/mcp/test_compliance.py`
 
 ### Implementation for User Story 4
 
-- [ ] T078 [US4] Implement repository visibility inspection for ignored shared paths and tracked operational paths in `src/universal_memory/application/layout/inspect_project_layout.py`
-- [ ] T079 [US4] Implement overlap detection for legacy/shared facts, rules, and skills in `src/universal_memory/application/layout/inspect_project_layout.py`
-- [ ] T080 [US4] Extend doctor checks with layout mode, shared root visibility, operational root privacy, and layout overlaps in `src/universal_memory/application/diagnostics/doctor_use_case.py`
-- [ ] T081 [US4] Update CLI doctor human, summary, and JSON output to render warning status and layout recovery hints in `src/universal_memory/interfaces/cli/init_command.py`
-- [ ] T082 [US4] Update MCP doctor serialization for added layout checks in `src/universal_memory/interfaces/mcp/server.py`
+- [X] T078 [US4] Implement repository visibility inspection for ignored shared paths and tracked operational paths in `src/universal_memory/application/layout/inspect_project_layout.py`
+- [X] T079 [US4] Implement overlap detection for legacy/shared facts, rules, and skills in `src/universal_memory/application/layout/inspect_project_layout.py`
+- [X] T080 [US4] Extend doctor checks with layout mode, shared root visibility, operational root privacy, and layout overlaps in `src/universal_memory/application/diagnostics/doctor_use_case.py`
+- [X] T081 [US4] Update CLI doctor human, summary, and JSON output to render warning status and layout recovery hints in `src/universal_memory/interfaces/cli/init_command.py`
+- [X] T082 [US4] Update MCP doctor serialization for added layout checks in `src/universal_memory/interfaces/mcp/server.py`
 
 **Checkpoint**: Doctor can validate shared layout health repeatedly after migration or repository changes.
 

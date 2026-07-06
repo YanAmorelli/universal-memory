@@ -1,8 +1,14 @@
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
 from universal_memory.application.diagnostics import DoctorCommand, DoctorUseCase
 from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
-from universal_memory.infrastructure.config.project_layout import ensure_project_layout
+from universal_memory.infrastructure.config.project_layout import (
+    ensure_project_layout,
+    ensure_shared_project_layout,
+)
 
 
 def prepare_global_paths(tmp_path: Path) -> tuple[Path, Path]:
@@ -29,7 +35,12 @@ def test_doctor_reports_success_for_healthy_layout(
     result = use_case.execute(DoctorCommand(project_root=tmp_path))
 
     assert result.ok is True
-    assert result.summary.to_payload() == {"total_checks": 5, "passed": 5, "failed": 0}
+    assert result.summary.to_payload() == {
+        "total_checks": 9,
+        "passed": 7,
+        "warnings": 2,
+        "failed": 0,
+    }
 
 
 def test_doctor_reports_partial_layout_without_stopping_other_checks(
@@ -192,3 +203,178 @@ def test_doctor_validates_global_config_path_kind(
     assert result.ok is False
     assert permission_check.status == "failed"
     assert "config.toml: path must be a file" in (permission_check.error or "")
+
+
+def test_doctor_reports_healthy_shared_layout_checks(tmp_path: Path) -> None:
+    ensure_shared_project_layout(tmp_path)
+    _git_init(tmp_path)
+    xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
+
+    use_case = DoctorUseCase(
+        which=lambda _name: "/bin/tool",
+        home=tmp_path / "home",
+        xdg_data_home=xdg_data_home,
+        xdg_config_home=xdg_config_home,
+    )
+
+    result = use_case.execute(DoctorCommand(project_root=tmp_path))
+    checks = {check.name: check for check in result.checks}
+
+    assert result.ok is True
+    assert checks["project_layout_mode"].status == "success"
+    assert checks["project_layout_mode"].detail == "Shared project layout is active."
+    assert checks["shared_root_visibility"].status == "success"
+    assert checks["operational_root_privacy"].status == "success"
+    assert checks["layout_overlaps"].status == "success"
+
+
+def test_doctor_warns_for_partial_layout_and_missing_shared_metadata(tmp_path: Path) -> None:
+    ensure_project_layout(tmp_path)
+    (tmp_path / "umem" / "memory").mkdir(parents=True)
+    (tmp_path / "umem" / "skills").mkdir()
+    _git_init(tmp_path)
+    xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
+
+    use_case = DoctorUseCase(
+        which=lambda _name: "/bin/tool",
+        home=tmp_path / "home",
+        xdg_data_home=xdg_data_home,
+        xdg_config_home=xdg_config_home,
+    )
+
+    result = use_case.execute(DoctorCommand(project_root=tmp_path))
+    layout_mode = {check.name: check for check in result.checks}["project_layout_mode"]
+
+    assert result.ok is True
+    assert layout_mode.status == "warning"
+    assert "without complete shared metadata" in (layout_mode.error or "")
+
+
+def test_doctor_warns_for_ignored_shared_root(tmp_path: Path) -> None:
+    ensure_shared_project_layout(tmp_path)
+    (tmp_path / ".gitignore").write_text("umem/\n", encoding="utf-8")
+    _git_init(tmp_path)
+    xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
+
+    use_case = DoctorUseCase(
+        which=lambda _name: "/bin/tool",
+        home=tmp_path / "home",
+        xdg_data_home=xdg_data_home,
+        xdg_config_home=xdg_config_home,
+    )
+
+    result = use_case.execute(DoctorCommand(project_root=tmp_path))
+    visibility = {check.name: check for check in result.checks}["shared_root_visibility"]
+
+    assert result.ok is True
+    assert visibility.status == "warning"
+    assert visibility.error == "Shared paths are ignored: umem/"
+
+
+def test_doctor_warns_for_ignored_shared_memory_path(tmp_path: Path) -> None:
+    ensure_shared_project_layout(tmp_path)
+    (tmp_path / ".gitignore").write_text("umem/memory/\n", encoding="utf-8")
+    _git_init(tmp_path)
+    xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
+
+    use_case = DoctorUseCase(
+        which=lambda _name: "/bin/tool",
+        home=tmp_path / "home",
+        xdg_data_home=xdg_data_home,
+        xdg_config_home=xdg_config_home,
+    )
+
+    result = use_case.execute(DoctorCommand(project_root=tmp_path))
+    visibility = {check.name: check for check in result.checks}["shared_root_visibility"]
+
+    assert result.ok is True
+    assert visibility.status == "warning"
+    assert visibility.error == "Shared paths are ignored: umem/memory/"
+
+
+def test_doctor_warns_for_tracked_operational_paths(tmp_path: Path) -> None:
+    ensure_shared_project_layout(tmp_path)
+    _git_init(tmp_path)
+    _git(tmp_path, "add", ".umem/audit/events.jsonl")
+    xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
+
+    use_case = DoctorUseCase(
+        which=lambda _name: "/bin/tool",
+        home=tmp_path / "home",
+        xdg_data_home=xdg_data_home,
+        xdg_config_home=xdg_config_home,
+    )
+
+    result = use_case.execute(DoctorCommand(project_root=tmp_path))
+    privacy = {check.name: check for check in result.checks}["operational_root_privacy"]
+
+    assert result.ok is True
+    assert privacy.status == "warning"
+    assert privacy.error == "Operational paths are tracked: .umem/audit/events.jsonl"
+
+
+def test_doctor_warns_when_git_metadata_is_unavailable(tmp_path: Path) -> None:
+    ensure_shared_project_layout(tmp_path)
+    xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
+
+    use_case = DoctorUseCase(
+        which=lambda _name: "/bin/tool",
+        home=tmp_path / "home",
+        xdg_data_home=xdg_data_home,
+        xdg_config_home=xdg_config_home,
+    )
+
+    result = use_case.execute(DoctorCommand(project_root=tmp_path))
+    checks = {check.name: check for check in result.checks}
+
+    assert result.ok is True
+    assert checks["shared_root_visibility"].status == "warning"
+    assert checks["operational_root_privacy"].status == "warning"
+
+
+def test_doctor_warns_for_legacy_shared_overlaps(tmp_path: Path) -> None:
+    ensure_shared_project_layout(tmp_path)
+    _git_init(tmp_path)
+    _append_jsonl(tmp_path / "umem/memory/facts.jsonl", {"id": "fact-1"})
+    _append_jsonl(tmp_path / ".umem/memory/facts.jsonl", {"id": "fact-1"})
+    _append_jsonl(tmp_path / "umem/memory/rules.jsonl", {"id": "rule-1"})
+    _append_jsonl(tmp_path / ".umem/memory/rules.jsonl", {"id": "rule-1"})
+    _append_jsonl(tmp_path / "umem/skills/skills.jsonl", {"slug": "review-helper"})
+    _append_jsonl(tmp_path / ".umem/memory/skills.jsonl", {"slug": "review-helper"})
+    xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
+
+    use_case = DoctorUseCase(
+        which=lambda _name: "/bin/tool",
+        home=tmp_path / "home",
+        xdg_data_home=xdg_data_home,
+        xdg_config_home=xdg_config_home,
+    )
+
+    result = use_case.execute(DoctorCommand(project_root=tmp_path))
+    overlap = {check.name: check for check in result.checks}["layout_overlaps"]
+
+    assert result.ok is True
+    assert overlap.status == "warning"
+    assert overlap.error == (
+        "Legacy/shared overlaps detected: fact:fact-1, rule:rule-1, skill:review-helper"
+    )
+    assert "Shared content takes precedence" in (overlap.recovery_hint or "")
+
+
+def _git_init(project_root: Path) -> None:
+    _git(project_root, "init")
+
+
+def _git(project_root: Path, *args: str) -> None:
+    git = shutil.which("git") or "git"
+    subprocess.run(  # noqa: S603
+        [git, "-C", project_root.as_posix(), *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+def _append_jsonl(path: Path, payload: dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload) + "\n")

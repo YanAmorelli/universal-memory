@@ -178,6 +178,10 @@ CONTRACT_KEYS_BY_TOOL = {
         "precedence",
         "warnings",
         "recommended_actions",
+        "git_status_available",
+        "ignored_shared_paths",
+        "tracked_operational_paths",
+        "overlaps",
     },
     "migrate_project_layout": {
         "operation",
@@ -493,6 +497,10 @@ CONTRACT_TYPES_BY_TOOL = {
         "precedence": str,
         "warnings": list,
         "recommended_actions": list,
+        "git_status_available": bool,
+        "ignored_shared_paths": list,
+        "tracked_operational_paths": list,
+        "overlaps": list,
     },
     "migrate_project_layout": {
         "operation": str,
@@ -872,6 +880,65 @@ async def test_mcp_compliance_returns_structured_error_for_unexpected_exception(
     assert payload["error"]["code"] == JSON_RPC_UNEXPECTED_ERROR
     assert payload["error"]["data"]["detail"] == "Unexpected error."
     assert payload["error"]["data"]["recovery_hint"]
+
+
+@pytest.mark.anyio
+async def test_mcp_compliance_doctor_payload_includes_shared_layout_checks(tmp_path: Path) -> None:
+    result = DoctorResult(
+        checks=[
+            DoctorCheck(
+                name="project_layout_mode",
+                status="success",
+                detail="Shared project layout is active.",
+            ),
+            DoctorCheck(
+                name="shared_root_visibility",
+                status="warning",
+                error="Shared paths are ignored: umem/",
+                recovery_hint="Update ignore rules so umem/ shared content is reviewable.",
+            ),
+            DoctorCheck(
+                name="operational_root_privacy",
+                status="warning",
+                error="Operational paths are tracked: .umem/audit/events.jsonl",
+                recovery_hint="Remove operational .umem paths from Git tracking.",
+            ),
+            DoctorCheck(
+                name="layout_overlaps",
+                status="warning",
+                error="Legacy/shared overlaps detected: skill:review-helper",
+                recovery_hint=(
+                    "Shared content takes precedence; remove or migrate shadowed legacy records."
+                ),
+            ),
+        ]
+    )
+    server = configure_server(
+        create_mcp_server(),
+        replace(mcp_use_cases(tmp_path), doctor=lambda _command: result),
+        project_root=tmp_path,
+    )
+
+    response = await server.call_tool("doctor", {})
+    payload = response.structured_content
+
+    assert payload is not None
+    assert payload["ok"] is True
+    assert payload["data"]["summary"] == {
+        "total_checks": 4,
+        "passed": 1,
+        "warnings": 3,
+        "failed": 0,
+    }
+    checks = {check["name"]: check for check in payload["data"]["checks"]}
+    assert set(checks) == {
+        "project_layout_mode",
+        "shared_root_visibility",
+        "operational_root_privacy",
+        "layout_overlaps",
+    }
+    assert checks["shared_root_visibility"]["status"] == "warning"
+    assert checks["layout_overlaps"]["recovery_hint"].startswith("Shared content takes precedence")
 
 
 @pytest.mark.anyio
