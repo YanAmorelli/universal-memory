@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from tests.application.skills.test_create_skill import FailingAgentSkillRepository
+from tests.application.skills.test_create_skill import (
+    FailingAgentSkillRepository,
+    make_shared_project_root,
+)
 from tests.application.skills.test_generate_skill import (
     RecordingAuditRepository,
     RecordingScanner,
@@ -13,12 +16,18 @@ from tests.application.skills.test_generate_skill import (
 )
 from universal_memory.application.security import SafeWriteUseCase
 from universal_memory.application.skills import (
+    AdoptSkillCommand,
+    AdoptSkillUseCase,
+    CreateSkillDraftCommand,
+    CreateSkillDraftUseCase,
     GetSkillDetailCommand,
     GetSkillDetailUseCase,
     ImportSkillCommand,
     ImportSkillUseCase,
     ListSkillsCommand,
     ListSkillsUseCase,
+    PublishSkillCommand,
+    PublishSkillUseCase,
 )
 from universal_memory.domain import SecretDetectedError, StorageError, ValidationFailedError
 from universal_memory.domain.entities import AgentSkillStatus, LatentSkillScope
@@ -55,6 +64,100 @@ def test_import_skill_copies_directory_and_registers_canonical_record(tmp_path: 
     assert result.skill_file == ".umem/skills/review-helper/SKILL.md"
     assert ".umem/skills/review-helper/references/guide.md" in result.created_paths
     assert not (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").exists()
+
+
+def test_import_user_facing_project_skill_defaults_to_shared_root_in_shared_layout(
+    tmp_path: Path,
+) -> None:
+    project_root = make_shared_project_root(tmp_path)
+    use_case, repository, _safe_write = build_use_case(project_root)
+    source = write_source_skill(project_root / "native" / "skills" / "review-helper")
+
+    result = use_case.execute(
+        ImportSkillCommand(path=source, scope=LatentSkillScope.project, origin="test")
+    )
+
+    stored = repository.read(result.agent_skill.id)
+    assert result.skill_file == "umem/skills/review-helper/SKILL.md"
+    assert stored.visibility == "shared"
+    assert stored.category == "user-facing"
+    assert (project_root / "umem" / "skills" / "review-helper" / "SKILL.md").is_file()
+
+
+def test_import_operational_project_skill_defaults_to_private_root_in_shared_layout(
+    tmp_path: Path,
+) -> None:
+    project_root = make_shared_project_root(tmp_path)
+    use_case, repository, _safe_write = build_use_case(project_root)
+    source = write_source_skill(project_root / "native" / "skills" / "review-helper")
+
+    result = use_case.execute(
+        ImportSkillCommand(
+            path=source,
+            scope=LatentSkillScope.project,
+            origin="test",
+            category="operational",
+        )
+    )
+
+    stored = repository.read(result.agent_skill.id)
+    assert result.skill_file == ".umem/skills/review-helper/SKILL.md"
+    assert stored.visibility == "private"
+    assert stored.category == "operational"
+    assert (project_root / ".umem" / "skills" / "review-helper" / "SKILL.md").is_file()
+    assert not (project_root / "umem" / "skills" / "review-helper").exists()
+
+
+def test_adopt_and_publish_follow_shared_layout_visibility_and_category(
+    tmp_path: Path,
+) -> None:
+    project_root = make_shared_project_root(tmp_path)
+    _import_use_case, repository, safe_write = build_use_case(project_root)
+    adopt_source = write_source_skill(project_root / "external" / "review-helper")
+
+    adopted = AdoptSkillUseCase(
+        project_root=project_root,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(
+        AdoptSkillCommand(
+            path=adopt_source,
+            scope=LatentSkillScope.project,
+            origin="test",
+            visibility="shared",
+        )
+    )
+
+    draft = CreateSkillDraftUseCase(
+        project_root=project_root,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(
+        CreateSkillDraftCommand(
+            name="Bootstrap Helper",
+            description="Local bootstrap guidance.",
+            scope=LatentSkillScope.project,
+            origin="test",
+        )
+    )
+    published = PublishSkillUseCase(
+        project_root=project_root,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(
+        PublishSkillCommand(
+            draft_or_path=draft.agent_skill.id,
+            origin="test",
+            category="operational",
+        )
+    )
+
+    assert adopted.skill_file == "umem/skills/review-helper/SKILL.md"
+    assert adopted.agent_skill.visibility == "shared"
+    assert adopted.agent_skill.category == "user-facing"
+    assert published.skill_file == ".umem/skills/bootstrap-helper/SKILL.md"
+    assert published.agent_skill.visibility == "private"
+    assert published.agent_skill.category == "operational"
 
 
 def test_import_skill_accepts_skill_file_input_and_list_detail_surface_it(tmp_path: Path) -> None:

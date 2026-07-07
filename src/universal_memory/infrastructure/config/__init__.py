@@ -6,8 +6,14 @@ from universal_memory.infrastructure.config.adapters import (
 )
 from universal_memory.infrastructure.config.project_layout import (
     PROJECT_LAYOUT_PATHS,
+    SHARED_LAYOUT_PATHS,
     ensure_project_layout,
+    ensure_shared_project_layout,
+    inspect_project_layout,
     is_project_initialized,
+    render_project_layout_metadata,
+    resolve_project_layout,
+    write_project_layout_metadata,
 )
 from universal_memory.infrastructure.config.toml_loader import (
     LoadedConfig,
@@ -17,11 +23,17 @@ from universal_memory.infrastructure.config.toml_loader import (
 
 __all__ = [
     "PROJECT_LAYOUT_PATHS",
+    "SHARED_LAYOUT_PATHS",
     "LoadedConfig",
     "LocalConfigValidationPort",
     "LocalProjectLayoutPort",
     "dump_toml_document",
     "ensure_project_layout",
+    "ensure_shared_project_layout",
+    "inspect_project_layout",
     "is_project_initialized",
     "load_config",
+    "render_project_layout_metadata",
+    "resolve_project_layout",
+    "write_project_layout_metadata",
 ]

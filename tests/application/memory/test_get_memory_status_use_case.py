@@ -31,13 +31,22 @@ from universal_memory.domain.ports import (
     LatentSkillRepository,
     RuleRepository,
 )
+from universal_memory.domain.project_layout import (
+    ProjectLayoutInspection,
+    ProjectLayoutMode,
+    ProjectLayoutPolicy,
+    ProjectLayoutPrecedence,
+    ResolvedProjectLayout,
+)
 
 EXPECTED_MIN_SIZE_BYTES = 3
+MIN_SHARED_LAYOUT_PATHS = 2
 
 
 class RecordingLayoutPort(ProjectLayoutPort):
-    def __init__(self, *, initialized: bool) -> None:
+    def __init__(self, *, initialized: bool, layout: str = "legacy") -> None:
         self.initialized = initialized
+        self.layout = layout
         self.checked_roots: list[Path] = []
         self.ensure_calls = 0
 
@@ -48,6 +57,52 @@ class RecordingLayoutPort(ProjectLayoutPort):
     def is_project_initialized(self, project_root: Path) -> bool:
         self.checked_roots.append(project_root)
         return self.initialized
+
+    def inspect_project_layout(self, project_root: Path) -> ProjectLayoutInspection:
+        return ProjectLayoutInspection(
+            operation="layout.status",
+            layout=self.layout if self.initialized else "uninitialized",
+            shared_root="umem",
+            operational_root=".umem",
+            precedence="shared_over_legacy",
+            warnings=[],
+            recommended_actions=[],
+        )
+
+    def resolve_project_layout(self, project_root: Path) -> ResolvedProjectLayout:
+        shared_root = project_root / "umem"
+        operational_root = project_root / ".umem"
+        return ResolvedProjectLayout(
+            project_root=project_root,
+            policy=ProjectLayoutPolicy(
+                schema_version="1",
+                layout=ProjectLayoutMode(self.layout),
+                shared_root="umem",
+                operational_root=".umem",
+                precedence=ProjectLayoutPrecedence.shared_over_legacy,
+            ),
+            shared_root_path=shared_root,
+            operational_root_path=operational_root,
+            shared_memory_root=shared_root / "memory",
+            shared_skills_root=shared_root / "skills",
+            operational_memory_root=operational_root / "memory",
+            operational_skills_root=operational_root / "skills",
+            operational_locks_root=operational_root / "locks",
+        )
+
+    def write_project_layout_metadata(
+        self,
+        project_root: Path,
+        *,
+        layout: str = "shared",
+    ) -> ProjectLayoutPolicy:
+        return ProjectLayoutPolicy(
+            schema_version="1",
+            layout=ProjectLayoutMode(layout),
+            shared_root="umem",
+            operational_root=".umem",
+            precedence=ProjectLayoutPrecedence.shared_over_legacy,
+        )
 
 
 class RecordingFactRepository(FactRepository):
@@ -279,13 +334,14 @@ def build_use_case(  # noqa: PLR0913
     skills: list[LatentSkill] | None = None,
     agent_skills: list[AgentSkill] | None = None,
     audit_log_repository: AuditLogRepository | None = None,
+    layout: str = "legacy",
 ) -> tuple[
     GetMemoryStatusUseCase,
     RecordingLayoutPort,
     RecordingRuleRepository,
     RecordingLatentSkillRepository,
 ]:
-    layout_port = RecordingLayoutPort(initialized=initialized)
+    layout_port = RecordingLayoutPort(initialized=initialized, layout=layout)
     rule_repository = RecordingRuleRepository(rules or [])
     skill_repository = RecordingLatentSkillRepository(skills or [])
     agent_skill_repository = (
@@ -322,6 +378,9 @@ def test_status_returns_actionable_uninitialized_result_without_creating_files(
     assert result.recommended_action == "Run 'umem init' from the project root directory."
     assert result.fact_counts == {}
     assert result.last_health_check is None
+    assert result.layout == "uninitialized"
+    assert result.shared_root == "umem"
+    assert result.operational_root == ".umem"
     assert layout_port.checked_roots == [tmp_path]
     assert layout_port.ensure_calls == 0
     assert not (tmp_path / ".umem").exists()
@@ -360,6 +419,11 @@ def test_status_counts_initialized_memory_and_detects_hosts(
     }
     assert result.active_rules_count == 1
     assert result.registered_skills_count == 1
+    assert result.layout == "legacy"
+    assert result.shared_root == "umem"
+    assert result.operational_root == ".umem"
+    assert result.path_counts is not None
+    assert result.path_counts["operational_paths"] >= 1
     assert result.approximate_size_bytes >= EXPECTED_MIN_SIZE_BYTES
     assert result.last_health_check is not None
     assert result.last_health_check.endswith("Z")
@@ -400,6 +464,29 @@ def test_status_counts_registered_canonical_skills_when_repository_is_available(
 
     assert result.registered_skills_count == 1
     assert latent_skills.filters == []
+
+
+def test_status_reports_shared_layout_roots_and_path_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".umem" / "memory").mkdir(parents=True)
+    (tmp_path / "umem" / "memory").mkdir(parents=True)
+    (tmp_path / "umem" / "project.toml").write_text('layout = "shared"\n', encoding="utf-8")
+    use_case, _layout, _rules, _skills = build_use_case(
+        initialized=True,
+        project_root=tmp_path,
+        layout="shared",
+    )
+
+    result = use_case.execute(GetMemoryStatusCommand(project_root=tmp_path))
+
+    assert result.layout == "shared"
+    assert result.shared_root == "umem"
+    assert result.operational_root == ".umem"
+    assert result.path_counts is not None
+    assert result.path_counts["shared_paths"] >= MIN_SHARED_LAYOUT_PATHS
+    assert result.path_counts["operational_paths"] >= 1
 
 
 def test_status_loads_latest_host_validation_from_audit_log(

@@ -52,6 +52,8 @@ class ImportSkillCommand:
     replace_native: bool = False
     sync_after_import: bool = False
     slug: str | None = None
+    visibility: str | None = None
+    category: str = "user-facing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,8 +110,12 @@ class ImportSkillResult:
                 "canonical_path": self.agent_skill.canonical_path,
                 "origin": self.agent_skill.origin,
                 "content_hash": self.agent_skill.content_hash,
+                "visibility": self.agent_skill.visibility,
+                "category": self.agent_skill.category,
             },
         }
+        payload["visibility"] = self.agent_skill.visibility
+        payload["category"] = self.agent_skill.category
         if not self.native_installations:
             payload["native_installations_note"] = NO_NATIVE_INSTALLATIONS_NOTE
         return payload
@@ -124,6 +130,15 @@ class _ImportSkillSchema(BaseModel):
     replace_native: bool = False
     sync_after_import: bool = False
     slug: str | None = None
+    visibility: str | None = None
+    category: str = "user-facing"
+
+
+@dataclass(frozen=True, slots=True)
+class _SkillPlacement:
+    visibility: str | None
+    category: str
+    metadata: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,9 +193,20 @@ class ImportSkillUseCase:
 
         parsed = _parse_skill_markdown(markdown)
         slug = _slug(validated.slug) if validated.slug else _slug(parsed.name)
-        skill_dir = self._skill_dir_for(validated.scope, slug)
+        placement = self._skill_placement(validated)
+        skill_dir = self._skill_dir_for(
+            validated.scope,
+            slug,
+            visibility=placement.visibility,
+            category=placement.category,
+        )
         canonical_skill_file = f"{skill_dir}/SKILL.md"
-        self._validate_no_conflict(validated.scope, slug)
+        self._validate_no_conflict(
+            validated.scope,
+            slug,
+            visibility=placement.visibility,
+            category=placement.category,
+        )
         validation_report = validate_skill_tree(
             skill_file,
             project_root=self.project_root,
@@ -216,6 +242,7 @@ class ImportSkillUseCase:
                 "recommendation_flow": False,
                 "import_source": import_source,
                 "validation": validation_report.to_payload(),
+                **placement.metadata,
             }
             agent_skill = AgentSkill(
                 id=str(uuid4()),
@@ -370,8 +397,20 @@ class ImportSkillUseCase:
                 raise StorageError(f"Failed to read imported file: {relative_path}") from exc
         return files
 
-    def _validate_no_conflict(self, scope: LatentSkillScope, slug: str) -> None:
-        canonical_dir = self._safe_write_for(scope).project_root / self._skill_dir_for(scope, slug)
+    def _validate_no_conflict(
+        self,
+        scope: LatentSkillScope,
+        slug: str,
+        *,
+        visibility: str | None,
+        category: str,
+    ) -> None:
+        canonical_dir = self._safe_write_for(scope).project_root / self._skill_dir_for(
+            scope,
+            slug,
+            visibility=visibility,
+            category=category,
+        )
         if canonical_dir.exists():
             raise ValidationFailedError(
                 f"Skill import conflict: canonical skill already exists for slug '{slug}'."
@@ -462,10 +501,64 @@ class ImportSkillUseCase:
             return self.global_safe_write_use_case
         return self.safe_write_use_case
 
-    @staticmethod
-    def _skill_dir_for(scope: LatentSkillScope, slug: str) -> str:
+    def _skill_placement(self, validated: _ImportSkillSchema) -> _SkillPlacement:
+        category = _normalize_category(validated.category)
+        visibility = self._resolve_visibility(
+            scope=validated.scope,
+            requested_visibility=validated.visibility,
+            category=category,
+        )
+        metadata: dict[str, Any] = {}
+        if validated.scope == LatentSkillScope.project and visibility is not None:
+            metadata["visibility"] = visibility
+            metadata["category"] = category
+        return _SkillPlacement(visibility=visibility, category=category, metadata=metadata)
+
+    def _resolve_visibility(
+        self,
+        *,
+        scope: LatentSkillScope,
+        requested_visibility: str | None,
+        category: str,
+    ) -> str | None:
+        if scope == LatentSkillScope.global_:
+            if requested_visibility is not None:
+                raise ValidationFailedError("visibility is only supported for project skills.")
+            return None
+        if requested_visibility is not None:
+            visibility = requested_visibility.strip().lower()
+            if visibility not in {"shared", "private"}:
+                raise ValidationFailedError("visibility must be shared or private.")
+            if visibility == "shared" and category == "operational":
+                raise ValidationFailedError(
+                    "operational skills cannot be shared by import; use skills share with "
+                    "operational confirmation."
+                )
+            return visibility
+        if self._project_uses_shared_layout():
+            return "private" if category == "operational" else "shared"
+        return None
+
+    def _project_uses_shared_layout(self) -> bool:
+        layout = getattr(self.repository, "layout", None)
+        return bool(getattr(layout, "is_shared", False))
+
+    def _skill_dir_for(
+        self,
+        scope: LatentSkillScope,
+        slug: str,
+        *,
+        visibility: str | None = None,
+        category: str = "user-facing",
+    ) -> str:
         if scope == LatentSkillScope.global_:
             return f"skills/{slug}"
+        if (
+            self._project_uses_shared_layout()
+            and visibility == "shared"
+            and category != "operational"
+        ):
+            return f"umem/skills/{slug}"
         return f".umem/skills/{slug}"
 
 
@@ -473,6 +566,13 @@ def _audit_scope_for(scope: LatentSkillScope) -> AuditEventScope:
     if scope == LatentSkillScope.global_:
         return AuditEventScope.global_
     return AuditEventScope.project
+
+
+def _normalize_category(category: str) -> str:
+    normalized = category.strip().lower().replace("_", "-")
+    if normalized not in {"user-facing", "operational"}:
+        raise ValidationFailedError("category must be user-facing or operational.")
+    return normalized
 
 
 def _hash_tree(files: list[tuple[str, str]]) -> str:

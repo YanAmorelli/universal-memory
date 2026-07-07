@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from inspect import signature
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import click
 import typer
@@ -27,6 +27,12 @@ from universal_memory.application.host import (
     SyncInstructionsCommand,
     SyncInstructionsResult,
 )
+from universal_memory.application.layout import (
+    InspectProjectLayoutUseCase,
+    MigrateProjectLayoutCommand,
+    MigrateProjectLayoutUseCase,
+)
+from universal_memory.application.layout.migrate_project_layout import MigrationInclude
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -89,6 +95,8 @@ from universal_memory.application.skills import (
     RenameSkillResult,
     RepairSkillsCommand,
     RepairSkillsResult,
+    ShareSkillCommand,
+    ShareSkillResult,
     SyncSkillResult,
     SyncSkillsCommand,
     SyncSkillsResult,
@@ -134,6 +142,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.entities.runtime import RuntimeAdapter, default_runtime_registry
+from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.interfaces.cli.message_catalog import (
     DEFAULT_LOCALE,
     human_message,
@@ -157,9 +166,7 @@ INIT_SPLASH_LINES = (
     " \\____/|_|  |_|\\___|_| |_| |_|",
     "  persistent context for AI agents",
 )
-SetupProjectCommand = (
-    Callable[[Path, list[str] | None], SetupProjectResult] | Callable[[Path], SetupProjectResult]
-)
+SetupProjectCommand = Callable[..., SetupProjectResult]
 LEGACY_CONFIGURABLE_RUNTIME_IDS = {"claude_code", "codex"}
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
@@ -180,6 +187,7 @@ GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResu
 CreateSkillCommandHandler = Callable[[CreateSkillCommand], CreateSkillResult]
 CreateSkillDraftCommandHandler = Callable[[CreateSkillDraftCommand], DraftSkillResult]
 PublishSkillCommandHandler = Callable[[PublishSkillCommand], PublishSkillResult]
+ShareSkillCommandHandler = Callable[[ShareSkillCommand], ShareSkillResult]
 ValidateSkillCommandHandler = Callable[[ValidateSkillCommand], ValidateSkillResult]
 AdoptSkillCommandHandler = Callable[[AdoptSkillCommand], AdoptSkillResult]
 UpdateCanonicalSkillCommandHandler = Callable[
@@ -205,6 +213,7 @@ UpdateManagedSkillsCommandHandler = Callable[
 ]
 UpdateMigrateCommandHandler = Callable[[UpdateMigrateCommand], UpdateMigrateResult]
 UpdateBenchmarksCommandHandler = Callable[[UpdateBenchmarksCommand], UpdateBenchmarksResult]
+LayoutMigrateCommandHandler = Callable[[MigrateProjectLayoutCommand], dict[str, Any]]
 UpdateSkillsItem = UpdateSkillResult | UpdateManagedSkillTemplateResult | SyncSkillResult
 
 
@@ -266,6 +275,7 @@ def main(  # noqa: PLR0913
     create_skill_command: CreateSkillCommandHandler | None = None,
     create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
     publish_skill_command: PublishSkillCommandHandler | None = None,
+    share_skill_command: ShareSkillCommandHandler | None = None,
     validate_skill_command: ValidateSkillCommandHandler | None = None,
     adopt_skill_command: AdoptSkillCommandHandler | None = None,
     update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
@@ -285,6 +295,7 @@ def main(  # noqa: PLR0913
     update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    layout_migrate_command: LayoutMigrateCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
 ) -> int:
     app = create_typer_app(
@@ -309,6 +320,7 @@ def main(  # noqa: PLR0913
         create_skill_command=create_skill_command,
         create_skill_draft_command=create_skill_draft_command,
         publish_skill_command=publish_skill_command,
+        share_skill_command=share_skill_command,
         validate_skill_command=validate_skill_command,
         adopt_skill_command=adopt_skill_command,
         update_canonical_skill_command=update_canonical_skill_command,
@@ -328,6 +340,7 @@ def main(  # noqa: PLR0913
         update_managed_skills_command=update_managed_skills_command,
         update_migrate_command=update_migrate_command,
         update_benchmarks_command=update_benchmarks_command,
+        layout_migrate_command=layout_migrate_command,
         locale_resolver=locale_resolver,
     )
     try:
@@ -398,6 +411,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     create_skill_command: CreateSkillCommandHandler | None = None,
     create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
     publish_skill_command: PublishSkillCommandHandler | None = None,
+    share_skill_command: ShareSkillCommandHandler | None = None,
     validate_skill_command: ValidateSkillCommandHandler | None = None,
     adopt_skill_command: AdoptSkillCommandHandler | None = None,
     update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
@@ -417,6 +431,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    layout_migrate_command: LayoutMigrateCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
 ) -> typer.Typer:
     app = typer.Typer(help="Universal Memory CLI", no_args_is_help=True)
@@ -424,6 +439,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     audit_app = typer.Typer(help="Inspect audit events")
     snapshots_app = typer.Typer(help="Inspect snapshots")
     host_app = typer.Typer(help="Configure agent hosts")
+    layout_app = typer.Typer(help="Inspect and migrate project layout")
     skills_app = typer.Typer(
         help=(
             "Manage skills. Use create for new canonical skills, import for existing "
@@ -438,6 +454,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     app.add_typer(audit_app, name="audit")
     app.add_typer(snapshots_app, name="snapshots")
     app.add_typer(host_app, name="host")
+    app.add_typer(layout_app, name="layout")
     app.add_typer(skills_app, name="skills")
     skills_app.add_typer(skills_draft_app, name="draft")
     skills_app.add_typer(skills_canonical_app, name="canonical")
@@ -469,7 +486,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         ctx.obj = {"output_format": output_format.lower()}
 
     @app.command("init")
-    def init_command(
+    def init_command(  # noqa: PLR0913
         ctx: typer.Context,
         runtimes: Annotated[
             list[str] | None,
@@ -479,6 +496,15 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             list[str] | None,
             typer.Option("--hosts", help="Legacy host option. Prefer --runtime."),
         ] = None,
+        layout: Annotated[
+            str,
+            typer.Option(
+                "--layout",
+                help="Project storage layout.",
+                case_sensitive=False,
+                click_type=click.Choice(["legacy", "shared"], case_sensitive=False),
+            ),
+        ] = "legacy",
         yes: YesOption = False,
         output_format: OutputFormatOption = None,
     ) -> None:
@@ -491,6 +517,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 _effective_format(ctx, output_format),
                 selected_runtimes=runtimes,
                 selected_hosts=hosts,
+                layout=layout.lower(),
                 yes=yes,
                 host_setup_command=host_setup_command,
                 host_check_command=host_check_command,
@@ -506,6 +533,131 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         raise typer.Exit(
             code=_run_status(status_command, output_format=_effective_format(ctx, output_format))
         )
+
+    @layout_app.command("status")
+    def layout_status(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
+        result = InspectProjectLayoutUseCase(
+            project_root=Path.cwd(),
+            layout_port=LocalProjectLayoutPort(),
+        ).execute()
+        report = result["data"]
+        payload = {
+            "ok": True,
+            "operation": result["operation"],
+            "scope": "project",
+            "data": report,
+            "warnings": report["warnings"],
+        }
+        resolved_format = _effective_format(ctx, output_format)
+        if resolved_format == "json":
+            print(json.dumps(payload, sort_keys=True))
+        elif resolved_format == "summary":
+            _stdout_console().print(
+                f"{report['layout']}: shared={report['shared_root']} "
+                f"operational={report['operational_root']}"
+            )
+        else:
+            table = Table(title="Project Layout")
+            table.add_column("Field")
+            table.add_column("Value")
+            for key, value in report.items():
+                table.add_row(key, json.dumps(value) if isinstance(value, list) else str(value))
+            _stdout_console().print(table)
+
+    @layout_app.command("migrate")
+    def layout_migrate(  # noqa: PLR0913
+        ctx: typer.Context,
+        target_layout: Annotated[
+            str,
+            typer.Option(
+                "--to",
+                help="Target project layout.",
+                case_sensitive=False,
+                click_type=click.Choice(["shared"], case_sensitive=False),
+            ),
+        ] = "shared",
+        dry_run: Annotated[
+            bool,
+            typer.Option("--dry-run", help="Preview migration without writing shared content."),
+        ] = False,
+        apply_changes: Annotated[
+            bool,
+            typer.Option("--apply", help="Apply migration writes."),
+        ] = False,
+        include: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--include",
+                help="Content category to migrate. May be used multiple times.",
+                click_type=click.Choice(["facts", "rules", "skills"], case_sensitive=False),
+            ),
+        ] = None,
+        private_fact_ids: Annotated[
+            list[str] | None,
+            typer.Option("--private-fact", help="Legacy project fact ID to keep local."),
+        ] = None,
+        private_skill_slugs: Annotated[
+            list[str] | None,
+            typer.Option("--private-skill", help="Legacy project skill slug to keep local."),
+        ] = None,
+        shared_operational_skill_slugs: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--share-operational-skill",
+                help="Operational skill slug explicitly approved for sharing.",
+            ),
+        ] = None,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        command_handler = (
+            layout_migrate_command or MigrateProjectLayoutUseCase(project_root=Path.cwd()).execute
+        )
+        _ = target_layout
+        if dry_run and apply_changes:
+            _print_expected_error(
+                ValidationFailedError("Use either --dry-run or --apply, not both."),
+                output_format=_effective_format(ctx, output_format),
+            )
+            raise typer.Exit(code=1)
+        result = command_handler(
+            MigrateProjectLayoutCommand(
+                target_layout="shared",
+                dry_run=not apply_changes,
+                include=tuple(
+                    cast(MigrationInclude, value.lower())
+                    for value in (include or ["facts", "rules", "skills"])
+                ),
+                private_fact_ids=tuple(private_fact_ids or []),
+                private_skill_slugs=tuple(private_skill_slugs or []),
+                shared_operational_skill_slugs=tuple(shared_operational_skill_slugs or []),
+            )
+        )
+        payload = {
+            "ok": True,
+            "operation": result["operation"],
+            "scope": "project",
+            "data": result["data"],
+            "warnings": result.get("warnings", []),
+        }
+        resolved_format = _effective_format(ctx, output_format)
+        if resolved_format == "json":
+            print(json.dumps(payload, sort_keys=True))
+        elif resolved_format == "summary":
+            data = result["data"]
+            _stdout_console().print(
+                f"layout.migrate dry_run={data['dry_run']} copied={len(data['copied'])} "
+                f"already_shared={len(data['already_shared'])} conflicts={len(data['conflicts'])}"
+            )
+        else:
+            data = result["data"]
+            table = Table(title="Project Layout Migration")
+            table.add_column("Field")
+            table.add_column("Value")
+            for key in ("source_layout", "target_layout", "dry_run"):
+                table.add_row(key, str(data[key]))
+            for key in ("copied", "already_shared", "skipped", "conflicts"):
+                table.add_row(key, str(len(data[key])))
+            _stdout_console().print(table)
 
     @app.command("doctor")
     def doctor(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
@@ -597,7 +749,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         )
 
     @app.command("remember")
-    def remember(
+    def remember(  # noqa: PLR0913
         ctx: typer.Context,
         content: Annotated[str, typer.Argument(help="Fact content to store.")],
         scope: Annotated[
@@ -612,6 +764,18 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             list[str] | None,
             typer.Option("--tag", help="Fact tag. May be used multiple times."),
         ] = None,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project fact visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        private: Annotated[
+            bool,
+            typer.Option("--private", help="Store the project fact in private local storage."),
+        ] = False,
         output_format: OutputFormatOption = None,
     ) -> None:
         if remember_command is None:
@@ -624,6 +788,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 content=content,
                 scope=_fact_scope(scope) or FactScope.project,
                 tags=tags or [],
+                visibility="private" if private else visibility,
             )
         )
 
@@ -648,6 +813,14 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 ),
             ),
         ] = None,
+        visibility: Annotated[
+            str,
+            typer.Option(
+                "--visibility",
+                help="Project fact visibility filter.",
+                click_type=click.Choice(["shared", "private", "all"], case_sensitive=False),
+            ),
+        ] = "all",
         output_format: OutputFormatOption = None,
     ) -> None:
         if facts_list_command is None:
@@ -659,6 +832,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 output_format=_effective_format(ctx, output_format),
                 scope=_fact_scope(scope),
                 status=_fact_status(status) if status is not None else FactStatus.active,
+                visibility=visibility.lower(),
             )
         )
 
@@ -1042,6 +1216,22 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             LatentSkillScope,
             typer.Option("--scope", help="Skill scope (project or global)."),
         ] = LatentSkillScope.project,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project skill visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
         output_format: OutputFormatOption = None,
     ) -> None:
         if create_skill_command is None:
@@ -1058,6 +1248,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 slug=slug,
                 sync=sync,
                 targets=target,
+                visibility=visibility,
+                category=category,
             )
         )
 
@@ -1143,6 +1335,22 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             list[str] | None,
             typer.Option("--target", help="Runtime target to sync. May be used multiple times."),
         ] = None,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project skill visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
         output_format: OutputFormatOption = None,
     ) -> None:
         if publish_skill_command is None:
@@ -1156,6 +1364,39 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 slug=slug,
                 sync=sync,
                 targets=target,
+                visibility=visibility,
+                category=category,
+            )
+        )
+
+    @skills_app.command(
+        "share",
+        help=("Copy an existing project skill into umem/skills. Operational skills require --yes."),
+    )
+    def skills_share(
+        ctx: typer.Context,
+        skill_id_or_name: Annotated[str, typer.Argument(help="Skill id, slug, or name.")],
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        if share_skill_command is None:
+            msg = "CLI share_skill_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_skills_share(
+                share_skill_command,
+                output_format=_effective_format(ctx, output_format),
+                skill_id_or_name=skill_id_or_name,
+                category=category,
+                yes=yes,
             )
         )
 
@@ -1226,6 +1467,22 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 ),
             ),
         ] = False,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project skill visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
         output_format: OutputFormatOption = None,
     ) -> None:
         if import_skill_command is None:
@@ -1239,6 +1496,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 scope=scope,
                 replace_native=replace_native,
                 sync_after_import=sync_after_import,
+                visibility=visibility,
+                category=category,
             )
         )
 
@@ -1271,6 +1530,22 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 help="Sync native targets after adoption. Default only registers canonical.",
             ),
         ] = False,
+        visibility: Annotated[
+            str | None,
+            typer.Option(
+                "--visibility",
+                help="Project skill visibility.",
+                click_type=click.Choice(["shared", "private"], case_sensitive=False),
+            ),
+        ] = None,
+        category: Annotated[
+            str,
+            typer.Option(
+                "--category",
+                help="Project skill category.",
+                click_type=click.Choice(["user-facing", "operational"], case_sensitive=False),
+            ),
+        ] = "user-facing",
         output_format: OutputFormatOption = None,
     ) -> None:
         if adopt_skill_command is None:
@@ -1285,6 +1560,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 scope=scope,
                 replace_native=replace_native,
                 sync_after_adopt=sync_after_adopt,
+                visibility=visibility,
+                category=category,
             )
         )
 
@@ -1632,6 +1909,7 @@ def build_main(  # noqa: PLR0913
     create_skill_command: CreateSkillCommandHandler | None = None,
     create_skill_draft_command: CreateSkillDraftCommandHandler | None = None,
     publish_skill_command: PublishSkillCommandHandler | None = None,
+    share_skill_command: ShareSkillCommandHandler | None = None,
     validate_skill_command: ValidateSkillCommandHandler | None = None,
     adopt_skill_command: AdoptSkillCommandHandler | None = None,
     update_canonical_skill_command: UpdateCanonicalSkillCommandHandler | None = None,
@@ -1651,6 +1929,7 @@ def build_main(  # noqa: PLR0913
     update_managed_skills_command: UpdateManagedSkillsCommandHandler | None = None,
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
+    layout_migrate_command: LayoutMigrateCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
@@ -1682,6 +1961,7 @@ def build_main(  # noqa: PLR0913
             create_skill_command=create_skill_command,
             create_skill_draft_command=create_skill_draft_command,
             publish_skill_command=publish_skill_command,
+            share_skill_command=share_skill_command,
             validate_skill_command=validate_skill_command,
             adopt_skill_command=adopt_skill_command,
             update_canonical_skill_command=update_canonical_skill_command,
@@ -1701,6 +1981,7 @@ def build_main(  # noqa: PLR0913
             update_managed_skills_command=update_managed_skills_command,
             update_migrate_command=update_migrate_command,
             update_benchmarks_command=update_benchmarks_command,
+            layout_migrate_command=layout_migrate_command,
             locale_resolver=locale_resolver,
         )
 
@@ -1715,12 +1996,15 @@ def _build_setup_project_command(
     def command(
         project_root: Path,
         enabled_host_ids: list[str] | None = None,
+        *,
+        layout: str = "legacy",
     ) -> SetupProjectResult:
         return setup_project(
             project_root,
             layout_port=layout_port,
             config_validation_port=config_validation_port,
             enabled_host_ids=enabled_host_ids,
+            layout=layout,
         )
 
     return command
@@ -1794,6 +2078,7 @@ def _run_init(  # noqa: PLR0913
     *,
     selected_runtimes: list[str] | None = None,
     selected_hosts: list[str] | None = None,
+    layout: str = "legacy",
     yes: bool = False,
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
@@ -1812,12 +2097,12 @@ def _run_init(  # noqa: PLR0913
             locale=locale,
         )
         if output_format == "json":
-            result = _execute_setup_project(command, Path.cwd(), runtime_ids)
+            result = _execute_setup_project(command, Path.cwd(), runtime_ids, layout=layout)
         else:
             with _stderr_console().status(
                 human_message("Initializing project scaffold...", locale=locale), spinner="dots"
             ):
-                result = _execute_setup_project(command, Path.cwd(), runtime_ids)
+                result = _execute_setup_project(command, Path.cwd(), runtime_ids, layout=layout)
             locale = resolve_locale()
         host_results = _configure_init_hosts(
             runtime_ids,
@@ -1854,6 +2139,8 @@ def _execute_setup_project(
     command: SetupProjectCommand,
     project_root: Path,
     enabled_runtime_ids: list[str],
+    *,
+    layout: str = "legacy",
 ) -> SetupProjectResult:
     try:
         sig = signature(command)
@@ -1868,8 +2155,16 @@ def _execute_setup_project(
             or has_var_args
             or "enabled_runtime_ids" in sig.parameters
             or "enabled_host_ids" in sig.parameters
+            or "layout" in sig.parameters
         ):
-            return command(project_root, enabled_runtime_ids)  # type: ignore
+            if "enabled_runtime_ids" in sig.parameters:
+                kwargs: dict[str, Any] = {"enabled_runtime_ids": enabled_runtime_ids}
+                if "layout" in sig.parameters:
+                    kwargs["layout"] = layout
+                return command(project_root, **kwargs)
+            if "layout" in sig.parameters:
+                return command(project_root, enabled_runtime_ids, layout=layout)
+            return command(project_root, enabled_runtime_ids)
     except (ValueError, TypeError):
         pass
     return command(project_root)  # type: ignore
@@ -2121,13 +2416,14 @@ def _run_context(
     return 0
 
 
-def _run_remember(
+def _run_remember(  # noqa: PLR0913
     command: RememberFactCommandHandler,
     *,
     output_format: str,
     content: str,
     scope: FactScope,
     tags: list[str],
+    visibility: str | None = None,
 ) -> int:
     try:
         result = command(
@@ -2137,6 +2433,7 @@ def _run_remember(
                 source="cli",
                 tags=tags,
                 origin="cli",
+                visibility=visibility,
             )
         )
     except OSError as error:
@@ -2166,9 +2463,10 @@ def _run_facts_list(
     output_format: str,
     scope: FactScope | None,
     status: FactStatus,
+    visibility: str = "all",
 ) -> int:
     try:
-        result = command(ListFactsCommand(scope=scope, status=status))
+        result = command(ListFactsCommand(scope=scope, status=status, visibility=visibility))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
@@ -2889,6 +3187,8 @@ def _run_skills_create(  # noqa: PLR0913
     slug: str | None,
     sync: bool,
     targets: list[str] | None,
+    visibility: str | None = None,
+    category: str = "user-facing",
 ) -> int:
     try:
         result = command(
@@ -2901,6 +3201,8 @@ def _run_skills_create(  # noqa: PLR0913
                 slug=slug,
                 sync=sync,
                 targets=targets,
+                visibility=visibility.lower() if visibility is not None else None,
+                category=category.lower(),
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -2987,6 +3289,8 @@ def _run_skills_publish(  # noqa: PLR0913
     slug: str | None,
     sync: bool,
     targets: list[str] | None,
+    visibility: str | None,
+    category: str,
 ) -> int:
     try:
         result = command(
@@ -2996,6 +3300,8 @@ def _run_skills_publish(  # noqa: PLR0913
                 slug=slug,
                 sync=sync,
                 targets=targets,
+                visibility=visibility,
+                category=category,
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -3007,6 +3313,36 @@ def _run_skills_publish(  # noqa: PLR0913
     else:
         _stdout_console().print(
             _format_summary_payload("skills.publish", result.to_payload(), result.warnings)
+        )
+    return 0
+
+
+def _run_skills_share(
+    command: ShareSkillCommandHandler,
+    *,
+    output_format: str,
+    skill_id_or_name: str,
+    category: str,
+    yes: bool,
+) -> int:
+    try:
+        result = command(
+            ShareSkillCommand(
+                skill_id_or_name=skill_id_or_name,
+                category=category,
+                confirm_operational=yes,
+                origin="cli",
+            )
+        )
+    except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
+        _print_expected_error(_map_skill_mutation_error(error, skill_id_or_name), output_format)
+        return 1
+    envelope = _skill_lifecycle_envelope("skills.share", result.agent_skill.scope.value, result)
+    if output_format == "json":
+        print(json.dumps(envelope, sort_keys=True))
+    else:
+        _stdout_console().print(
+            _format_summary_payload("skills.share", result.to_payload(), result.warnings)
         )
     return 0
 
@@ -3128,6 +3464,8 @@ def _run_skills_import(  # noqa: PLR0913
     scope: LatentSkillScope,
     replace_native: bool,
     sync_after_import: bool,
+    visibility: str | None,
+    category: str,
 ) -> int:
     try:
         result = command(
@@ -3137,6 +3475,8 @@ def _run_skills_import(  # noqa: PLR0913
                 origin="cli",
                 replace_native=replace_native,
                 sync_after_import=sync_after_import,
+                visibility=visibility,
+                category=category,
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -3159,6 +3499,8 @@ def _run_skills_adopt(  # noqa: PLR0913
     scope: LatentSkillScope,
     replace_native: bool,
     sync_after_adopt: bool,
+    visibility: str | None,
+    category: str,
 ) -> int:
     try:
         result = command(
@@ -3169,6 +3511,8 @@ def _run_skills_adopt(  # noqa: PLR0913
                 slug=slug,
                 replace_native=replace_native,
                 sync_after_adopt=sync_after_adopt,
+                visibility=visibility,
+                category=category,
             )
         )
     except (KeyError, OSError, ValidationError, ValueError, *DOMAIN_ERROR_TYPES) as error:
@@ -4365,7 +4709,7 @@ def _update_apply_success_envelope(
 
 def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
     project_root = result.project_path
-    return {
+    payload = {
         "project_path": _relative_path(result.project_path, project_root),
         "config_path": _relative_path(result.config_path, project_root),
         "memory_path": _relative_path(result.memory_path, project_root),
@@ -4375,6 +4719,20 @@ def _init_payload(result: SetupProjectResult) -> dict[str, Any]:
         "already_initialized": result.already_initialized,
         "audit_reference": AUDIT_REFERENCE_PLACEHOLDER,
     }
+    payload.update(
+        {
+            "layout": result.layout,
+            "shared_root": (
+                _relative_path(result.shared_root, project_root)
+                if result.shared_root is not None
+                else None
+            ),
+            "operational_root": _relative_path(result.operational_root, project_root),
+            "shared_paths": result.shared_paths or [],
+            "operational_paths": result.operational_paths or [],
+        }
+    )
+    return payload
 
 
 def _fact_payload(fact: Fact) -> dict[str, Any]:
@@ -4387,6 +4745,8 @@ def _fact_payload(fact: Fact) -> dict[str, Any]:
         "recurrence_count": fact.recurrence_count,
         "tags": fact.tags,
         "metadata": fact.metadata,
+        "visibility": fact.metadata.get("visibility", "legacy"),
+        "storage_path": fact.metadata.get("storage_path"),
         "created_at": format_utc_iso(fact.created_at),
         "updated_at": format_utc_iso(fact.updated_at),
     }
@@ -4399,6 +4759,10 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
             "project_path": result.project_path,
             "installed_version": result.installed_version,
             "recommended_action": result.recommended_action,
+            "layout": result.layout,
+            "shared_root": result.shared_root,
+            "operational_root": result.operational_root,
+            "path_counts": result.path_counts or {},
         }
 
     return {
@@ -4411,6 +4775,10 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
         "approximate_size_bytes": result.approximate_size_bytes,
         "last_health_check": result.last_health_check,
         "host_validation": result.host_validation,
+        "layout": result.layout,
+        "shared_root": result.shared_root,
+        "operational_root": result.operational_root,
+        "path_counts": result.path_counts or {},
     }
 
 
@@ -4439,6 +4807,8 @@ def _remember_payload(result: RememberFactResult) -> dict[str, Any]:
         "scope": fact.scope.value,
         "status": fact.status.value,
         "tags": fact.tags,
+        "visibility": fact.metadata.get("visibility"),
+        "storage_path": fact.metadata.get("storage_path"),
         "created_at": format_utc_iso(fact.created_at),
         "audit_reference": result.audit_reference,
     }
@@ -4530,7 +4900,7 @@ def _format_human_doctor_output(result: DoctorResult) -> str:
         "",
     ]
     for check in result.checks:
-        marker = "[OK]" if check.status == "success" else "[FAIL]"
+        marker = {"success": "[OK]", "warning": "[WARN]"}.get(check.status, "[FAIL]")
         label = " ".join(check.name.split("_")).title()
         detail = f" - {check.detail}" if check.detail else ""
         lines.append(f"{marker} {label}{detail}")
@@ -4545,8 +4915,13 @@ def _format_human_doctor_output(result: DoctorResult) -> str:
             "",
             (
                 "Final status: all checks passed."
-                if result.ok
-                else f"Final status: {summary.failed} failure(s) found."
+                if summary.failed == 0 and summary.warnings == 0
+                else (
+                    f"Final status: {summary.warnings} warning(s), no failure(s) found."
+                    if summary.failed == 0
+                    else f"Final status: {summary.failed} failure(s), "
+                    f"{summary.warnings} warning(s) found."
+                )
             ),
         ]
     )

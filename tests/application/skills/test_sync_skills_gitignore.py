@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -79,6 +80,7 @@ def test_sync_check_gitignore_warns_for_tracked_native_target(
         ["git", "add", "-f", ".opencode/skills/review-helper/SKILL.md"],  # noqa: S607
         cwd=tmp_path,
         check=True,
+        env=_sanitized_git_env(),
     )
 
     result = SyncSkillsUseCase(
@@ -96,4 +98,21 @@ def _git_init(path: Path) -> None:
         cwd=path,
         check=True,
         stdout=subprocess.DEVNULL,
+        env=_sanitized_git_env(),
     )
+
+
+def _sanitized_git_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in (
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG",
+        "GIT_CONFIG_COUNT",
+        "GIT_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_PREFIX",
+        "GIT_WORK_TREE",
+    ):
+        env.pop(key, None)
+    return env

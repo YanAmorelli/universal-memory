@@ -44,6 +44,10 @@ class GetMemoryStatusResult:
     host_validation: dict[str, dict[str, str | None]]
     recommended_action: str | None = None
     installed_version: str = __version__
+    layout: str = "uninitialized"
+    shared_root: str = "umem"
+    operational_root: str = ".umem"
+    path_counts: dict[str, int] | None = None
 
 
 class GetMemoryStatusUseCase:
@@ -72,6 +76,12 @@ class GetMemoryStatusUseCase:
         project_root = command.project_root.resolve()
         project_path = _relative_project_path(project_root)
         data_root = self.data_root or (project_root / ".umem")
+        layout_report = self.layout_port.inspect_project_layout(project_root)
+        path_counts = _layout_path_counts(
+            project_root=project_root,
+            shared_root=layout_report.shared_root,
+            operational_root=layout_report.operational_root,
+        )
 
         if not self.layout_port.is_project_initialized(project_root):
             return GetMemoryStatusResult(
@@ -84,6 +94,10 @@ class GetMemoryStatusUseCase:
                 last_health_check=None,
                 host_validation={},
                 recommended_action="Run 'umem init' from the project root directory.",
+                layout=layout_report.layout,
+                shared_root=layout_report.shared_root,
+                operational_root=layout_report.operational_root,
+                path_counts=path_counts,
             )
 
         # Health check: verify read/write permissions.
@@ -112,6 +126,10 @@ class GetMemoryStatusUseCase:
             last_health_check=format_utc_iso(self.clock()) if health_ok else None,
             host_validation=self._host_validation(),
             recommended_action=None,
+            layout=layout_report.layout,
+            shared_root=layout_report.shared_root,
+            operational_root=layout_report.operational_root,
+            path_counts=path_counts,
         )
 
     def _registered_skills_count(self) -> int:
@@ -175,6 +193,29 @@ def _directory_size(root: Path) -> int:
     except OSError:
         pass
     return size
+
+
+def _layout_path_counts(
+    *,
+    project_root: Path,
+    shared_root: str,
+    operational_root: str,
+) -> dict[str, int]:
+    return {
+        "shared_paths": _path_count(project_root / shared_root),
+        "operational_paths": _path_count(project_root / operational_root),
+    }
+
+
+def _path_count(root: Path) -> int:
+    if not root.exists():
+        return 0
+    if root.is_file():
+        return 1
+    try:
+        return sum(1 for path in root.rglob("*") if path.exists())
+    except OSError:
+        return 0
 
 
 def _unconfigured_host_validation() -> dict[str, str | None]:

@@ -6,7 +6,11 @@ from universal_memory.domain import StorageError
 from universal_memory.infrastructure.config.project_layout import (
     PROJECT_LAYOUT_PATHS,
     ensure_project_layout,
+    inspect_project_layout,
     is_project_initialized,
+    render_project_layout_metadata,
+    resolve_project_layout,
+    write_project_layout_metadata,
 )
 
 
@@ -72,3 +76,47 @@ def test_ensure_project_layout_rejects_file_directory_collisions(tmp_path: Path)
         ensure_project_layout(tmp_path)
 
     assert is_project_initialized(tmp_path) is False
+
+
+def test_shared_layout_metadata_loads_with_relative_paths(tmp_path: Path) -> None:
+    write_project_layout_metadata(tmp_path, layout="shared")
+
+    report = inspect_project_layout(tmp_path)
+    resolved = resolve_project_layout(tmp_path)
+
+    assert report.layout == "shared"
+    assert report.shared_root == "umem"
+    assert report.operational_root == ".umem"
+    assert report.precedence == "shared_over_legacy"
+    assert resolved.shared_memory_root == tmp_path / "umem" / "memory"
+    assert resolved.operational_locks_root == tmp_path / ".umem" / "locks"
+
+
+def test_shared_layout_metadata_rejects_absolute_or_traversal_roots(tmp_path: Path) -> None:
+    policy_path = tmp_path / "umem" / "project.toml"
+    policy_path.parent.mkdir()
+    policy_path.write_text(
+        'schema_version = "1"\nlayout = "shared"\nshared_root = "../outside"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(StorageError, match="project-relative"):
+        resolve_project_layout(tmp_path)
+
+
+def test_partial_layout_report_when_visible_root_exists_without_metadata(tmp_path: Path) -> None:
+    (tmp_path / "umem").mkdir()
+
+    report = inspect_project_layout(tmp_path)
+
+    assert report.layout == "partial"
+    assert "umem/project.toml" in report.warnings[0]
+
+
+def test_project_layout_metadata_rendering_uses_stable_defaults() -> None:
+    rendered = render_project_layout_metadata(layout="shared")
+
+    assert 'layout = "shared"' in rendered
+    assert 'shared_root = "umem"' in rendered
+    assert 'operational_root = ".umem"' in rendered
+    assert 'precedence = "shared_over_legacy"' in rendered

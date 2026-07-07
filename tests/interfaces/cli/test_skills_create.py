@@ -61,6 +61,10 @@ def test_skills_create_json_uses_cli_origin_and_success_envelope(capsys) -> None
             "when creating launch schedules",
             "--scope",
             "project",
+            "--visibility",
+            "shared",
+            "--category",
+            "user-facing",
             "--format",
             "json",
         ],
@@ -76,6 +80,8 @@ def test_skills_create_json_uses_cli_origin_and_success_envelope(capsys) -> None
             scope=LatentSkillScope.project,
             origin="cli",
             triggers=["when creating launch schedules"],
+            visibility="shared",
+            category="user-facing",
         )
     ]
     assert payload["operation"] == "skills.create"

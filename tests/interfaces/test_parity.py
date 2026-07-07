@@ -105,6 +105,8 @@ PARITY_EXCLUSIONS = {
 
 PARITY_MATRIX = {
     "init": "initialize_project",
+    "layout.status": "inspect_project_layout",
+    "layout.migrate": "migrate_project_layout",
     "status": "status",
     "doctor": "doctor",
     "context": "context",
@@ -278,6 +280,12 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
     ("cli_args", "mcp_tool", "mcp_args"),
     [
         (["init", "--format", "json"], "initialize_project", {}),
+        (["layout", "status", "--format", "json"], "inspect_project_layout", {}),
+        (
+            ["layout", "migrate", "--to", "shared", "--dry-run", "--format", "json"],
+            "migrate_project_layout",
+            {"target_layout": "shared", "dry_run": True},
+        ),
         (["status", "--format", "json"], "status", {}),
         (["doctor", "--format", "json"], "doctor", {}),
         (["context", "--format", "json"], "context", {}),
@@ -762,6 +770,7 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
         "activate_skill_command": activate_skill_result,
         "deactivate_skill_command": deactivate_skill_result,
         "update_skill_command": update_skill_result,
+        "layout_migrate_command": lambda command: migration_payload(dry_run=command.dry_run),
     }
 
 
@@ -805,7 +814,33 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         activate_skill=activate_skill_result,
         deactivate_skill=deactivate_skill_result,
         update_skill=update_skill_result,
+        migrate_project_layout=lambda command: migration_payload(dry_run=command.dry_run),
     )
+
+
+def migration_payload(*, dry_run: bool) -> dict[str, Any]:
+    data = {
+        "operation": "layout.migrate",
+        "source_layout": "legacy",
+        "target_layout": "shared",
+        "dry_run": dry_run,
+        "copied": [
+            {
+                "kind": "fact",
+                "id": "fact-1",
+                "reason": "copied",
+                "path": "umem/memory/facts.jsonl",
+            }
+        ],
+        "already_shared": [],
+        "skipped": [],
+        "conflicts": [],
+        "remaining_local": [],
+        "affected_paths": ["umem/project.toml", "umem/memory/facts.jsonl"],
+        "next_steps": [],
+        "warnings": [],
+    }
+    return {"operation": "layout.migrate", "scope": "project", "data": data, "warnings": []}
 
 
 def track_latent_skill_result(command: TrackLatentSkillCommand) -> TrackLatentSkillResult:

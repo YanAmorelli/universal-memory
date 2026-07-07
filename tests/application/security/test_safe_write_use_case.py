@@ -229,3 +229,22 @@ def test_rejects_absolute_or_traversal_paths(tmp_path: Path) -> None:
 
     assert snapshots.written == []
     assert audit.written == []
+
+
+def test_safe_write_allows_shared_root_while_auditing_operationally(tmp_path: Path) -> None:
+    use_case, _scanner, snapshots, audit = build_use_case(project_root=tmp_path)
+
+    result = use_case.execute(
+        SafeWriteCommand(
+            relative_path="umem/memory/facts.jsonl",
+            content="{}\n",
+            scope=AuditEventScope.project,
+            origin="repository",
+            action="write_fact",
+        )
+    )
+
+    assert (tmp_path / "umem" / "memory" / "facts.jsonl").read_text(encoding="utf-8") == "{}\n"
+    assert snapshots.written[0].relative_path == "umem/memory/facts.jsonl"
+    assert audit.written[0].scope == AuditEventScope.project
+    assert result.relative_path == "umem/memory/facts.jsonl"

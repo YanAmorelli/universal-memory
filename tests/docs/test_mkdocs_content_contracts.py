@@ -181,3 +181,19 @@ def test_skill_lifecycle_docs_mention_new_mcp_tool_names() -> None:
         "repair_skills",
     ):
         assert tool in docs
+
+
+def test_shared_root_docs_keep_operational_state_private() -> None:
+    docs = "\n".join(
+        read(path)
+        for path in (
+            "specs/002-shared-project-root/plan.md",
+            "specs/002-shared-project-root/quickstart.md",
+        )
+    )
+
+    assert "umem/project.toml" in docs
+    assert "umem/memory" in docs
+    assert "umem/skills" in docs
+    assert ".umem/locks" in docs
+    assert "use-universal-memory` remains operational under `.umem/skills" in docs

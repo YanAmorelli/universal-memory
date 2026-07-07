@@ -386,6 +386,10 @@ async def test_status_tool_uses_injected_use_case_and_matches_cli_json_contract(
                     "audit_reference": "audit-codex",
                 },
             },
+            "layout": "uninitialized",
+            "shared_root": "umem",
+            "operational_root": ".umem",
+            "path_counts": {},
         },
     }
 
@@ -428,7 +432,7 @@ async def test_doctor_tool_uses_injected_use_case_and_matches_cli_json_contract(
                     "detail": "Python 3.12.13",
                 }
             ],
-            "summary": {"total_checks": 1, "passed": 1, "failed": 0},
+            "summary": {"total_checks": 1, "passed": 1, "warnings": 0, "failed": 0},
         },
     }
 

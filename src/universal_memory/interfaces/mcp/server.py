@@ -4,6 +4,7 @@ import sys
 import traceback
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from inspect import signature
 from pathlib import Path
 from typing import Any, Literal
 
@@ -18,6 +19,11 @@ from universal_memory.application.host import (
     ConfigureHostResult,
     SyncInstructionsCommand,
     SyncInstructionsResult,
+)
+from universal_memory.application.layout import (
+    InspectProjectLayoutUseCase,
+    MigrateProjectLayoutCommand,
+    MigrateProjectLayoutUseCase,
 )
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
@@ -74,6 +80,8 @@ from universal_memory.application.skills import (
     RenameSkillResult,
     RepairSkillsCommand,
     RepairSkillsResult,
+    ShareSkillCommand,
+    ShareSkillResult,
     SyncSkillsCommand,
     SyncSkillsResult,
     TrackLatentSkillCommand,
@@ -96,6 +104,7 @@ from universal_memory.domain.entities import (
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
+from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.interfaces import errors as interface_errors
 from universal_memory.interfaces.errors import (
     error_descriptor,
@@ -114,7 +123,7 @@ JSON_RPC_UNEXPECTED_ERROR = interface_errors.JSON_RPC_UNEXPECTED_ERROR
 
 DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 TOKEN_ESTIMATE_CHARS = 4
-SetupProjectCommandHandler = Callable[[Path], SetupProjectResult]
+SetupProjectCommandHandler = Callable[..., SetupProjectResult]
 StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
 DoctorCommandHandler = Callable[[DoctorCommand], DoctorResult]
 ContextCommandHandler = Callable[[AssembleContextSummaryCommand], AssembleContextSummaryResult]
@@ -132,6 +141,7 @@ GenerateSkillCommandHandler = Callable[[GenerateSkillCommand], GenerateSkillResu
 CreateSkillCommandHandler = Callable[[CreateSkillCommand], CreateSkillResult]
 CreateSkillDraftCommandHandler = Callable[[CreateSkillDraftCommand], DraftSkillResult]
 PublishSkillCommandHandler = Callable[[PublishSkillCommand], PublishSkillResult]
+ShareSkillCommandHandler = Callable[[ShareSkillCommand], ShareSkillResult]
 ValidateSkillCommandHandler = Callable[[ValidateSkillCommand], ValidateSkillResult]
 AdoptSkillCommandHandler = Callable[[AdoptSkillCommand], AdoptSkillResult]
 UpdateCanonicalSkillCommandHandler = Callable[
@@ -152,11 +162,27 @@ ActivateSkillCommandHandler = Callable[[ActivateSkillCommand], ActivateSkillResu
 DeactivateSkillCommandHandler = Callable[[DeactivateSkillCommand], DeactivateSkillResult]
 UpdateSkillCommandHandler = Callable[[UpdateSkillCommand], UpdateSkillResult]
 ToolResponse = dict[str, Any]
+LayoutMigrateCommandHandler = Callable[[MigrateProjectLayoutCommand], dict[str, Any]]
 
 
 def _missing_use_case(_command: Any) -> Any:
     msg = "MCP use case dependency was not configured."
     raise RuntimeError(msg)
+
+
+def _execute_initialize_project(
+    command: SetupProjectCommandHandler,
+    project_root: Path,
+    *,
+    layout: str,
+) -> SetupProjectResult:
+    try:
+        sig = signature(command)
+        if "layout" in sig.parameters:
+            return command(project_root, layout=layout)
+    except (TypeError, ValueError):
+        pass
+    return command(project_root)
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +206,7 @@ class MCPUseCases:
     create_skill: CreateSkillCommandHandler = _missing_use_case
     create_skill_draft: CreateSkillDraftCommandHandler = _missing_use_case
     publish_skill: PublishSkillCommandHandler = _missing_use_case
+    share_skill: ShareSkillCommandHandler = _missing_use_case
     validate_skill: ValidateSkillCommandHandler = _missing_use_case
     adopt_skill: AdoptSkillCommandHandler = _missing_use_case
     update_canonical_skill: UpdateCanonicalSkillCommandHandler = _missing_use_case
@@ -195,6 +222,7 @@ class MCPUseCases:
     activate_skill: ActivateSkillCommandHandler = _missing_use_case
     deactivate_skill: DeactivateSkillCommandHandler = _missing_use_case
     update_skill: UpdateSkillCommandHandler = _missing_use_case
+    migrate_project_layout: LayoutMigrateCommandHandler = _missing_use_case
 
 
 def create_mcp_server(name: str = "universal-memory") -> FastMCP:
@@ -220,10 +248,10 @@ def configure_server(  # noqa: PLR0915
         return use_cases.status(GetMemoryStatusCommand(project_root=root)).initialized
 
     @server.tool(name="initialize_project")
-    def initialize_project() -> ToolResponse:
+    def initialize_project(layout: Literal["legacy", "shared"] = "legacy") -> ToolResponse:
         """Initialize the local Universal Memory project layout."""
         try:
-            result = use_cases.initialize_project(root)
+            result = _execute_initialize_project(use_cases.initialize_project, root, layout=layout)
             return _success_envelope(
                 operation="init",
                 scope="project",
@@ -248,6 +276,57 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="status", scope="project")
+
+    @server.tool(name="inspect_project_layout")
+    def inspect_layout() -> ToolResponse:
+        """Report the active project layout without mutating files."""
+        try:
+            result = InspectProjectLayoutUseCase(
+                project_root=root,
+                layout_port=LocalProjectLayoutPort(),
+            ).execute()
+            report = result["data"]
+            return _success_envelope(
+                operation=result["operation"],
+                scope="project",
+                data=report,
+                warnings=report["warnings"],
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="layout.status", scope="project")
+
+    @server.tool(name="migrate_project_layout")
+    def migrate_project_layout(  # noqa: PLR0913
+        target_layout: Literal["shared"] = "shared",
+        dry_run: bool = True,
+        include: list[Literal["facts", "rules", "skills"]] | None = None,
+        private_fact_ids: list[str] | None = None,
+        private_skill_slugs: list[str] | None = None,
+        shared_operational_skill_slugs: list[str] | None = None,
+    ) -> ToolResponse:
+        """Copy curated legacy project content into visible shared project storage."""
+        try:
+            command_handler = use_cases.migrate_project_layout
+            if command_handler is _missing_use_case:
+                command_handler = MigrateProjectLayoutUseCase(project_root=root).execute
+            result = command_handler(
+                MigrateProjectLayoutCommand(
+                    target_layout=target_layout,
+                    dry_run=dry_run,
+                    include=tuple(include or ["facts", "rules", "skills"]),
+                    private_fact_ids=tuple(private_fact_ids or []),
+                    private_skill_slugs=tuple(private_skill_slugs or []),
+                    shared_operational_skill_slugs=tuple(shared_operational_skill_slugs or []),
+                )
+            )
+            return _success_envelope(
+                operation=result["operation"],
+                scope="project",
+                data=result["data"],
+                warnings=result.get("warnings", []),
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="layout.migrate", scope="project")
 
     @server.tool(name="doctor")
     def doctor() -> ToolResponse:
@@ -293,6 +372,7 @@ def configure_server(  # noqa: PLR0915
         content: str,
         scope: Literal["project", "global"] = "project",
         tags: list[str] | None = None,
+        visibility: Literal["shared", "private"] | None = None,
     ) -> ToolResponse:
         """Persist a memory fact through the shared safe mutation pipeline."""
         try:
@@ -306,6 +386,7 @@ def configure_server(  # noqa: PLR0915
                     source="mcp",
                     tags=tags or [],
                     origin="mcp",
+                    visibility=visibility,
                 )
             )
             return _success_envelope(
@@ -320,6 +401,7 @@ def configure_server(  # noqa: PLR0915
     def list_facts(
         scope: Literal["project", "global"] | None = None,
         status: Literal["active", "stale", "archived", "purged"] = "active",
+        visibility: Literal["shared", "private", "all"] = "all",
     ) -> ToolResponse:
         """List memory facts with optional scope and status filters."""
         try:
@@ -327,7 +409,7 @@ def configure_server(  # noqa: PLR0915
             if fact_scope is None or fact_scope is FactScope.project:
                 require_project_initialized()
             result = use_cases.list_facts(
-                ListFactsCommand(scope=fact_scope, status=FactStatus(status))
+                ListFactsCommand(scope=fact_scope, status=FactStatus(status), visibility=visibility)
             )
             return _success_envelope(
                 operation="facts.list",
@@ -626,6 +708,8 @@ def configure_server(  # noqa: PLR0915
         triggers: list[str] | None = None,
         raw_markdown: str | None = None,
         targets: list[str] | None = None,
+        visibility: Literal["shared", "private"] | None = None,
+        category: Literal["user-facing", "operational"] = "user-facing",
     ) -> ToolResponse:
         """Create a canonical Agent Skill without native sync unless sync is explicit."""
         try:
@@ -643,6 +727,8 @@ def configure_server(  # noqa: PLR0915
                     slug=slug,
                     sync=sync,
                     targets=targets,
+                    visibility=visibility,
+                    category=category,
                 )
             )
             return _success_envelope(
@@ -711,11 +797,13 @@ def configure_server(  # noqa: PLR0915
             return _mcp_tool_error(error, operation="skills.validate", scope="project")
 
     @server.tool(name="publish_skill")
-    def publish_skill(
+    def publish_skill(  # noqa: PLR0913
         draft_or_path: str,
         slug: str | None = None,
         sync: bool = False,
         targets: list[str] | None = None,
+        visibility: Literal["shared", "private"] | None = None,
+        category: Literal["user-facing", "operational"] = "user-facing",
     ) -> ToolResponse:
         """Publish a validated draft as canonical and optionally sync native targets."""
         try:
@@ -727,6 +815,8 @@ def configure_server(  # noqa: PLR0915
                     slug=slug,
                     sync=sync,
                     targets=targets,
+                    visibility=visibility,
+                    category=category,
                 )
             )
             return _success_envelope(
@@ -737,6 +827,32 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="skills.publish", scope="project")
+
+    @server.tool(name="share_skill")
+    def share_skill(
+        skill_id_or_name: str,
+        category: Literal["user-facing", "operational"] = "user-facing",
+        confirm_operational: bool = False,
+    ) -> ToolResponse:
+        """Explicitly copy a project skill into shared repository content."""
+        try:
+            require_project_initialized()
+            result = use_cases.share_skill(
+                ShareSkillCommand(
+                    skill_id_or_name=skill_id_or_name,
+                    category=category,
+                    confirm_operational=confirm_operational,
+                    origin="mcp",
+                )
+            )
+            return _success_envelope(
+                operation="skills.share",
+                scope=result.agent_skill.scope.value,
+                data=result.to_payload(),
+                warnings=result.warnings,
+            )
+        except Exception as error:
+            return _mcp_tool_error(error, operation="skills.share", scope="project")
 
     @server.tool(name="promote_skill_recommendation")
     def promote_skill_recommendation(
@@ -803,11 +919,13 @@ def configure_server(  # noqa: PLR0915
             return _mcp_tool_error(error, operation="skills.sync", scope="all")
 
     @server.tool(name="import_skill")
-    def import_skill(
+    def import_skill(  # noqa: PLR0913
         path: str,
         scope: Literal["project", "global"] = "project",
         replace_native: bool = False,
         sync_after_import: bool = False,
+        visibility: Literal["shared", "private"] | None = None,
+        category: Literal["user-facing", "operational"] = "user-facing",
     ) -> ToolResponse:
         """Import an existing native or local Agent Skill directory into canonical UMEM storage."""
         try:
@@ -821,6 +939,8 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                     replace_native=replace_native,
                     sync_after_import=sync_after_import,
+                    visibility=visibility,
+                    category=category,
                 )
             )
             return _success_envelope(
@@ -833,12 +953,14 @@ def configure_server(  # noqa: PLR0915
             return _mcp_tool_error(error, operation="skills.import", scope=_raw_scope(scope))
 
     @server.tool(name="adopt_skill")
-    def adopt_skill(
+    def adopt_skill(  # noqa: PLR0913
         path: str,
         scope: Literal["project", "global"] = "project",
         slug: str | None = None,
         replace_native: bool = False,
         sync_after_adopt: bool = False,
+        visibility: Literal["shared", "private"] | None = None,
+        category: Literal["user-facing", "operational"] = "user-facing",
     ) -> ToolResponse:
         """Adopt an existing skill directory into UMEM without creating duplicate slugs."""
         try:
@@ -853,6 +975,8 @@ def configure_server(  # noqa: PLR0915
                     slug=slug,
                     replace_native=replace_native,
                     sync_after_adopt=sync_after_adopt,
+                    visibility=visibility,
+                    category=category,
                 )
             )
             return _success_envelope(
@@ -1119,6 +1243,10 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
             "project_path": result.project_path,
             "installed_version": result.installed_version,
             "recommended_action": result.recommended_action,
+            "layout": result.layout,
+            "shared_root": result.shared_root,
+            "operational_root": result.operational_root,
+            "path_counts": result.path_counts or {},
         }
 
     return {
@@ -1131,6 +1259,10 @@ def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
         "approximate_size_bytes": result.approximate_size_bytes,
         "last_health_check": result.last_health_check,
         "host_validation": result.host_validation,
+        "layout": result.layout,
+        "shared_root": result.shared_root,
+        "operational_root": result.operational_root,
+        "path_counts": result.path_counts or {},
     }
 
 
@@ -1163,7 +1295,7 @@ def _context_payload(
 
 
 def _init_payload(result: SetupProjectResult, project_root: Path) -> dict[str, Any]:
-    return {
+    payload = {
         "project_path": _relative_path(result.project_path, project_root),
         "config_path": _relative_path(result.config_path, project_root),
         "memory_path": _relative_path(result.memory_path, project_root),
@@ -1173,6 +1305,20 @@ def _init_payload(result: SetupProjectResult, project_root: Path) -> dict[str, A
         "already_initialized": result.already_initialized,
         "audit_reference": "not-implemented-yet",
     }
+    payload.update(
+        {
+            "layout": result.layout,
+            "shared_root": (
+                _relative_path(result.shared_root, project_root)
+                if result.shared_root is not None
+                else None
+            ),
+            "operational_root": _relative_path(result.operational_root, project_root),
+            "shared_paths": result.shared_paths or [],
+            "operational_paths": result.operational_paths or [],
+        }
+    )
+    return payload
 
 
 def _remember_payload(result: RememberFactResult) -> dict[str, Any]:
@@ -1182,6 +1328,8 @@ def _remember_payload(result: RememberFactResult) -> dict[str, Any]:
         "scope": fact.scope.value,
         "status": fact.status.value,
         "tags": fact.tags,
+        "visibility": fact.metadata.get("visibility"),
+        "storage_path": fact.metadata.get("storage_path"),
         "created_at": format_utc_iso(fact.created_at),
         "audit_reference": result.audit_reference,
     }
@@ -1197,6 +1345,8 @@ def _fact_payload(fact: Any) -> dict[str, Any]:
         "recurrence_count": fact.recurrence_count,
         "tags": fact.tags,
         "metadata": fact.metadata,
+        "visibility": fact.metadata.get("visibility", "legacy"),
+        "storage_path": fact.metadata.get("storage_path"),
         "created_at": format_utc_iso(fact.created_at),
         "updated_at": format_utc_iso(fact.updated_at),
     }

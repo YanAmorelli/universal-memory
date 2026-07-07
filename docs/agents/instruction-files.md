@@ -42,3 +42,23 @@ Use instruction files as entrypoints: they should tell the agent how to bootstra
 UMEM, where to retrieve current context, and which operating skill to follow.
 Durable facts belong in UMEM memory, and reusable procedures belong in canonical
 UMEM skills.
+
+## UMEM Paths
+
+Instruction files should point to UMEM; they should not duplicate the contents of
+UMEM stores.
+
+| Path | Responsibility |
+| --- | --- |
+| `AGENTS.md` | Shared bootstrap policy and pointers for agents. |
+| `umem/project.toml` | Shared-layout metadata and approved shared operational skill slugs. |
+| `umem/memory/` | Reviewable project facts and rules intended for collaborators. |
+| `umem/skills/` | Reviewable shared project skills. |
+| `.umem/config.toml` | Local project runtime configuration. |
+| `.umem/memory/` | Legacy project memory plus private project facts and rules. |
+| `.umem/skills/` | Legacy, private, and operational project skills. |
+| `.umem/audit/`, `.umem/snapshots/`, `.umem/locks/` | Private operational state that should not be published by default. |
+
+Before adding long-lived guidance to `AGENTS.md`, decide whether it is really a
+shared rule, a provider-specific delta, a fact in `umem/memory/`, or a reusable
+skill under `umem/skills/` or `.umem/skills/`.

@@ -130,8 +130,8 @@ def test_setup_project_skills_lifecycle_documents_valid_create_command(tmp_path:
 
     assert '--trigger "when to use it"' in skills_lifecycle_content
     assert (
-        "umem skills import .agents/skills/<skill-name> --scope project --sync"
-        in skills_lifecycle_content
+        "umem skills import .agents/skills/<skill-name> --scope project "
+        "--visibility shared --category user-facing --sync" in skills_lifecycle_content
     )
     assert "umem skills sync <skill-id-or-name> --format json" in skills_lifecycle_content
     assert "Official Workflows" in skills_lifecycle_content
@@ -159,6 +159,30 @@ def test_setup_project_persists_selected_runtimes(tmp_path: Path) -> None:
     assert '[runtimes]\nenabled = [\n    "codex",\n]\n' in (
         tmp_path / ".umem" / "config.toml"
     ).read_text(encoding="utf-8")
+
+
+def test_setup_project_shared_layout_creates_visible_root_and_keeps_umem_skill_private(
+    tmp_path: Path,
+) -> None:
+    result = setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+        layout="shared",
+    )
+
+    assert result.layout == "shared"
+    assert result.shared_root == Path("umem")
+    assert result.operational_root == Path(".umem")
+    assert result.shared_paths == ["umem/project.toml", "umem/memory", "umem/skills"]
+    assert (tmp_path / "umem" / "project.toml").is_file()
+    assert (tmp_path / "umem" / "memory").is_dir()
+    assert (tmp_path / "umem" / "skills").is_dir()
+    assert (tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md").is_file()
+    assert not (tmp_path / "umem" / "skills" / "use-universal-memory").exists()
+    policy = tomllib.loads((tmp_path / "umem" / "project.toml").read_text(encoding="utf-8"))
+    assert policy["visibility_defaults"]["operational_skills"] == "private"
+    assert policy["shared_operational_skills"] == []
 
 
 def test_setup_project_accepts_runtime_aliases_and_rejects_unknown_runtime(
@@ -268,6 +292,32 @@ def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path)
         ".umem/skills/use-universal-memory/references/guardrails-and-recording.md",
         ".umem/memory/latent_skills.jsonl",
     ]
+
+
+def test_setup_project_shared_layout_is_idempotent_and_reports_existing_paths(
+    tmp_path: Path,
+) -> None:
+    first_result = setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+        layout="shared",
+    )
+    second_result = setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+        layout="shared",
+    )
+
+    assert first_result.created is True
+    assert "umem/project.toml" in first_result.created_paths
+    assert second_result.created is False
+    assert second_result.already_initialized is True
+    assert second_result.created_paths == []
+    assert "umem/project.toml" in second_result.existing_paths
+    assert "umem/memory" in second_result.existing_paths
+    assert "umem/skills" in second_result.existing_paths
 
 
 def test_setup_project_does_not_overwrite_existing_default_umem_skill_reference(

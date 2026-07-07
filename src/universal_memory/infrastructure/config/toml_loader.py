@@ -26,8 +26,10 @@ TomlData = dict[str, Any]
 class LoadedConfig:
     global_config_path: Path
     project_config_path: Path
+    shared_project_config_path: Path
     global_data: TomlData
     project_data: TomlData
+    shared_project_data: TomlData
     merged: TomlData
     resolved_paths: TomlData
     write_result: SafeWriteResult | None = None
@@ -49,20 +51,32 @@ def load_config(project_root: Path, global_config_path: Path | None = None) -> L
         else Path.home() / ".config" / "umem" / "config.toml"
     )
     project_config_path = normalized_project_root / ".umem" / "config.toml"
+    shared_project_config_path = normalized_project_root / "umem" / "project.toml"
 
     global_data = _read_toml_document(resolved_global_config_path)
     project_data = _read_toml_document(project_config_path)
-    merged = _with_legacy_hosts_migration(_deep_merge(global_data, project_data))
+    raw_shared_project_data = _read_toml_document(shared_project_config_path)
+    shared_project_data = (
+        {"project_layout": raw_shared_project_data} if raw_shared_project_data else {}
+    )
+    merged = _with_legacy_hosts_migration(
+        _deep_merge(_deep_merge(global_data, project_data), shared_project_data)
+    )
     resolved_paths = _deep_merge(
         _resolve_config_paths(global_data, resolved_global_config_path.parent),
-        _resolve_config_paths(project_data, normalized_project_root),
+        _deep_merge(
+            _resolve_config_paths(project_data, normalized_project_root),
+            _resolve_config_paths(shared_project_data, normalized_project_root),
+        ),
     )
 
     return LoadedConfig(
         global_config_path=resolved_global_config_path,
         project_config_path=project_config_path,
+        shared_project_config_path=shared_project_config_path,
         global_data=global_data,
         project_data=project_data,
+        shared_project_data=shared_project_data,
         merged=merged,
         resolved_paths=resolved_paths,
     )
@@ -134,16 +148,23 @@ def update_project_config(
             )
         )
 
-    merged = _with_legacy_hosts_migration(_deep_merge(global_data, project_data))
+    merged = _with_legacy_hosts_migration(
+        _deep_merge(_deep_merge(global_data, project_data), loaded.shared_project_data)
+    )
     resolved_paths = _deep_merge(
         _resolve_config_paths(global_data, loaded.global_config_path.parent),
-        _resolve_config_paths(project_data, project_root.resolve()),
+        _deep_merge(
+            _resolve_config_paths(project_data, project_root.resolve()),
+            _resolve_config_paths(loaded.shared_project_data, project_root.resolve()),
+        ),
     )
     return LoadedConfig(
         global_config_path=loaded.global_config_path,
         project_config_path=loaded.project_config_path,
+        shared_project_config_path=loaded.shared_project_config_path,
         global_data=global_data,
         project_data=project_data,
+        shared_project_data=loaded.shared_project_data,
         merged=merged,
         resolved_paths=resolved_paths,
         write_result=write_result,

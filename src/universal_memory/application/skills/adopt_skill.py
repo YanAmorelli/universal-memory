@@ -35,6 +35,8 @@ class AdoptSkillCommand:
     slug: str | None = None
     replace_native: bool = False
     sync_after_adopt: bool = False
+    visibility: str | None = None
+    category: str = "user-facing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +74,11 @@ class AdoptSkillResult:
                 "canonical_path": self.agent_skill.canonical_path,
                 "origin": self.agent_skill.origin,
                 "content_hash": self.agent_skill.content_hash,
+                "visibility": self.agent_skill.visibility,
+                "category": self.agent_skill.category,
             },
+            "visibility": self.agent_skill.visibility,
+            "category": self.agent_skill.category,
         }
 
 
@@ -85,6 +91,8 @@ class _AdoptSkillSchema(BaseModel):
     slug: str | None = None
     replace_native: bool = False
     sync_after_adopt: bool = False
+    visibility: str | None = None
+    category: str = "user-facing"
 
 
 class AdoptSkillUseCase:
@@ -116,7 +124,13 @@ class AdoptSkillUseCase:
         markdown = skill_file.read_text(encoding="utf-8")
         parsed = _parse_skill_markdown(markdown)
         slug = validate_slug(validated.slug.strip() if validated.slug else _slug(parsed.name))
-        canonical_dir = _skill_dir_for(validated.scope, slug)
+        category = _normalize_category(validated.category)
+        visibility = self._resolve_visibility(
+            scope=validated.scope,
+            requested_visibility=validated.visibility,
+            category=category,
+        )
+        canonical_dir = self._skill_dir_for(validated.scope, slug, visibility, category)
         canonical_file = f"{canonical_dir}/SKILL.md"
         report = validate_skill_tree(skill_file, project_root=self.project_root, subject=slug)
         assert_validation_passes(report)
@@ -144,6 +158,7 @@ class AdoptSkillUseCase:
                     "creation_flow": "adopt",
                     "adopt_source": _relative_display(self.project_root, source_dir),
                     "validation": report.to_payload(),
+                    **_placement_metadata(validated.scope, visibility, category),
                 },
             )
             registry_write = self.repository.write(skill, origin=validated.origin)
@@ -171,6 +186,8 @@ class AdoptSkillUseCase:
                 replace_native=validated.replace_native,
                 sync_after_import=validated.sync_after_adopt,
                 slug=slug,
+                visibility=visibility,
+                category=category,
             )
         )
         skill = imported.agent_skill.model_copy(
@@ -190,6 +207,52 @@ class AdoptSkillUseCase:
             warnings=[*report.warnings, *imported.warnings],
         )
 
+    def _resolve_visibility(
+        self,
+        *,
+        scope: LatentSkillScope,
+        requested_visibility: str | None,
+        category: str,
+    ) -> str | None:
+        if scope == LatentSkillScope.global_:
+            if requested_visibility is not None:
+                raise ValidationFailedError("visibility is only supported for project skills.")
+            return None
+        if requested_visibility is not None:
+            visibility = requested_visibility.strip().lower()
+            if visibility not in {"shared", "private"}:
+                raise ValidationFailedError("visibility must be shared or private.")
+            if visibility == "shared" and category == "operational":
+                raise ValidationFailedError(
+                    "operational skills cannot be shared by adopt; use skills share with "
+                    "operational confirmation."
+                )
+            return visibility
+        if self._project_uses_shared_layout():
+            return "private" if category == "operational" else "shared"
+        return None
+
+    def _project_uses_shared_layout(self) -> bool:
+        layout = getattr(self.repository, "layout", None)
+        return bool(getattr(layout, "is_shared", False))
+
+    def _skill_dir_for(
+        self,
+        scope: LatentSkillScope,
+        slug: str,
+        visibility: str | None,
+        category: str,
+    ) -> str:
+        if scope == LatentSkillScope.global_:
+            return f"skills/{slug}"
+        if (
+            self._project_uses_shared_layout()
+            and visibility == "shared"
+            and category != "operational"
+        ):
+            return f"umem/skills/{slug}"
+        return f".umem/skills/{slug}"
+
 
 def _source_dir(project_root: Path, path: Path) -> Path:
     source = path if path.is_absolute() else project_root / path
@@ -204,12 +267,25 @@ def _is_canonical_source(project_root: Path, source_dir: Path, canonical_dir: st
     return source_dir == (project_root / canonical_dir).resolve()
 
 
-def _skill_dir_for(scope: LatentSkillScope, slug: str) -> str:
-    return f"skills/{slug}" if scope == LatentSkillScope.global_ else f".umem/skills/{slug}"
-
-
 def _relative_display(project_root: Path, path: Path) -> str:
     try:
         return path.resolve().relative_to(project_root.resolve()).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+def _normalize_category(category: str) -> str:
+    normalized = category.strip().lower().replace("_", "-")
+    if normalized not in {"user-facing", "operational"}:
+        raise ValidationFailedError("category must be user-facing or operational.")
+    return normalized
+
+
+def _placement_metadata(
+    scope: LatentSkillScope,
+    visibility: str | None,
+    category: str,
+) -> dict[str, str]:
+    if scope == LatentSkillScope.project and visibility is not None:
+        return {"visibility": visibility, "category": category}
+    return {}

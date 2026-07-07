@@ -36,7 +36,12 @@ from universal_memory.domain.ports import (
     SecretScannerPort,
     SnapshotRepository,
 )
-from universal_memory.domain.project_layout import ProjectLayoutResult
+from universal_memory.domain.project_layout import (
+    ProjectLayoutInspection,
+    ProjectLayoutPolicy,
+    ProjectLayoutResult,
+    ResolvedProjectLayout,
+)
 
 PortType = type[ABC]
 type MethodExpectations = dict[str, tuple[object, dict[str, object]]]
@@ -96,7 +101,13 @@ EXPECTED_METHODS: dict[PortType, MethodExpectations] = {
     },
     ProjectLayoutPort: {
         "ensure_project_layout": (ProjectLayoutResult, {"project_root": Path}),
+        "inspect_project_layout": (ProjectLayoutInspection, {"project_root": Path}),
         "is_project_initialized": (bool, {"project_root": Path}),
+        "resolve_project_layout": (ResolvedProjectLayout, {"project_root": Path}),
+        "write_project_layout_metadata": (
+            ProjectLayoutPolicy,
+            {"project_root": Path},
+        ),
     },
     SecretScannerPort: {
         "scan": (type(None), {"content": str}),

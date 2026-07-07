@@ -7,6 +7,7 @@ from universal_memory.application.host import (
     ConfigureHostUseCase,
     SyncInstructionsUseCase,
 )
+from universal_memory.application.layout import MigrateProjectLayoutUseCase
 from universal_memory.application.memory import (
     AssembleContextSummaryUseCase,
     ContextHygieneUseCase,
@@ -38,6 +39,7 @@ from universal_memory.application.skills import (
     RecommendSkillsUseCase,
     RenameSkillUseCase,
     RepairSkillsUseCase,
+    ShareSkillUseCase,
     SyncSkillsUseCase,
     TrackLatentSkillUseCase,
     UpdateCanonicalSkillUseCase,
@@ -262,6 +264,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
             agent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    share_skill_use_case = ShareSkillUseCase(
+        project_root=project_root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
     validate_skill_use_case = ValidateSkillUseCase(
         project_root=project_root,
         repository=agent_skill_repository,
@@ -330,6 +337,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     update_benchmarks_use_case = UpdateBenchmarksUseCase(
         safe_write_use_case=safe_write_use_case,
     )
+    layout_migrate_use_case = MigrateProjectLayoutUseCase(
+        project_root=project_root,
+        safe_write_use_case=safe_write_use_case,
+    )
 
     def locale_resolver() -> str:
         try:
@@ -379,6 +390,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         create_skill_command=create_skill_use_case.execute,
         create_skill_draft_command=create_skill_draft_use_case.execute,
         publish_skill_command=publish_skill_use_case.execute,
+        share_skill_command=share_skill_use_case.execute,
         validate_skill_command=validate_skill_use_case.execute,
         adopt_skill_command=adopt_skill_use_case.execute,
         update_canonical_skill_command=update_canonical_skill_use_case.execute,
@@ -398,6 +410,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         update_managed_skills_command=update_managed_skills_use_case.execute,
         update_migrate_command=update_migrate_use_case.execute,
         update_benchmarks_command=update_benchmarks_use_case.execute,
+        layout_migrate_command=layout_migrate_use_case.execute,
         locale_resolver=locale_resolver,
     )
     return configured_main(argv)

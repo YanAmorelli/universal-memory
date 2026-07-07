@@ -20,5 +20,20 @@ def skill_payload_assertions():
     return assert_lifecycle_payload
 
 
+@pytest.fixture
+def layout_payload_assertions():
+    def assert_layout_payload(
+        payload: dict[str, Any],
+        *,
+        operation: str,
+        required_keys: set[str],
+    ) -> None:
+        assert payload["operation"] == operation
+        data = payload.get("data", payload)
+        assert required_keys <= set(data)
+
+    return assert_layout_payload
+
+
 def summary_lines(output: str) -> list[str]:
     return [line.strip() for line in output.splitlines() if line.strip()]
