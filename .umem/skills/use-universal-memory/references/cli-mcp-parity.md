@@ -29,9 +29,11 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | --- | --- | --- |
 | Initialize project | `umem init --yes --format json` | `initialize_project()` |
 | Status | `umem status --format json` | `status()` |
+| Inspect project layout | `umem layout status --format json` | `inspect_project_layout()` |
+| Migrate project layout | `umem layout migrate --to shared --dry-run --format json` | `migrate_project_layout(target_layout="shared", dry_run=true)` |
 | Context | `umem context --scope project --format json` | `context(scope="project")` |
-| Remember fact | `umem remember "..." --scope project --tag workflow --format json` | `remember_fact(content="...", scope="project", tags=["workflow"])` |
-| List facts | `umem facts list --scope project --format json` | `list_facts(scope="project")` |
+| Remember fact | `umem remember "..." --scope project --visibility shared --tag workflow --format json` | `remember_fact(content="...", scope="project", visibility="shared", tags=["workflow"])` |
+| List facts | `umem facts list --scope project --visibility all --format json` | `list_facts(scope="project", visibility="all")` |
 | Purge fact | `umem facts purge --id <fact-id> --format json` | `purge_fact(id="<fact-id>", confirm=true)` |
 | Audit list | `umem audit list --scope project --format json` | `list_audit_events(scope="project")` |
 | Snapshots list | `umem snapshots list --scope project --format json` | `list_snapshots(scope="project")` |
@@ -46,6 +48,8 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | Skill publish | `umem skills publish <draft-or-path> --format json` | `publish_skill(draft_or_path="<draft-or-path>")` |
 | Skill create | `umem skills create ... --format json` | `create_skill(...)` |
 | Skill adopt | `umem skills adopt <path> --format json` | `adopt_skill(path="<path>")` |
+| Skill import | `umem skills import <path> --format json` | `import_skill(path="<path>")` |
+| Skill share | `umem skills share <skill> --yes --format json` | `share_skill(skill_id_or_name="<skill>", confirm_operational=true)` |
 | Skill canonical update | `umem skills canonical update <skill> --file <path> --format json` | `update_canonical_skill(...)` |
 | Skill rename | `umem skills rename <skill> --slug <slug> --format json` | `rename_skill(...)` |
 | Skill cleanup | `umem skills cleanup <skill> --targets --format json` | `cleanup_skill(...)` |
@@ -77,3 +81,11 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 - New public capabilities should include both CLI and MCP coverage unless explicitly
   marked internal.
 - Error output must not leak secrets, stack traces, or absolute local paths.
+- Shared-layout JSON payloads should expose project-relative paths. Layout status
+  should include `shared_root`, `operational_root`, `ignored_shared_paths`,
+  `tracked_operational_paths`, and `overlaps`.
+- Project fact and skill payloads should preserve `visibility` and `storage_path`
+  or canonical path metadata across CLI and MCP.
+- Operational skill sharing must be explicit on both surfaces: CLI uses
+  `--category operational --yes`; MCP uses `category="operational"` and
+  `confirm_operational=true`.

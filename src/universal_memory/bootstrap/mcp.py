@@ -25,6 +25,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         ConfigureHostUseCase,
         SyncInstructionsUseCase,
     )
+    from universal_memory.application.layout import MigrateProjectLayoutUseCase  # noqa: PLC0415
     from universal_memory.application.memory import (  # noqa: PLC0415
         AssembleContextSummaryUseCase,
         GetMemoryStatusUseCase,
@@ -56,6 +57,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         RecommendSkillsUseCase,
         RenameSkillUseCase,
         RepairSkillsUseCase,
+        ShareSkillUseCase,
         SyncSkillsUseCase,
         TrackLatentSkillUseCase,
         UpdateCanonicalSkillUseCase,
@@ -228,6 +230,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             agent_skill_repository, "global_safe_write_use_case", None
         ),
     )
+    share_skill_use_case = ShareSkillUseCase(
+        project_root=root,
+        repository=agent_skill_repository,
+        safe_write_use_case=safe_write_use_case,
+    )
     validate_skill_use_case = ValidateSkillUseCase(
         project_root=root,
         repository=agent_skill_repository,
@@ -283,12 +290,17 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         repository=latent_skill_repository,
         agent_skill_repository=agent_skill_repository,
     )
+    layout_migrate_use_case = MigrateProjectLayoutUseCase(
+        project_root=root,
+        safe_write_use_case=safe_write_use_case,
+    )
 
-    def initialize_project(project_root: Path):
+    def initialize_project(project_root: Path, *, layout: str = "legacy"):
         return setup_project(
             project_root,
             layout_port=layout_port,
             config_validation_port=LocalConfigValidationPort(),
+            layout=layout,
         )
 
     return configure_server(
@@ -313,6 +325,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             create_skill=create_skill_use_case.execute,
             create_skill_draft=create_skill_draft_use_case.execute,
             publish_skill=publish_skill_use_case.execute,
+            share_skill=share_skill_use_case.execute,
             validate_skill=validate_skill_use_case.execute,
             adopt_skill=adopt_skill_use_case.execute,
             update_canonical_skill=update_canonical_skill_use_case.execute,
@@ -328,6 +341,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             activate_skill=_activate_skill_use_case.execute,
             deactivate_skill=_deactivate_skill_use_case.execute,
             update_skill=_update_skill_use_case.execute,
+            migrate_project_layout=layout_migrate_use_case.execute,
         ),
         project_root=root,
     )

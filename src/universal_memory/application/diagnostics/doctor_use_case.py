@@ -8,9 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
+from universal_memory.application.layout.inspect_project_layout import (
+    inspect_repository_layout_health,
+)
+from universal_memory.domain.project_layout import ProjectLayoutInspection
 from universal_memory.infrastructure.config.project_layout import (
     DIRECTORY_LAYOUT_PATHS,
     PROJECT_LAYOUT_PATHS,
+    inspect_project_layout,
 )
 from universal_memory.infrastructure.config.toml_loader import load_config
 
@@ -48,12 +53,14 @@ class DoctorCheck:
 class DoctorSummary:
     total_checks: int
     passed: int
+    warnings: int
     failed: int
 
     def to_payload(self) -> dict[str, int]:
         return {
             "total_checks": self.total_checks,
             "passed": self.passed,
+            "warnings": self.warnings,
             "failed": self.failed,
         }
 
@@ -64,13 +71,19 @@ class DoctorResult:
 
     @property
     def ok(self) -> bool:
-        return all(check.status == "success" for check in self.checks)
+        return all(check.status != "failed" for check in self.checks)
 
     @property
     def summary(self) -> DoctorSummary:
         passed = sum(1 for check in self.checks if check.status == "success")
-        failed = len(self.checks) - passed
-        return DoctorSummary(total_checks=len(self.checks), passed=passed, failed=failed)
+        warnings = sum(1 for check in self.checks if check.status == "warning")
+        failed = sum(1 for check in self.checks if check.status == "failed")
+        return DoctorSummary(
+            total_checks=len(self.checks),
+            passed=passed,
+            warnings=warnings,
+            failed=failed,
+        )
 
     def to_payload(self) -> dict[str, object]:
         return {
@@ -107,6 +120,7 @@ class DoctorUseCase:
             self._python_version_check(),
             self._path_permissions_check(project_root),
             self._project_layout_check(project_root),
+            *self._shared_layout_checks(project_root),
             self._path_executables_check(),
             self._hosts_integration_check(project_root),
         ]
@@ -193,6 +207,138 @@ class DoctorUseCase:
             status="failed",
             error="; ".join(failures),
             recovery_hint="Run umem init --yes to rebuild missing default paths.",
+        )
+
+    def _shared_layout_checks(self, project_root: Path) -> list[DoctorCheck]:
+        report = inspect_repository_layout_health(
+            project_root,
+            inspect_project_layout(project_root),
+        )
+        checks = [
+            self._project_layout_mode_check(project_root, report),
+            self._shared_root_visibility_check(report),
+            self._operational_root_privacy_check(report),
+            self._layout_overlaps_check(report),
+        ]
+        return checks
+
+    def _project_layout_mode_check(
+        self,
+        project_root: Path,
+        report: ProjectLayoutInspection,
+    ) -> DoctorCheck:
+        layout = report.layout
+        detail = f"Layout mode is {layout}."
+        if layout == "shared":
+            missing = [
+                relative_path
+                for relative_path in ("umem/project.toml", "umem/memory", "umem/skills")
+                if not (project_root / relative_path).exists()
+            ]
+            if missing:
+                return DoctorCheck(
+                    name="project_layout_mode",
+                    status="warning",
+                    detail="Layout mode is shared but shared paths are incomplete.",
+                    error=f"Missing shared paths: {', '.join(missing)}",
+                    recovery_hint=(
+                        "Run umem init --layout shared --yes or repair umem/project.toml."
+                    ),
+                )
+            return DoctorCheck(
+                name="project_layout_mode",
+                status="success",
+                detail="Shared project layout is active.",
+            )
+        if layout == "partial":
+            return DoctorCheck(
+                name="project_layout_mode",
+                status="warning",
+                detail=detail,
+                error="Visible umem/ content exists without complete shared metadata.",
+                recovery_hint=(
+                    "Create umem/project.toml or run umem layout migrate --to shared --apply."
+                ),
+            )
+        if layout == "legacy":
+            return DoctorCheck(
+                name="project_layout_mode",
+                status="success",
+                detail="Legacy project layout is active.",
+            )
+        return DoctorCheck(
+            name="project_layout_mode",
+            status="warning",
+            detail=detail,
+            error="Project has not selected a UMEM layout.",
+            recovery_hint="Run umem init --yes or umem init --layout shared --yes.",
+        )
+
+    @staticmethod
+    def _shared_root_visibility_check(report: ProjectLayoutInspection) -> DoctorCheck:
+        if not report.git_status_available:
+            return DoctorCheck(
+                name="shared_root_visibility",
+                status="warning",
+                detail="Git metadata is unavailable.",
+                recovery_hint="Run umem doctor inside a Git repository to verify umem/ visibility.",
+            )
+        ignored = report.ignored_shared_paths or []
+        if ignored:
+            return DoctorCheck(
+                name="shared_root_visibility",
+                status="warning",
+                error=f"Shared paths are ignored: {', '.join(ignored)}",
+                recovery_hint="Update ignore rules so umem/ shared content is reviewable.",
+            )
+        return DoctorCheck(
+            name="shared_root_visibility",
+            status="success",
+            detail="Shared root visibility is reviewable.",
+        )
+
+    @staticmethod
+    def _operational_root_privacy_check(report: ProjectLayoutInspection) -> DoctorCheck:
+        if not report.git_status_available:
+            return DoctorCheck(
+                name="operational_root_privacy",
+                status="warning",
+                detail="Git metadata is unavailable.",
+                recovery_hint="Run umem doctor inside a Git repository to verify .umem privacy.",
+            )
+        tracked = report.tracked_operational_paths or []
+        if tracked:
+            return DoctorCheck(
+                name="operational_root_privacy",
+                status="warning",
+                error=f"Operational paths are tracked: {', '.join(tracked)}",
+                recovery_hint="Remove operational .umem paths from Git tracking.",
+            )
+        return DoctorCheck(
+            name="operational_root_privacy",
+            status="success",
+            detail="Operational .umem state is not tracked.",
+        )
+
+    @staticmethod
+    def _layout_overlaps_check(report: ProjectLayoutInspection) -> DoctorCheck:
+        overlaps = report.overlaps or []
+        if overlaps:
+            categories = ", ".join(
+                f"{item['category']}:{item['id']}" for item in overlaps if "id" in item
+            )
+            return DoctorCheck(
+                name="layout_overlaps",
+                status="warning",
+                error=f"Legacy/shared overlaps detected: {categories}",
+                recovery_hint=(
+                    "Shared content takes precedence; remove or migrate shadowed legacy records."
+                ),
+            )
+        return DoctorCheck(
+            name="layout_overlaps",
+            status="success",
+            detail="No legacy/shared overlaps detected.",
         )
 
     def _path_executables_check(self) -> DoctorCheck:

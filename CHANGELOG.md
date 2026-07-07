@@ -5,6 +5,37 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.4.0] - 2026-07-07
+
+### Added
+
+- Added shared project root support with commit-friendly `umem/project.toml`,
+  `umem/memory/`, and `umem/skills/` paths while preserving private operational state
+  under `.umem/`.
+- Added shared-layout initialization, status, migration, doctor diagnostics, and
+  CLI/MCP parity coverage.
+- Added explicit shared skill flows so user-facing project skills can be reviewed and
+  committed under `umem/skills/<slug>/`.
+
+### Changed
+
+- Project facts, rules, and user-facing skills now resolve through shared layout
+  precedence when `umem/project.toml` is present.
+- Migration to shared layout removes successfully migrated project facts from legacy
+  `.umem/memory/facts.jsonl` while preserving private, global, conflicting, and
+  operational records.
+- Agent and user documentation now distinguish commit-friendly shared content from
+  private `.umem/` operational state.
+
+### Fixed
+
+- Fixed shared-layout migration to materialize expected shared directories even when no
+  shared skills exist.
+- Fixed package readiness and doctor diagnostics around shared-root visibility,
+  operational-root privacy, and legacy/shared overlaps.
+- Fixed Git subprocess checks so inherited hook-local `GIT_*` environment variables do
+  not make diagnostics inspect the caller repository instead of the target project.
+
 ## [0.3.0] - 2026-06-27
 
 ### Added
@@ -195,7 +226,8 @@ corresponding Git tags when available.
 - Added secret scanning guardrails.
 - Added safe-write snapshots and audit trails before mutations.
 
-[0.3.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.1...HEAD
+[0.4.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.4...v0.1.5

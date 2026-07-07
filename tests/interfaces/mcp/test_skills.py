@@ -6,12 +6,20 @@ from typing import Any, cast
 
 import pytest
 
+from tests.application.skills.test_create_skill import make_shared_project_root
+from tests.application.skills.test_generate_skill import (
+    RecordingAuditRepository,
+    RecordingScanner,
+    RecordingSnapshotRepository,
+)
 from universal_memory.application.memory import GetMemoryStatusResult
+from universal_memory.application.security import SafeWriteUseCase
 from universal_memory.application.skills import (
     ActivateSkillCommand,
     ActivateSkillResult,
     CreateSkillCommand,
     CreateSkillResult,
+    CreateSkillUseCase,
     DeactivateSkillCommand,
     DeactivateSkillResult,
     ImportSkillCommand,
@@ -20,6 +28,9 @@ from universal_memory.application.skills import (
     PromoteSkillRecommendationResult,
     RecommendSkillsCommand,
     RecommendSkillsResult,
+    ShareSkillCommand,
+    ShareSkillResult,
+    ShareSkillUseCase,
     SkillRecommendationItem,
     SyncSkillResult,
     SyncSkillsCommand,
@@ -37,6 +48,7 @@ from universal_memory.domain.entities import (
     LatentSkillScope,
     LatentSkillStatus,
 )
+from universal_memory.infrastructure.storage import LocalAgentSkillRepository
 from universal_memory.interfaces.mcp.server import (
     JSON_RPC_SECRET_DETECTED,
     JSON_RPC_STORAGE_ERROR,
@@ -232,6 +244,37 @@ def import_result() -> ImportSkillResult:
         affected_paths=[".umem/skills/review-helper/SKILL.md"],
         audit_reference="audit-import",
         snapshot_reference="snapshot-import",
+    )
+
+
+def share_result() -> ShareSkillResult:
+    now = datetime(2026, 5, 29, 12, 0, tzinfo=UTC)
+    skill = AgentSkill(
+        id=SKILL_ID,
+        created_at=now,
+        updated_at=now,
+        name="Use Universal Memory",
+        slug="use-universal-memory",
+        description="Operational bootstrap guidance.",
+        scope=LatentSkillScope.project,
+        status=AgentSkillStatus.active,
+        canonical_path="umem/skills/use-universal-memory/SKILL.md",
+        origin="mcp",
+        audit_reference="audit-share",
+        content_hash="hash-share",
+        native_installations=[],
+        metadata={"visibility": "shared", "category": "operational"},
+    )
+    return ShareSkillResult(
+        agent_skill=skill,
+        old_canonical_path=".umem/skills/use-universal-memory/SKILL.md",
+        new_canonical_path="umem/skills/use-universal-memory/SKILL.md",
+        affected_paths=[
+            "umem/skills/use-universal-memory/SKILL.md",
+            "umem/project.toml",
+        ],
+        audit_reference="audit-share",
+        snapshot_reference="snapshot-share",
     )
 
 
@@ -582,6 +625,8 @@ async def test_create_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: 
             "description": " Operate launch funnel: CTAs and UTMs. ",
             "scope": "project",
             "triggers": [" when creating launch schedules ", ""],
+            "visibility": "shared",
+            "category": "user-facing",
         },
     )
     payload = result.structured_content
@@ -597,6 +642,8 @@ async def test_create_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: 
             origin="mcp",
             triggers=["when creating launch schedules"],
             raw_markdown=None,
+            visibility="shared",
+            category="user-facing",
         )
     ]
     assert success_payload["ok"] is True
@@ -830,6 +877,99 @@ async def test_import_skill_tool_uses_mcp_origin_and_success_envelope(tmp_path: 
     assert success_payload["ok"] is True
     assert success_payload["operation"] == "skills.import"
     assert success_payload["data"]["skill_file"] == ".umem/skills/review-helper/SKILL.md"
+
+
+@pytest.mark.anyio
+async def test_share_skill_tool_uses_mcp_origin_and_operational_confirmation(
+    tmp_path: Path,
+) -> None:
+    seen: list[ShareSkillCommand] = []
+
+    def share_skill(command: ShareSkillCommand) -> ShareSkillResult:
+        seen.append(command)
+        return share_result()
+
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(share_skill=share_skill),
+        project_root=tmp_path,
+    )
+
+    result = await server.call_tool(
+        "share_skill",
+        {
+            "skill_id_or_name": "use-universal-memory",
+            "category": "operational",
+            "confirm_operational": True,
+        },
+    )
+    payload = result.structured_content
+    assert payload is not None
+    success_payload = payload.get("structuredContent", payload)
+
+    assert seen == [
+        ShareSkillCommand(
+            skill_id_or_name="use-universal-memory",
+            category="operational",
+            confirm_operational=True,
+            origin="mcp",
+        )
+    ]
+    assert success_payload["operation"] == "skills.share"
+    assert success_payload["data"]["new_canonical_path"] == (
+        "umem/skills/use-universal-memory/SKILL.md"
+    )
+    assert success_payload["data"]["category"] == "operational"
+
+
+@pytest.mark.anyio
+async def test_share_skill_tool_requires_confirmation_for_existing_operational_default_category(
+    tmp_path: Path,
+) -> None:
+    project_root = make_shared_project_root(tmp_path)
+    safe_write = SafeWriteUseCase(
+        project_root=project_root,
+        secret_scanner=RecordingScanner(),
+        snapshot_repository=RecordingSnapshotRepository(),
+        audit_log_repository=RecordingAuditRepository(),
+    )
+    repository = LocalAgentSkillRepository(
+        project_root=project_root,
+        safe_write_use_case=safe_write,
+    )
+    operational = CreateSkillUseCase(
+        project_root=project_root,
+        repository=repository,
+        safe_write_use_case=safe_write,
+    ).execute(
+        CreateSkillCommand(
+            name="Operational Helper",
+            description="Local workflow bootstrap.",
+            scope=LatentSkillScope.project,
+            origin="test",
+            category="operational",
+        )
+    )
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(
+            share_skill=ShareSkillUseCase(
+                project_root=project_root,
+                repository=repository,
+                safe_write_use_case=safe_write,
+            ).execute
+        ),
+        project_root=project_root,
+    )
+
+    result = await server.call_tool("share_skill", {"skill_id_or_name": operational.slug})
+    payload = result.structured_content
+    assert payload is not None
+    error_payload = payload.get("structuredContent", payload)
+
+    assert error_payload["ok"] is False
+    assert error_payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
+    assert "explicit confirmation" in error_payload["error"]["data"]["detail"]
 
 
 @pytest.mark.anyio

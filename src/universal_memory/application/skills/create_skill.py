@@ -40,6 +40,8 @@ class CreateSkillCommand:
     targets: list[str] | None = None
     source_recommendation_id: str | None = None
     metadata: dict[str, Any] | None = None
+    visibility: str | None = None
+    category: str = "user-facing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,8 +102,12 @@ class CreateSkillResult:
                 "canonical_path": self.agent_skill.canonical_path,
                 "origin": self.agent_skill.origin,
                 "content_hash": self.agent_skill.content_hash,
+                "visibility": self.agent_skill.metadata.get("visibility"),
+                "category": self.agent_skill.metadata.get("category"),
             },
         }
+        payload["visibility"] = self.agent_skill.metadata.get("visibility")
+        payload["category"] = self.agent_skill.metadata.get("category")
         if self.agent_skill.source_recommendation_id is not None:
             payload["source_recommendation_id"] = self.agent_skill.source_recommendation_id
             payload["canonical_skill"]["source_recommendation_id"] = (
@@ -124,6 +130,16 @@ class _CreateSkillSchema(BaseModel):
     targets: list[str] | None = None
     source_recommendation_id: str | None = None
     metadata: dict[str, Any] | None = None
+    visibility: str | None = None
+    category: str = "user-facing"
+
+
+@dataclass(frozen=True, slots=True)
+class _SkillPlacement:
+    requested_slug: str
+    metadata: dict[str, Any]
+    visibility: str | None
+    category: str
 
 
 class CreateSkillUseCase:
@@ -166,9 +182,19 @@ class CreateSkillUseCase:
                 )
             triggers = parsed.triggers or triggers
 
-        requested_slug = validated.slug.strip() if validated.slug else self._slug(name)
-        slug = self._resolve_slug(validated.scope, self._validate_slug(requested_slug))
-        skill_dir = self._skill_dir_for(validated.scope, slug)
+        placement = self._skill_placement(validated=validated, name=name)
+        slug = self._resolve_slug(
+            validated.scope,
+            self._validate_slug(placement.requested_slug),
+            visibility=placement.visibility,
+            category=placement.category,
+        )
+        skill_dir = self._skill_dir_for(
+            validated.scope,
+            slug,
+            visibility=placement.visibility,
+            category=placement.category,
+        )
         skill_file = f"{skill_dir}/SKILL.md"
         content = self._render_skill_markdown(
             name=name,
@@ -199,7 +225,7 @@ class CreateSkillUseCase:
                 "triggers": triggers,
                 "creation_flow": "direct",
                 "recommendation_flow": False,
-                **(validated.metadata or {}),
+                **placement.metadata,
             }
             if validated.source_recommendation_id is not None:
                 metadata["source_recommendation_id"] = validated.source_recommendation_id
@@ -281,11 +307,23 @@ class CreateSkillUseCase:
                     _cleanup_created_file(self.project_root / affected_path)
             raise
 
-    def _resolve_slug(self, scope: LatentSkillScope, base_slug: str) -> str:
+    def _resolve_slug(
+        self,
+        scope: LatentSkillScope,
+        base_slug: str,
+        *,
+        visibility: str | None,
+        category: str,
+    ) -> str:
         for skill in self.repository.list(scope=scope):
             if skill.slug == base_slug:
                 raise ValidationFailedError(f"Skill slug already exists: {base_slug}")
-        base_dir = self._absolute_skill_dir_for(scope, base_slug)
+        base_dir = self._absolute_skill_dir_for(
+            scope,
+            base_slug,
+            visibility=visibility,
+            category=category,
+        )
         if base_dir.exists() and not base_dir.is_dir():
             raise StorageError(f"Path is occupied by a regular file: {base_dir}")
         if not base_dir.exists():
@@ -293,12 +331,36 @@ class CreateSkillUseCase:
         suffix = 2
         while True:
             candidate = f"{base_slug}-{suffix}"
-            candidate_dir = self._absolute_skill_dir_for(scope, candidate)
+            candidate_dir = self._absolute_skill_dir_for(
+                scope,
+                candidate,
+                visibility=visibility,
+                category=category,
+            )
             if candidate_dir.exists() and not candidate_dir.is_dir():
                 raise StorageError(f"Path is occupied by a regular file: {candidate_dir}")
             if not candidate_dir.exists():
                 return candidate
             suffix += 1
+
+    def _skill_placement(self, *, validated: _CreateSkillSchema, name: str) -> _SkillPlacement:
+        requested_slug = validated.slug.strip() if validated.slug else self._slug(name)
+        category = _normalize_category(validated.category)
+        visibility = self._resolve_visibility(
+            scope=validated.scope,
+            requested_visibility=validated.visibility,
+            category=category,
+        )
+        metadata = dict(validated.metadata or {})
+        if validated.scope == LatentSkillScope.project and visibility is not None:
+            metadata["visibility"] = visibility
+            metadata["category"] = category
+        return _SkillPlacement(
+            requested_slug=requested_slug,
+            metadata=metadata,
+            visibility=visibility,
+            category=category,
+        )
 
     @staticmethod
     def _validate_slug(slug: str) -> str:
@@ -313,13 +375,70 @@ class CreateSkillUseCase:
             return self.global_safe_write_use_case
         return self.safe_write_use_case
 
-    def _skill_dir_for(self, scope: LatentSkillScope, slug: str) -> str:
+    def _skill_dir_for(
+        self,
+        scope: LatentSkillScope,
+        slug: str,
+        *,
+        visibility: str | None,
+        category: str,
+    ) -> str:
         if scope == LatentSkillScope.global_:
             return f"skills/{slug}"
+        if self._uses_shared_skill_root(visibility=visibility, category=category):
+            return f"umem/skills/{slug}"
         return f".umem/skills/{slug}"
 
-    def _absolute_skill_dir_for(self, scope: LatentSkillScope, slug: str) -> Path:
-        return self._safe_write_for(scope).project_root / self._skill_dir_for(scope, slug)
+    def _absolute_skill_dir_for(
+        self,
+        scope: LatentSkillScope,
+        slug: str,
+        *,
+        visibility: str | None,
+        category: str,
+    ) -> Path:
+        return self._safe_write_for(scope).project_root / self._skill_dir_for(
+            scope,
+            slug,
+            visibility=visibility,
+            category=category,
+        )
+
+    def _resolve_visibility(
+        self,
+        *,
+        scope: LatentSkillScope,
+        requested_visibility: str | None,
+        category: str,
+    ) -> str | None:
+        if scope == LatentSkillScope.global_:
+            if requested_visibility is not None:
+                raise ValidationFailedError("visibility is only supported for project skills.")
+            return None
+        if requested_visibility is not None:
+            visibility = requested_visibility.strip().lower()
+            if visibility not in {"shared", "private"}:
+                raise ValidationFailedError("visibility must be shared or private.")
+            if visibility == "shared" and category == "operational":
+                raise ValidationFailedError(
+                    "operational skills cannot be shared by create; use skills share with "
+                    "operational confirmation."
+                )
+            return visibility
+        if self._project_uses_shared_layout():
+            return "private" if category == "operational" else "shared"
+        return None
+
+    def _project_uses_shared_layout(self) -> bool:
+        layout = getattr(self.repository, "layout", None)
+        return bool(getattr(layout, "is_shared", False))
+
+    def _uses_shared_skill_root(self, *, visibility: str | None, category: str) -> bool:
+        return (
+            self._project_uses_shared_layout()
+            and visibility == "shared"
+            and category != "operational"
+        )
 
     def _render_skill_markdown(
         self,
@@ -380,6 +499,13 @@ class CreateSkillUseCase:
 
 def _normalize_triggers(triggers: list[str] | None) -> list[str]:
     return [trigger.strip() for trigger in triggers or [] if trigger.strip()]
+
+
+def _normalize_category(category: str) -> str:
+    normalized = category.strip().lower().replace("_", "-")
+    if normalized not in {"user-facing", "operational"}:
+        raise ValidationFailedError("category must be user-facing or operational.")
+    return normalized
 
 
 def _hash_text(content: str) -> str:

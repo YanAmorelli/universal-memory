@@ -210,8 +210,10 @@ and removing obsolete or incorrect memory.
 
 ```bash
 umem remember "Short verified fact." --scope project --tag architecture --format json
+umem remember "Shared project fact." --scope project --visibility shared --tag architecture --format json
+umem remember "Private project note." --scope project --visibility private --tag private --format json
 umem remember "Durable user preference." --scope global --tag preference --format json
-umem facts list --scope project --format json
+umem facts list --scope project --visibility all --format json
 umem facts list --scope global --format json
 umem facts purge --id <fact-id> --format json
 ```
@@ -227,6 +229,9 @@ umem host sync --apply --yes --format json
 - `"Short verified fact."`: one concise sentence; prefer specific, reusable knowledge.
 - `--scope project|global`: project for repository-specific knowledge, global for
   cross-project user preferences.
+- `--visibility shared|private`: project-only visibility. In shared-layout
+  projects, shared facts write to `umem/memory/facts.jsonl`; private facts write
+  under `.umem/memory`.
 - `--tag <tag>`: use curated tags such as `architecture`, `workflow`, `bug`, `testing`,
   `docs`, `preference`, or `security`.
 - `--id <fact-id>`: exact fact ID returned by `facts list`.
@@ -235,8 +240,10 @@ umem host sync --apply --yes --format json
 ## MCP Equivalents
 
 - `remember_fact(content="Short verified fact.", scope="project", tags=["architecture"])`
+- `remember_fact(content="Shared project fact.", scope="project", visibility="shared", tags=["architecture"])`
+- `remember_fact(content="Private project note.", scope="project", visibility="private", tags=["private"])`
 - `remember_fact(content="Durable user preference.", scope="global", tags=["preference"])`
-- `list_facts(scope="project")`
+- `list_facts(scope="project", visibility="all")`
 - `list_facts(scope="global")`
 - `purge_fact(id="<fact-id>", confirm=true)`
 - `sync_instructions(apply=true)`
@@ -247,6 +254,10 @@ umem host sync --apply --yes --format json
   audit event.
 - If a fact is uncertain, verify or ask before recording it.
 - If a fact is obsolete, purge the old fact instead of adding a contradictory one.
+- Do not place operational state, raw logs, secrets, local-only investigations,
+  or private customer context in shared project facts.
+- In shared-layout projects, review `storage_path` and `visibility` before
+  committing `umem/memory` changes.
 """,
     ".umem/skills/use-universal-memory/references/skills-lifecycle.md": """# Skills Lifecycle
 
@@ -256,8 +267,11 @@ approval, generation, activation, deactivation, and updates.
 
 ## Mental Model
 
-- Canonical skill: `.umem/skills/<slug>/SKILL.md` is the source of truth after
-  `create`, `import`, `promote`, or `generate`.
+- Canonical skill: the `SKILL.md` under the active UMEM skill root is the source
+  of truth after `create`, `import`, `publish`, `promote`, or `generate`.
+- Shared-layout user-facing project skills use `umem/skills/<slug>/SKILL.md`;
+  private and operational project skills use `.umem/skills/<slug>/SKILL.md`.
+- Legacy project skills continue to use `.umem/skills/<slug>/SKILL.md`.
 - Native skill target: `.agents/skills/<slug>/`, `.opencode/skills/<slug>/`, or another
   runtime directory is a synchronized copy for a specific agent host.
 - AGENTS.md/Codex/OpenAI-class hosts that support Agent Skills should use
@@ -265,8 +279,11 @@ approval, generation, activation, deactivation, and updates.
 - Edit direction: change the canonical skill first, then run `skills sync` to refresh
   native runtime copies.
 - Import direction: use `skills import` when an existing native skill should become
-  canonical. Import copies the source into `.umem/skills/<slug>/`; it does not make every
-  runtime copy current until `skills sync` runs.
+  canonical. Import copies the source into the appropriate UMEM skill root; it
+  does not make every runtime copy current until `skills sync` runs.
+- Share direction: use `skills share` when an existing project skill should move
+  into reviewable `umem/skills/`. Operational skills require explicit
+  confirmation and an allowlist entry in `umem/project.toml`.
 - Wrapper direction: wrapper stubs are a local exception only. The default UMEM model is
   canonical source plus complete synchronized native copies.
 
@@ -275,9 +292,12 @@ approval, generation, activation, deactivation, and updates.
 - Track a recurring workflow or methodology as a latent skill candidate.
 - Draft a skill when content may need validation before publish.
 - Create a skill directly when the user already knows the desired skill.
-- Adopt existing canonical work in place when it already lives under `.umem/skills/<slug>/`.
-- Import an existing local or native skill directory into the canonical `.umem/skills`
-  registry.
+- Adopt existing canonical work in place when it already lives under a UMEM skill
+  root such as `.umem/skills/<slug>/` or `umem/skills/<slug>/`.
+- Import an existing local or native skill directory into the canonical UMEM
+  skill registry.
+- Share a project skill into `umem/skills/` only when repository-visible skill
+  content is intentional.
 - Sync canonical skills into supported native runtime targets after import or changes.
 - Review and approve or reject a latent skill proposal.
 - Generate the canonical Agent Skills directory structure.
@@ -295,9 +315,11 @@ umem skills detail <skill-id-or-name> --format json
 umem skills draft create --name "Skill name" --description "What the skill does." --scope project --trigger "when to use it" --format json
 umem skills draft validate <draft-or-path> --format json
 umem skills publish <draft-or-path> --format summary
-umem skills create --name "Skill name" --description "What the skill does." --scope project --trigger "when to use it" --format summary
+umem skills create --name "Skill name" --description "What the skill does." --scope project --visibility shared --category user-facing --trigger "when to use it" --format summary
+umem skills create --name "Local bootstrap" --description "Local-only operational behavior." --scope project --category operational --format summary
 umem skills adopt .umem/skills/<skill-name> --scope project --format summary
-umem skills import .agents/skills/<skill-name> --scope project --sync --format json
+umem skills import .agents/skills/<skill-name> --scope project --visibility shared --category user-facing --sync --format json
+umem skills share use-universal-memory --category operational --yes --format summary
 umem skills validate <skill-id-or-name-or-path> --format json
 umem skills canonical update <skill-id-or-name> --file <relative-markdown-path> --format json
 umem skills rename <skill-id-or-name> --slug <new-slug> --format json
@@ -332,11 +354,16 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
 - `<skill-id-or-name>`: identifier or unique name for read-only detail.
 - `<latent-skill-id>`: exact latent skill ID for proposal and mutations.
 - `.agents/skills/<skill-name>` or `<path>/SKILL.md`: existing Agent Skills directory
-  or its `SKILL.md`; import copies it into canonical `.umem/skills/<slug>/`.
+  or its `SKILL.md`; import copies it into the canonical UMEM skill root.
 - `--name <text>`: skill display name.
 - `--description <text>`: concise purpose and behavior.
 - `--scope project|global`: project is default; global is for cross-project agent
   workflows.
+- `--visibility shared|private`: project-only placement. Shared user-facing
+  skills use `umem/skills`; private skills use `.umem/skills`.
+- `--category user-facing|operational`: project skill category. Operational
+  skills default private and require `skills share ... --category operational
+  --yes` before they become repository-visible.
 - `--evidence-summary <text>`: curated reason this recurring pattern should be tracked.
 - `--tag <tag>`: repeatable trigger or classification.
 - `--min-recurrence <count>`: optional read-only recommendation threshold; default is 2.
@@ -365,8 +392,10 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
 - `validate_skill(skill_or_path="<skill-id-or-name-or-path>")`
 - `publish_skill(draft_or_path="<draft-or-path>", sync=false)`
 - `create_skill(name="Skill name", description="What the skill does.", scope="project", raw_markdown="<complete SKILL.md content>", sync=false)`
+- `create_skill(name="Skill name", description="What the skill does.", scope="project", visibility="shared", category="user-facing", raw_markdown="<complete SKILL.md content>", sync=false)`
 - `adopt_skill(path=".umem/skills/<skill-name>", scope="project", sync_after_adopt=false)`
 - `import_skill(path=".agents/skills/<skill-name>", scope="project", replace_native=false, sync_after_import=true)`
+- `share_skill(skill_id_or_name="use-universal-memory", category="operational", confirm_operational=true)`
 - `update_canonical_skill(skill_id_or_name="<skill-id-or-name>", raw_markdown="<complete SKILL.md content>", sync=false)`
 - `rename_skill(skill_id_or_name="<skill-id-or-name>", slug="<new-slug>")`
 - `cleanup_skill(skill_id_or_name="<skill-id-or-name>", targets=true, dry_run=true)`
@@ -394,14 +423,20 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
   targets unless `--sync` is present.
 - `skills publish` converts a draft to canonical and does not sync native targets unless
   `--sync` is present.
-- `skills adopt` registers existing `.umem/skills/<slug>` work in place without creating a suffixed duplicate.
+- `skills adopt` registers existing UMEM skill-root work in place without
+  creating a suffixed duplicate.
 - Use `skills import`, not `skills adopt`, for existing native runtime directories such
   as `.agents/skills/<slug>` or `.opencode/skills/<slug>`.
 - `skills validate`, `skills canonical update`, `skills rename`, `skills cleanup`, and
   `skills repair` are the supported maintenance path for canonical skills.
 - `skills import` is the normal path for an existing `.agents/skills/...`, `.opencode/skills/...`,
   or other local Agent Skills directory. It registers a canonical UMEM skill and copies
-  the source directory into `.umem/skills/<slug>/`.
+  the source directory into the appropriate UMEM skill root.
+- In shared-layout projects, user-facing project skills default to shared
+  `umem/skills`; operational skills default to private `.umem/skills`.
+- `skills share` is the explicit path for moving an existing project skill into
+  `umem/skills`. For operational skills, require human approval or an explicit
+  non-interactive `--yes`/`confirm_operational=true`.
 - `skills sync` materializes canonical skills into configured native runtime targets;
   importing a skill does not necessarily make it available to every runtime until sync
   runs.
@@ -422,7 +457,8 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
   source native directory rewritten immediately.
 - `skills track` explicitly creates or increments a proposed latent skill from curated observed evidence; it does not automatically scan history.
 - `skills recommend` is read-only candidate review over explicit latent skill records; promotion, import, generation, and sync are separate explicit workflows.
-- `skills generate` creates canonical files under `.umem/skills/` for project skills.
+- `skills generate` creates canonical files under the active UMEM skill root for
+  project skills.
 - `skills deactivate` preserves files and changes status to disabled.
 - `skills activate` requires a readable, valid `SKILL.md`.
 - `skills update`, `activate`, and `deactivate` operate on latent/generated skill IDs.
@@ -437,8 +473,8 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
 
 ## Official Workflows
 
-- Adopt an existing local skill as canonical and distribute it: run `umem skills import .agents/skills/<skill-name> --scope project --sync --format json`, then inspect the returned `skill_file` and `native_installations`.
-- Edit an imported canonical skill: modify `.umem/skills/<slug>/SKILL.md`, run `umem skills detail <slug> --format json` to verify metadata, then run `umem skills sync <slug> --format json`.
+- Adopt an existing local skill as canonical and distribute it: run `umem skills import .agents/skills/<skill-name> --scope project --visibility shared --category user-facing --sync --format json`, then inspect the returned `skill_file` and `native_installations`.
+- Edit an imported canonical skill: modify the returned `skill_file`, run `umem skills detail <slug> --format json` to verify metadata, then run `umem skills sync <slug> --format json`.
 - Avoid the common trap: do not pass a canonical `skill_id` from `skills list` or `skills detail` to `skills update` unless the payload identifies it as a latent/generated mutation target.
 
 ## Playbook: Adopt Existing Native Skill Into UMEM
@@ -480,9 +516,9 @@ through managed native sync.
    manage `.agents/skills/foo/` as a complete native copy. Use `--replace-native` during
    import only when intentionally rewriting the matching managed native source immediately.
 7. Remember that `native_installations` or `targets` may be empty after import. That means
-   UMEM adopted the source into `.umem/skills/`, but no enabled runtime target was written
-   or adopted during that command. Use `--sync` during import for the complete adoption flow,
-   or run `skills sync` afterward.
+   UMEM adopted the source into a UMEM skill root, but no enabled runtime target
+   was written or adopted during that command. Use `--sync` during import for the
+   complete adoption flow, or run `skills sync` afterward.
 8. Check the real UMEM inventory with `umem skills detail foo --format json`. Normal
    `git status` can hide `.umem/`, `.agents/`, `.opencode/`, or other runtime directories
    when repository ignore rules exclude them.
@@ -494,10 +530,12 @@ through managed native sync.
    umem host sync --apply --yes --format json
    ```
 
-Treat `.umem/skills/foo/SKILL.md` as the editable source from this point on. Native
-wrappers are a repository policy choice, not UMEM's default 0.1.4 product behavior. UMEM's
-default runtime model is canonical source plus synchronized complete native copies, because
-host runtimes expect complete native skill directories.
+Treat the returned canonical `skill_file` as the editable source from this point
+on. For shared user-facing skills that may be `umem/skills/foo/SKILL.md`; for
+private or operational skills that remains `.umem/skills/foo/SKILL.md`. Native
+wrappers are a repository policy choice, not UMEM's default product behavior.
+UMEM's default runtime model is canonical source plus synchronized complete
+native copies, because host runtimes expect complete native skill directories.
 
 When runtime directories should reflect the canonical version, run:
 
@@ -506,9 +544,10 @@ umem skills sync foo --format json
 ```
 
 Future `skills migrate` behavior should follow the same product direction: discover native
-skills, import or adopt them into `.umem/skills/`, validate targets, and synchronize
-complete managed copies to configured native runtime directories. A `wrap-source` option
-may exist only for explicit local policy; it should not be the default migration outcome.
+skills, import or adopt them into the appropriate UMEM skill root, validate
+targets, and synchronize complete managed copies to configured native runtime
+directories. A `wrap-source` option may exist only for explicit local policy; it
+should not be the default migration outcome.
 
 ## Latent Tracking Criteria
 
@@ -558,8 +597,9 @@ Bad examples:
 - User wants a new skill written from scratch: use `skills create`.
 - User points to an existing skill directory or `SKILL.md`: use `skills import`.
 - User wants an existing canonical skill available in native runtimes: use `skills sync`.
-- User wants to change an imported canonical skill: edit `.umem/skills/<slug>/SKILL.md`, then
-  run `skills sync`; do not assume `skills update` accepts canonical skill IDs.
+- User wants to change an imported canonical skill: edit the returned canonical
+  `skill_file`, then run `skills sync`; do not assume `skills update` accepts
+  canonical skill IDs.
 - User reports a recurring workflow but has not asked for a concrete skill yet: use
   `skills track`, then `skills recommend`, then ask before promotion/generation.
 - Do not use `skills update`, `activate`, or `deactivate` on an ID returned by `skills detail`
@@ -648,9 +688,11 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | --- | --- | --- |
 | Initialize project | `umem init --yes --format json` | `initialize_project()` |
 | Status | `umem status --format json` | `status()` |
+| Inspect project layout | `umem layout status --format json` | `inspect_project_layout()` |
+| Migrate project layout | `umem layout migrate --to shared --dry-run --format json` | `migrate_project_layout(target_layout="shared", dry_run=true)` |
 | Context | `umem context --scope project --format json` | `context(scope="project")` |
-| Remember fact | `umem remember "..." --scope project --tag workflow --format json` | `remember_fact(content="...", scope="project", tags=["workflow"])` |
-| List facts | `umem facts list --scope project --format json` | `list_facts(scope="project")` |
+| Remember fact | `umem remember "..." --scope project --visibility shared --tag workflow --format json` | `remember_fact(content="...", scope="project", visibility="shared", tags=["workflow"])` |
+| List facts | `umem facts list --scope project --visibility all --format json` | `list_facts(scope="project", visibility="all")` |
 | Purge fact | `umem facts purge --id <fact-id> --format json` | `purge_fact(id="<fact-id>", confirm=true)` |
 | Audit list | `umem audit list --scope project --format json` | `list_audit_events(scope="project")` |
 | Snapshots list | `umem snapshots list --scope project --format json` | `list_snapshots(scope="project")` |
@@ -665,6 +707,8 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | Skill publish | `umem skills publish <draft-or-path> --format json` | `publish_skill(draft_or_path="<draft-or-path>")` |
 | Skill create | `umem skills create ... --format json` | `create_skill(...)` |
 | Skill adopt | `umem skills adopt <path> --format json` | `adopt_skill(path="<path>")` |
+| Skill import | `umem skills import <path> --format json` | `import_skill(path="<path>")` |
+| Skill share | `umem skills share <skill> --yes --format json` | `share_skill(skill_id_or_name="<skill>", confirm_operational=true)` |
 | Skill canonical update | `umem skills canonical update <skill> --file <path> --format json` | `update_canonical_skill(...)` |
 | Skill rename | `umem skills rename <skill> --slug <slug> --format json` | `rename_skill(...)` |
 | Skill cleanup | `umem skills cleanup <skill> --targets --format json` | `cleanup_skill(...)` |
@@ -696,6 +740,14 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 - New public capabilities should include both CLI and MCP coverage unless explicitly
   marked internal.
 - Error output must not leak secrets, stack traces, or absolute local paths.
+- Shared-layout JSON payloads should expose project-relative paths. Layout status
+  should include `shared_root`, `operational_root`, `ignored_shared_paths`,
+  `tracked_operational_paths`, and `overlaps`.
+- Project fact and skill payloads should preserve `visibility` and `storage_path`
+  or canonical path metadata across CLI and MCP.
+- Operational skill sharing must be explicit on both surfaces: CLI uses
+  `--category operational --yes`; MCP uses `category="operational"` and
+  `confirm_operational=true`.
 """,
     ".umem/skills/use-universal-memory/references/guardrails-and-recording.md": """# Guardrails And Recording
 
@@ -785,6 +837,11 @@ class SetupProjectResult:
     already_initialized: bool
     created_paths: list[str]
     existing_paths: list[str]
+    layout: str = "legacy"
+    shared_root: Path | None = None
+    operational_root: Path = Path(".umem")
+    shared_paths: list[str] | None = None
+    operational_paths: list[str] | None = None
 
 
 def setup_project(  # noqa: PLR0913
@@ -794,9 +851,26 @@ def setup_project(  # noqa: PLR0913
     global_config_path: Path | None = None,
     enabled_runtime_ids: list[str] | None = None,
     enabled_host_ids: list[str] | None = None,
+    layout: str = "legacy",
 ) -> SetupProjectResult:
     normalized_project_root = project_root.resolve()
     layout_result = layout_port.ensure_project_layout(normalized_project_root)
+    shared_created_paths: list[str] = []
+    shared_existing_paths: list[str] = []
+    shared_paths: list[str] = []
+    if layout == "shared":
+        shared_paths = ["umem/project.toml", "umem/memory", "umem/skills"]
+        existing_shared_paths = {
+            shared_path
+            for shared_path in shared_paths
+            if (normalized_project_root / shared_path).exists()
+        }
+        layout_port.write_project_layout_metadata(normalized_project_root, layout="shared")
+        for shared_path in shared_paths:
+            if shared_path in existing_shared_paths:
+                shared_existing_paths.append(shared_path)
+            else:
+                shared_created_paths.append(shared_path)
     seeded_skill_paths = _ensure_default_umem_skill(normalized_project_root)
     loaded_config = load_config(normalized_project_root, global_config_path=global_config_path)
     requested_runtime_ids = (
@@ -837,6 +911,14 @@ def setup_project(  # noqa: PLR0913
     )
 
     umem_root = Path(".umem")
+    operational_paths = [
+        ".umem/config.toml",
+        ".umem/memory",
+        ".umem/audit/events.jsonl",
+        ".umem/snapshots",
+        ".umem/skills",
+        ".umem/benchmarks",
+    ]
     return SetupProjectResult(
         project_path=Path("."),
         config_path=umem_root / "config.toml",
@@ -847,8 +929,29 @@ def setup_project(  # noqa: PLR0913
         benchmarks_path=umem_root / "benchmarks",
         created=layout_result.created,
         already_initialized=not layout_result.created,
-        created_paths=[*layout_result.created_paths, *seeded_skill_paths["created"]],
-        existing_paths=[*layout_result.existing_paths, *seeded_skill_paths["existing"]],
+        created_paths=[
+            *layout_result.created_paths,
+            *[
+                shared_path
+                for shared_path in shared_created_paths
+                if shared_path not in layout_result.created_paths
+            ],
+            *seeded_skill_paths["created"],
+        ],
+        existing_paths=[
+            *layout_result.existing_paths,
+            *[
+                shared_path
+                for shared_path in shared_existing_paths
+                if shared_path not in layout_result.existing_paths
+            ],
+            *seeded_skill_paths["existing"],
+        ],
+        layout=layout,
+        shared_root=Path("umem") if layout == "shared" else None,
+        operational_root=Path(".umem"),
+        shared_paths=shared_paths if layout == "shared" else [],
+        operational_paths=operational_paths,
     )
 
 

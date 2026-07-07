@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -417,6 +418,7 @@ def _git_path_is_ignored(project_root: Path, relative_path: str) -> bool:
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=_sanitized_git_env(),
     )
     return result.returncode == 0
 
@@ -428,8 +430,25 @@ def _git_path_is_tracked(project_root: Path, relative_path: str) -> bool:
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=_sanitized_git_env(),
     )
     return result.returncode == 0
+
+
+def _sanitized_git_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in (
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG",
+        "GIT_CONFIG_COUNT",
+        "GIT_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_PREFIX",
+        "GIT_WORK_TREE",
+    ):
+        env.pop(key, None)
+    return env
 
 
 def merge_native_installations(

@@ -36,7 +36,17 @@ from universal_memory.domain.ports import (
     SecretScannerPort,
     SnapshotRepository,
 )
-from universal_memory.domain.project_layout import ProjectLayoutResult
+from universal_memory.domain.project_layout import (
+    ProjectLayoutInspection,
+    ProjectLayoutMode,
+    ProjectLayoutPolicy,
+    ProjectLayoutPrecedence,
+    ProjectLayoutResult,
+    ProjectMemoryVisibility,
+    ProjectSkillCategory,
+    ProjectSkillVisibility,
+    ResolvedProjectLayout,
+)
 
 __all__ = [
     "AuditEvent",
@@ -56,8 +66,16 @@ __all__ = [
     "LatentSkillRepository",
     "LatentSkillScope",
     "LatentSkillStatus",
+    "ProjectLayoutInspection",
+    "ProjectLayoutMode",
+    "ProjectLayoutPolicy",
     "ProjectLayoutPort",
+    "ProjectLayoutPrecedence",
     "ProjectLayoutResult",
+    "ProjectMemoryVisibility",
+    "ProjectSkillCategory",
+    "ProjectSkillVisibility",
+    "ResolvedProjectLayout",
     "Rule",
     "RuleRepository",
     "RuleScope",

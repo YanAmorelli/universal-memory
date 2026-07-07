@@ -66,6 +66,11 @@ from universal_memory.application.skills.rename_skill import (
     RenameSkillResult,
     RenameSkillUseCase,
 )
+from universal_memory.application.skills.share_skill import (
+    ShareSkillCommand,
+    ShareSkillResult,
+    ShareSkillUseCase,
+)
 from universal_memory.application.skills.sync_skills import (
     SyncSkillResult,
     SyncSkillsCommand,
@@ -150,6 +155,9 @@ __all__ = [
     "RepairSkillsCommand",
     "RepairSkillsResult",
     "RepairSkillsUseCase",
+    "ShareSkillCommand",
+    "ShareSkillResult",
+    "ShareSkillUseCase",
     "SkillListItem",
     "SkillRecommendationItem",
     "SkillValidationCheck",

@@ -51,6 +51,7 @@ from universal_memory.application.skills import (
     RecommendSkillsResult,
     RenameSkillResult,
     RepairSkillsResult,
+    ShareSkillResult,
     SkillListItem,
     SkillRecommendationItem,
     SkillValidationReport,
@@ -89,6 +90,7 @@ from universal_memory.interfaces.mcp.server import (
 FACT_ID = "11111111-1111-4111-8111-111111111111"
 PUBLIC_MCP_TOOLS = {
     "initialize_project": {},
+    "inspect_project_layout": {},
     "status": {},
     "doctor": {},
     "context": {},
@@ -114,6 +116,11 @@ PUBLIC_MCP_TOOLS = {
     },
     "validate_skill": {"skill_or_path": "tdd-recorrente"},
     "publish_skill": {"draft_or_path": "draft-helper"},
+    "share_skill": {
+        "skill_id_or_name": "use-universal-memory",
+        "category": "operational",
+        "confirm_operational": True,
+    },
     "import_skill": {
         "path": "native/tdd-recorrente/SKILL.md",
         "replace_native": True,
@@ -145,6 +152,7 @@ PUBLIC_MCP_TOOLS = {
         "name": "TDD recorrente",
         "description": "Usuario pede ciclo red green refactor",
     },
+    "migrate_project_layout": {"target_layout": "shared", "dry_run": True},
 }
 CONTRACT_KEYS_BY_TOOL = {
     "initialize_project": {
@@ -156,6 +164,38 @@ CONTRACT_KEYS_BY_TOOL = {
         "created",
         "already_initialized",
         "audit_reference",
+        "layout",
+        "shared_root",
+        "operational_root",
+        "shared_paths",
+        "operational_paths",
+    },
+    "inspect_project_layout": {
+        "operation",
+        "layout",
+        "shared_root",
+        "operational_root",
+        "precedence",
+        "warnings",
+        "recommended_actions",
+        "git_status_available",
+        "ignored_shared_paths",
+        "tracked_operational_paths",
+        "overlaps",
+    },
+    "migrate_project_layout": {
+        "operation",
+        "source_layout",
+        "target_layout",
+        "dry_run",
+        "copied",
+        "already_shared",
+        "skipped",
+        "conflicts",
+        "remaining_local",
+        "affected_paths",
+        "next_steps",
+        "warnings",
     },
     "status": {
         "initialized",
@@ -167,6 +207,10 @@ CONTRACT_KEYS_BY_TOOL = {
         "approximate_size_bytes",
         "last_health_check",
         "host_validation",
+        "layout",
+        "shared_root",
+        "operational_root",
+        "path_counts",
     },
     "doctor": {"checks", "summary"},
     "context": {
@@ -178,7 +222,16 @@ CONTRACT_KEYS_BY_TOOL = {
         "token_estimate",
         "last_read_at",
     },
-    "remember_fact": {"fact_id", "scope", "status", "tags", "created_at", "audit_reference"},
+    "remember_fact": {
+        "fact_id",
+        "scope",
+        "status",
+        "tags",
+        "visibility",
+        "storage_path",
+        "created_at",
+        "audit_reference",
+    },
     "list_facts": {"facts"},
     "purge_fact": {"purged_count", "affected_ids", "audit_reference"},
     "list_audit_events": {"events"},
@@ -251,6 +304,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "audit_reference",
         "snapshot_reference",
         "native_installations",
+        "visibility",
+        "category",
         "canonical_skill",
     },
     "create_skill_draft": {
@@ -276,6 +331,24 @@ CONTRACT_KEYS_BY_TOOL = {
         "native_installations",
         "validation",
         "canonical_skill",
+        "visibility",
+        "category",
+    },
+    "share_skill": {
+        "skill_id",
+        "name",
+        "slug",
+        "skill_dir",
+        "skill_file",
+        "old_canonical_path",
+        "new_canonical_path",
+        "affected_paths",
+        "audit_reference",
+        "snapshot_reference",
+        "recommended_actions",
+        "canonical_skill",
+        "visibility",
+        "category",
     },
     "import_skill": {
         "skill_id",
@@ -290,6 +363,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "native_installations",
         "native_installations_note",
         "canonical_skill",
+        "visibility",
+        "category",
     },
     "adopt_skill": {
         "skill_id",
@@ -304,6 +379,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "native_installations",
         "warnings",
         "canonical_skill",
+        "visibility",
+        "category",
     },
     "update_canonical_skill": {
         "skill_id",
@@ -343,6 +420,8 @@ CONTRACT_KEYS_BY_TOOL = {
         "audit_reference",
         "snapshot_reference",
         "native_installations",
+        "visibility",
+        "category",
         "canonical_skill",
         "source_recommendation_id",
         "promotion",
@@ -404,6 +483,38 @@ CONTRACT_TYPES_BY_TOOL = {
         "created": list,
         "already_initialized": bool,
         "audit_reference": str,
+        "layout": str,
+        "shared_root": (str, type(None)),
+        "operational_root": str,
+        "shared_paths": list,
+        "operational_paths": list,
+    },
+    "inspect_project_layout": {
+        "operation": str,
+        "layout": str,
+        "shared_root": str,
+        "operational_root": str,
+        "precedence": str,
+        "warnings": list,
+        "recommended_actions": list,
+        "git_status_available": bool,
+        "ignored_shared_paths": list,
+        "tracked_operational_paths": list,
+        "overlaps": list,
+    },
+    "migrate_project_layout": {
+        "operation": str,
+        "source_layout": str,
+        "target_layout": str,
+        "dry_run": bool,
+        "copied": list,
+        "already_shared": list,
+        "skipped": list,
+        "conflicts": list,
+        "remaining_local": list,
+        "affected_paths": list,
+        "next_steps": list,
+        "warnings": list,
     },
     "status": {
         "initialized": bool,
@@ -415,6 +526,10 @@ CONTRACT_TYPES_BY_TOOL = {
         "approximate_size_bytes": int,
         "last_health_check": str,
         "host_validation": dict,
+        "layout": str,
+        "shared_root": str,
+        "operational_root": str,
+        "path_counts": dict,
     },
     "doctor": {
         "checks": list,
@@ -434,6 +549,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "scope": str,
         "status": str,
         "tags": list,
+        "visibility": (str, type(None)),
+        "storage_path": (str, type(None)),
         "created_at": str,
         "audit_reference": str,
     },
@@ -513,6 +630,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "audit_reference": str,
         "snapshot_reference": str,
         "native_installations": list,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
         "canonical_skill": dict,
     },
     "create_skill_draft": {
@@ -538,6 +657,24 @@ CONTRACT_TYPES_BY_TOOL = {
         "native_installations": list,
         "validation": dict,
         "canonical_skill": dict,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
+    },
+    "share_skill": {
+        "skill_id": str,
+        "name": str,
+        "slug": str,
+        "skill_dir": str,
+        "skill_file": str,
+        "old_canonical_path": str,
+        "new_canonical_path": str,
+        "affected_paths": list,
+        "audit_reference": str,
+        "snapshot_reference": str,
+        "recommended_actions": list,
+        "canonical_skill": dict,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
     },
     "import_skill": {
         "skill_id": str,
@@ -551,6 +688,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "snapshot_reference": str,
         "native_installations": list,
         "canonical_skill": dict,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
     },
     "adopt_skill": {
         "skill_id": str,
@@ -565,6 +704,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "native_installations": list,
         "warnings": list,
         "canonical_skill": dict,
+        "visibility": (str, type(None)),
+        "category": (str, type(None)),
     },
     "update_canonical_skill": {
         "skill_id": str,
@@ -604,6 +745,8 @@ CONTRACT_TYPES_BY_TOOL = {
         "audit_reference": str,
         "snapshot_reference": str,
         "native_installations": list,
+        "visibility": str,
+        "category": str,
         "canonical_skill": dict,
         "source_recommendation_id": str,
         "promotion": dict,
@@ -740,6 +883,65 @@ async def test_mcp_compliance_returns_structured_error_for_unexpected_exception(
 
 
 @pytest.mark.anyio
+async def test_mcp_compliance_doctor_payload_includes_shared_layout_checks(tmp_path: Path) -> None:
+    result = DoctorResult(
+        checks=[
+            DoctorCheck(
+                name="project_layout_mode",
+                status="success",
+                detail="Shared project layout is active.",
+            ),
+            DoctorCheck(
+                name="shared_root_visibility",
+                status="warning",
+                error="Shared paths are ignored: umem/",
+                recovery_hint="Update ignore rules so umem/ shared content is reviewable.",
+            ),
+            DoctorCheck(
+                name="operational_root_privacy",
+                status="warning",
+                error="Operational paths are tracked: .umem/audit/events.jsonl",
+                recovery_hint="Remove operational .umem paths from Git tracking.",
+            ),
+            DoctorCheck(
+                name="layout_overlaps",
+                status="warning",
+                error="Legacy/shared overlaps detected: skill:review-helper",
+                recovery_hint=(
+                    "Shared content takes precedence; remove or migrate shadowed legacy records."
+                ),
+            ),
+        ]
+    )
+    server = configure_server(
+        create_mcp_server(),
+        replace(mcp_use_cases(tmp_path), doctor=lambda _command: result),
+        project_root=tmp_path,
+    )
+
+    response = await server.call_tool("doctor", {})
+    payload = response.structured_content
+
+    assert payload is not None
+    assert payload["ok"] is True
+    assert payload["data"]["summary"] == {
+        "total_checks": 4,
+        "passed": 1,
+        "warnings": 3,
+        "failed": 0,
+    }
+    checks = {check["name"]: check for check in payload["data"]["checks"]}
+    assert set(checks) == {
+        "project_layout_mode",
+        "shared_root_visibility",
+        "operational_root_privacy",
+        "layout_overlaps",
+    }
+    assert checks["shared_root_visibility"]["status"] == "warning"
+    assert checks["layout_overlaps"]["recovery_hint"].startswith("Shared content takes precedence")
+
+
+@pytest.mark.anyio
 async def test_mcp_compliance_blocks_destructive_tools_without_confirmation(
     tmp_path: Path,
 ) -> None:
@@ -754,6 +956,80 @@ async def test_mcp_compliance_blocks_destructive_tools_without_confirmation(
         assert payload["ok"] is False, f"{tool_name}: destructive call should fail without confirm"
         assert payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
         assert "destructive" in payload["error"]["data"]["detail"]
+
+
+@pytest.mark.anyio
+async def test_mcp_initialize_project_accepts_shared_layout(tmp_path: Path) -> None:
+    seen: list[str] = []
+
+    def initialize_project(project_root: Path, *, layout: str = "legacy") -> SetupProjectResult:
+        seen.append(layout)
+        return SetupProjectResult(
+            project_path=project_root,
+            config_path=project_root / ".umem" / "config.toml",
+            memory_path=project_root / ".umem" / "memory",
+            audit_path=project_root / ".umem" / "audit" / "events.jsonl",
+            snapshots_path=project_root / ".umem" / "snapshots",
+            skills_path=project_root / ".umem" / "skills",
+            benchmarks_path=project_root / ".umem" / "benchmarks",
+            created=True,
+            created_paths=[".umem/config.toml", "umem/project.toml"],
+            existing_paths=[],
+            already_initialized=False,
+            layout="shared",
+            shared_root=Path("umem"),
+            operational_root=Path(".umem"),
+            shared_paths=["umem/project.toml", "umem/memory", "umem/skills"],
+            operational_paths=[".umem/config.toml", ".umem/memory"],
+        )
+
+    use_cases = mcp_use_cases(tmp_path)
+    use_cases = replace(use_cases, initialize_project=initialize_project)
+    server = configure_server(create_mcp_server(), use_cases, project_root=tmp_path)
+
+    payload = (
+        await server.call_tool("initialize_project", {"layout": "shared"})
+    ).structured_content
+
+    assert payload is not None
+    assert payload["ok"] is True
+    assert payload["data"]["layout"] == "shared"
+    assert payload["data"]["shared_root"] == "umem"
+    assert payload["data"]["operational_root"] == ".umem"
+    assert payload["data"]["shared_paths"] == ["umem/project.toml", "umem/memory", "umem/skills"]
+    assert seen == ["shared"]
+
+
+@pytest.mark.anyio
+async def test_mcp_migrate_project_layout_accepts_dry_run_and_apply(tmp_path: Path) -> None:
+    seen: list[bool] = []
+
+    def migrate(command) -> dict[str, Any]:
+        seen.append(command.dry_run)
+        return migration_payload(dry_run=command.dry_run)
+
+    use_cases = replace(mcp_use_cases(tmp_path), migrate_project_layout=migrate)
+    server = configure_server(create_mcp_server(), use_cases, project_root=tmp_path)
+
+    dry_run_payload = (
+        await server.call_tool(
+            "migrate_project_layout",
+            {"target_layout": "shared", "dry_run": True},
+        )
+    ).structured_content
+    apply_payload = (
+        await server.call_tool(
+            "migrate_project_layout",
+            {"target_layout": "shared", "dry_run": False},
+        )
+    ).structured_content
+
+    assert dry_run_payload is not None
+    assert apply_payload is not None
+    assert dry_run_payload["operation"] == "layout.migrate"
+    assert dry_run_payload["data"]["dry_run"] is True
+    assert apply_payload["data"]["dry_run"] is False
+    assert seen == [True, False]
 
 
 def _assert_contract_types(tool_name: str, data: dict[str, Any]) -> None:
@@ -804,6 +1080,7 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         create_skill_draft=create_skill_draft_result,
         validate_skill=validate_skill_result,
         publish_skill=publish_skill_result,
+        share_skill=share_skill_result,
         import_skill=import_skill_result,
         adopt_skill=adopt_skill_result,
         update_canonical_skill=update_canonical_skill_result,
@@ -820,7 +1097,33 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
         deactivate_skill=deactivate_skill_result,
         update_skill=update_skill_result,
         track_latent_skill=track_latent_skill_result,
+        migrate_project_layout=lambda command: migration_payload(dry_run=command.dry_run),
     )
+
+
+def migration_payload(*, dry_run: bool) -> dict[str, Any]:
+    data = {
+        "operation": "layout.migrate",
+        "source_layout": "legacy",
+        "target_layout": "shared",
+        "dry_run": dry_run,
+        "copied": [
+            {
+                "kind": "fact",
+                "id": "fact-1",
+                "reason": "copied",
+                "path": "umem/memory/facts.jsonl",
+            }
+        ],
+        "already_shared": [],
+        "skipped": [],
+        "conflicts": [],
+        "remaining_local": [],
+        "affected_paths": ["umem/project.toml", "umem/memory/facts.jsonl"],
+        "next_steps": [],
+        "warnings": [],
+    }
+    return {"operation": "layout.migrate", "scope": "project", "data": data, "warnings": []}
 
 
 def mutation_skill(
@@ -988,6 +1291,10 @@ def create_skill_result(command: CreateSkillCommand) -> CreateSkillResult:
         origin="mcp",
         audit_reference="audit-1",
         content_hash="hash-1",
+        metadata={
+            "visibility": command.visibility or "private",
+            "category": command.category,
+        },
     )
     return CreateSkillResult(
         agent_skill=agent_skill,
@@ -1059,6 +1366,37 @@ def publish_skill_result(_command: object) -> PublishSkillResult:
         audit_reference="audit-1",
         snapshot_reference="snapshot-1",
         validation=validation_report(),
+    )
+
+
+def share_skill_result(_command: object) -> ShareSkillResult:
+    create = create_skill_result(
+        CreateSkillCommand(
+            name="Use Universal Memory",
+            description="Operational bootstrap guidance.",
+            scope=LatentSkillScope.project,
+            origin="mcp",
+            slug="use-universal-memory",
+            category="operational",
+        )
+    )
+    skill = create.agent_skill.model_copy(
+        update={
+            "canonical_path": "umem/skills/use-universal-memory/SKILL.md",
+            "metadata": {"visibility": "shared", "category": "operational"},
+        }
+    )
+    return ShareSkillResult(
+        agent_skill=skill,
+        old_canonical_path=".umem/skills/use-universal-memory/SKILL.md",
+        new_canonical_path="umem/skills/use-universal-memory/SKILL.md",
+        affected_paths=[
+            "umem/skills/use-universal-memory/SKILL.md",
+            "umem/project.toml",
+        ],
+        audit_reference="audit-share",
+        snapshot_reference="snapshot-share",
+        recommended_actions=["Review umem/project.toml and commit the shared skill."],
     )
 
 

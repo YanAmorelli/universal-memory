@@ -1,8 +1,10 @@
 # Skill Lifecycle
 
-Universal Memory manages canonical Agent Skills under `.umem/skills/`. Agents can
-draft, validate, publish, create, adopt, import, maintain, and sync skills through
-explicit safe commands.
+Universal Memory manages canonical Agent Skills under the active project UMEM
+roots. In shared-layout projects, reviewable user-facing skills live under
+`umem/skills/`; private and operational skills live under `.umem/skills/`.
+Agents can draft, validate, publish, create, adopt, import, share, maintain, and
+sync skills through explicit safe commands.
 
 ## Lifecycle
 
@@ -18,26 +20,47 @@ explicit safe commands.
 
 ## Canonical Vs Native
 
-`.umem/skills/<slug>/SKILL.md` is the canonical source after create, import, promote, or
-generate. Native runtime directories such as `.agents/skills/...`, `.opencode/skills/...`,
-or `.antigravity/...` are materialized copies for specific agents. `skills sync` may create
-or update those runtime directories, so review the resulting worktree changes and ignore
-rules intentionally.
+The canonical source after create, import, publish, promote, or generate is the
+`SKILL.md` under the active UMEM skill root. Legacy projects use
+`.umem/skills/<slug>/SKILL.md`. Shared-layout projects use
+`umem/skills/<slug>/SKILL.md` for shared user-facing project skills and
+`.umem/skills/<slug>/SKILL.md` for private or operational project skills. Native
+runtime directories such as `.agents/skills/...`, `.opencode/skills/...`, or
+`.antigravity/...` are materialized copies for specific agents. `skills sync`
+may create or update those runtime directories, so review the resulting
+worktree changes and ignore rules intentionally.
 
-This is intentionally not a wrapper model. UMEM keeps the canonical copy under
-`.umem/skills/`, then writes complete native copies so each host can consume skills in its
-own expected layout. For AGENTS.md/Codex/OpenAI-class hosts that support Agent Skills,
-`.agents/skills/<slug>/SKILL.md` is a native runtime target. It should be managed by the
-same sync flow as other runtime targets, not treated as a manual compatibility directory.
-Wrappers are only an explicit repository policy exception.
+This is intentionally not a wrapper model. UMEM keeps one canonical copy under
+`umem/skills/` or `.umem/skills/`, then writes complete native copies so each
+host can consume skills in its own expected layout. For AGENTS.md/Codex/OpenAI-class
+hosts that support Agent Skills, `.agents/skills/<slug>/SKILL.md` is a
+native runtime target. It should be managed by the same sync flow as other
+runtime targets, not treated as a manual compatibility directory. Wrappers are
+only an explicit repository policy exception.
 
 `skills create` and `skills publish` are canonical-only by default. Use `--sync` or
 `skills sync` when native runtime target directories should be written. Use
-`skills adopt` for existing `.umem/skills/<slug>` work and `skills import` for native
-directories such as `.agents/skills/<slug>`. Use `skills canonical update` to replace
-canonical content through validation, `skills rename` to move a slug, `skills cleanup`
-for one skill's managed native targets, and `skills repair` for project-wide orphan
-target cleanup.
+`skills adopt` for existing UMEM skill roots such as `.umem/skills/<slug>` or
+`umem/skills/<slug>`, and `skills import` for native directories such as
+`.agents/skills/<slug>`. Use `skills share` when an existing project skill
+should move into reviewable `umem/skills/`. Use `skills canonical update` to
+replace canonical content through validation, `skills rename` to move a slug,
+`skills cleanup` for one skill's managed native targets, and `skills repair` for
+project-wide orphan target cleanup.
+
+Shared-layout defaults are intentionally conservative:
+
+| Skill kind | Default canonical path |
+| --- | --- |
+| User-facing project skill | `umem/skills/<slug>/SKILL.md` |
+| Private project skill | `.umem/skills/<slug>/SKILL.md` |
+| Operational project skill | `.umem/skills/<slug>/SKILL.md` |
+| Legacy project skill | `.umem/skills/<slug>/SKILL.md` |
+
+Operational skills cannot be written directly to `umem/skills/` through
+`skills create`, `skills import`, `skills adopt`, or `skills publish`. Use
+`skills share <skill> --category operational --yes` when a human has explicitly
+approved repository-visible operational guidance.
 
 ## Adopt Existing Native Skill Into UMEM
 
@@ -47,7 +70,7 @@ Use this path when a local or native skill already exists and should become UMEM
 umem status --format json
 umem context --scope project --format json
 umem skills list --format json
-umem skills import .agents/skills/review-protocol --scope project --sync --format json
+umem skills import .agents/skills/review-protocol --scope project --visibility shared --category user-facing --sync --format json
 umem skills detail review-protocol --format json
 ```
 
@@ -56,10 +79,11 @@ also materialize configured native copies from canonical in the same operation. 
 `--replace-native` only when intentionally rewriting the matching managed native source
 during import.
 
-If `native_installations` or `targets` is empty, the import still succeeded: UMEM copied or
-adopted the source into `.umem/skills/`, but no enabled runtime target was written or
-adopted during that command. Re-run `umem skills import ... --sync` before other
-canonical changes, or run `umem skills sync review-protocol --format json` after import.
+If `native_installations` or `targets` is empty, the import still succeeded:
+UMEM copied or adopted the source into a UMEM skill root, but no enabled runtime
+target was written or adopted during that command. Re-run `umem skills import
+... --sync` before other canonical changes, or run `umem skills sync
+review-protocol --format json` after import.
 Normal `git status` may hide `.umem/`, `.agents/`, `.opencode/`, or other runtime
 directories when ignore rules exclude them.
 
@@ -70,15 +94,18 @@ umem remember "Adopted review-protocol as a UMEM canonical skill." --scope proje
 umem host sync --apply --yes --format json
 ```
 
-After import, edit `.umem/skills/review-protocol/SKILL.md`. Native wrappers are a
-repository policy choice, not UMEM's default 0.1.4 behavior. UMEM keeps the canonical
-source under `.umem/skills/` and synchronizes complete native copies for host runtimes.
+After import, edit the returned canonical `skill_file`. In a shared-layout
+project this may be `umem/skills/review-protocol/SKILL.md` for user-facing
+shared skills or `.umem/skills/review-protocol/SKILL.md` for private or
+operational skills. Native wrappers are a repository policy choice, not UMEM's
+default behavior. UMEM keeps the canonical source under one UMEM skill root and
+synchronizes complete native copies for host runtimes.
 
 Future migration flows should preserve this direction: adopt or import existing native
-skills into canonical `.umem/skills/`, validate configured targets, then synchronize
-complete managed copies back to native runtime directories. A `wrap-source` option may
-exist for repositories that deliberately want wrappers, but it is not the recommended or
-default migration result.
+skills into the appropriate canonical UMEM skill root, validate configured
+targets, then synchronize complete managed copies back to native runtime
+directories. A `wrap-source` option may exist for repositories that deliberately
+want wrappers, but it is not the recommended or default migration result.
 
 ## CLI Commands
 
@@ -89,11 +116,13 @@ umem skills detail <skill-id-or-name>
 umem skills draft create --name "Review Protocol" --description "Recurring review workflow"
 umem skills draft validate review-protocol
 umem skills publish review-protocol --format summary
-umem skills create --name "Review Protocol" --description "Recurring review workflow" --format summary
+umem skills create --name "Review Protocol" --description "Recurring review workflow" --visibility shared --category user-facing --format summary
+umem skills create --name "Local Bootstrap Helper" --description "Local bootstrap workflow" --category operational --format summary
 umem skills adopt .umem/skills/review-protocol --scope project
-umem skills import .agents/skills/review-protocol --scope project --sync
+umem skills import .agents/skills/review-protocol --scope project --visibility shared --category user-facing --sync
+umem skills share use-universal-memory --category operational --yes --format summary
 umem skills validate review-protocol
-umem skills canonical update review-protocol --file .umem/skills/review-protocol/SKILL.md
+umem skills canonical update review-protocol --file <relative-skill-file>
 umem skills rename review-protocol --slug review-checklist
 umem skills cleanup review-checklist --targets --format summary
 umem skills cleanup review-checklist --targets --apply
@@ -127,7 +156,8 @@ and does not prompt for overwrite. Use explicit `umem skills sync <skill-id-or-n
 Generated skills use a canonical structure:
 
 ```text
-.umem/skills/<skill-slug>/
+umem/skills/<skill-slug>/        # shared user-facing
+.umem/skills/<skill-slug>/       # legacy, private, or operational
   SKILL.md
   references/
   scripts/

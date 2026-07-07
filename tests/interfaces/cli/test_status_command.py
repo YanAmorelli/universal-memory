@@ -25,6 +25,10 @@ def initialized_result(project_root: Path) -> GetMemoryStatusResult:
         registered_skills_count=3,
         approximate_size_bytes=42,
         last_health_check="2026-05-27T20:00:00Z",
+        layout="shared",
+        shared_root="umem",
+        operational_root=".umem",
+        path_counts={"shared_paths": 3, "operational_paths": 5},
         host_validation={
             "claude_code": {
                 "status": "unconfigured",
@@ -78,6 +82,10 @@ def test_status_json_outputs_pure_success_envelope(
             "registered_skills_count": 3,
             "approximate_size_bytes": 42,
             "last_health_check": "2026-05-27T20:00:00Z",
+            "layout": "shared",
+            "shared_root": "umem",
+            "operational_root": ".umem",
+            "path_counts": {"shared_paths": 3, "operational_paths": 5},
             "host_validation": {
                 "claude_code": {
                     "status": "unconfigured",
@@ -122,6 +130,10 @@ def test_status_uninitialized_json_includes_recommended_action(
         "initialized": False,
         "project_path": ".",
         "installed_version": __version__,
+        "layout": "shared",
+        "shared_root": "umem",
+        "operational_root": ".umem",
+        "path_counts": {"shared_paths": 3, "operational_paths": 5},
         "recommended_action": "Run umem init from the project root.",
     }
 
