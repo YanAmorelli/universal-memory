@@ -212,6 +212,7 @@ def test_migration_keeps_context_summaries_operational_while_cleaning_facts(
     _migrate(tmp_path, dry_run=False)
 
     assert _read_jsonl(tmp_path / ".umem" / "memory" / "facts.jsonl") == []
+    assert (tmp_path / "umem" / "skills").is_dir()
     assert context_summaries_path.read_text(encoding="utf-8") == '{"id":"summary-1"}\n'
 
 

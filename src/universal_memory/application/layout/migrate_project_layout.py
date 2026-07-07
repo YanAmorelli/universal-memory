@@ -108,6 +108,7 @@ class MigrateProjectLayoutUseCase:
         self._report_global_records(include=include, skipped=skipped)
 
         if not command.dry_run:
+            self._ensure_shared_layout_directories(affected_paths=affected_paths)
             self._write_metadata(
                 shared_operational_skill_slugs=command.shared_operational_skill_slugs
             )
@@ -392,6 +393,19 @@ class MigrateProjectLayoutUseCase:
                 remaining_local.add(self._relative(layout.legacy_skills_registry_path))
         if not command.dry_run and output != shared:
             self._write_jsonl(layout.shared_skills_registry_path, list(output.values()))
+
+    def _ensure_shared_layout_directories(self, *, affected_paths: set[str]) -> None:
+        layout = resolve_project_layout(self.project_root)
+        for directory in (layout.shared_memory_root, layout.shared_skills_root):
+            if directory.exists():
+                continue
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+            except OSError as error:
+                raise StorageError(
+                    f"Failed to create shared layout directory {self._relative(directory)}: {error}"
+                ) from error
+            affected_paths.add(self._relative(directory))
 
     def _copy_skill_dir(self, legacy_skill: AgentSkill, shared_skill: AgentSkill) -> None:
         source = self.project_root / legacy_skill.canonical_path
