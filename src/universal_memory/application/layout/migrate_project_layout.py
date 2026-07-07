@@ -161,6 +161,7 @@ class MigrateProjectLayoutUseCase:
         legacy = self._load_jsonl_models(layout.legacy_facts_path, Fact)
         shared = {fact.id: fact for fact in self._load_jsonl_models(layout.shared_facts_path, Fact)}
         output = dict(shared)
+        remaining_legacy: list[Fact] = []
         for fact in legacy:
             if fact.scope != FactScope.project:
                 skipped.append(
@@ -171,10 +172,12 @@ class MigrateProjectLayoutUseCase:
                         layout.legacy_facts_path,
                     )
                 )
+                remaining_legacy.append(fact)
                 continue
             if fact.id in command.private_fact_ids or fact.metadata.get("visibility") == "private":
                 skipped.append(self._item("fact", fact.id, "private", layout.legacy_facts_path))
                 remaining_local.add(self._relative(layout.legacy_facts_path))
+                remaining_legacy.append(fact)
                 continue
             candidate = self._shared_fact(fact, layout.shared_facts_path)
             existing = shared.get(fact.id)
@@ -182,11 +185,13 @@ class MigrateProjectLayoutUseCase:
                 copied.append(self._item("fact", fact.id, "copied", layout.shared_facts_path))
                 output[fact.id] = candidate
                 affected_paths.add(self._relative(layout.shared_facts_path))
+                affected_paths.add(self._relative(layout.legacy_facts_path))
                 continue
             if self._entity_hash(candidate) == self._entity_hash(existing):
                 already_shared.append(
                     self._item("fact", fact.id, "already_shared", layout.shared_facts_path)
                 )
+                affected_paths.add(self._relative(layout.legacy_facts_path))
             else:
                 conflicts.append(
                     self._conflict(
@@ -197,8 +202,11 @@ class MigrateProjectLayoutUseCase:
                     )
                 )
                 remaining_local.add(self._relative(layout.legacy_facts_path))
+                remaining_legacy.append(fact)
         if not command.dry_run and output != shared:
             self._write_jsonl(layout.shared_facts_path, list(output.values()))
+        if not command.dry_run and remaining_legacy != legacy:
+            self._write_jsonl(layout.legacy_facts_path, remaining_legacy)
 
     def _migrate_rules(  # noqa: PLR0913
         self,

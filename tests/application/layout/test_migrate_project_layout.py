@@ -63,12 +63,12 @@ def test_migration_dry_run_apply_and_second_apply_are_idempotent(tmp_path: Path)
     assert (tmp_path / "umem" / "memory" / "rules.jsonl").is_file()
     assert (tmp_path / "umem" / "skills" / "review-helper" / "SKILL.md").is_file()
     assert (tmp_path / ".umem" / "layout" / "migration-report.json").is_file()
+    assert _read_jsonl(tmp_path / ".umem" / "memory" / "facts.jsonl") == []
 
     second_apply = _migrate(tmp_path, dry_run=False)
 
     assert second_apply["data"]["copied"] == []
     assert _ids(second_apply["data"]["already_shared"]) == {
-        FACT_ID,
         RULE_ID,
         "review-helper",
     }
@@ -109,6 +109,7 @@ def test_migration_apply_uses_safe_write_for_shared_and_operational_outputs(
         "umem/memory/rules.jsonl",
         "umem/skills/skills.jsonl",
         "umem/skills/review-helper/SKILL.md",
+        ".umem/memory/facts.jsonl",
         ".umem/layout/migration-report.json",
     } <= snapshot_paths
     assert all(event.result == "success" for event in audit.written)
@@ -194,8 +195,24 @@ def test_migration_skips_global_private_and_operational_records(tmp_path: Path) 
     assert ("fact", GLOBAL_FACT_ID, "skipped_global") in skipped
     assert ("skill", "global-helper", "skipped_global") in skipped
     assert not (tmp_path / "umem" / "skills" / "use-universal-memory").exists()
+    remaining_facts = _read_jsonl(tmp_path / ".umem" / "memory" / "facts.jsonl")
+    assert [fact["id"] for fact in remaining_facts] == [PRIVATE_FACT_ID]
     assert all(not Path(item["path"]).is_absolute() for item in result["data"]["skipped"])
     assert str(tmp_path) not in json.dumps(result["data"]["skipped"])
+
+
+def test_migration_keeps_context_summaries_operational_while_cleaning_facts(
+    tmp_path: Path,
+) -> None:
+    fact = _fact(FACT_ID, "Use shared project memory.")
+    _write_legacy_project(tmp_path, facts=[fact], rules=[], skills=[])
+    context_summaries_path = tmp_path / ".umem" / "memory" / "context_summaries.jsonl"
+    context_summaries_path.write_text('{"id":"summary-1"}\n', encoding="utf-8")
+
+    _migrate(tmp_path, dry_run=False)
+
+    assert _read_jsonl(tmp_path / ".umem" / "memory" / "facts.jsonl") == []
+    assert context_summaries_path.read_text(encoding="utf-8") == '{"id":"summary-1"}\n'
 
 
 def test_migration_can_share_private_operational_skill_when_explicitly_allowed(

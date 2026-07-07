@@ -63,6 +63,8 @@ Expected result:
 
 - Dry run reports what would be copied, skipped, kept private, or conflicting.
 - Apply writes `umem/project.toml` and missing shared files through safe-write.
+- Apply removes migrated project facts from legacy `.umem/memory/facts.jsonl`;
+  private, global, and conflicting facts remain local.
 - Re-running apply does not duplicate facts, rules, skill registrations, or skill directories.
 - Global facts and global skills are reported as skipped out of scope.
 - Operational skills are skipped unless explicitly shared.

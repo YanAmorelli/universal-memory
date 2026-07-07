@@ -48,13 +48,13 @@ Alternatives considered:
 - Hard failure on any overlap: rejected because partially migrated projects need readable diagnostics and safe next steps.
 - Timestamp wins: rejected because it is harder to explain and can produce surprising results after copy-based migration.
 
-## Decision: Migration copies by default and remains idempotent
+## Decision: Migration copies shared records safely and cleans migrated facts
 
-Rationale: Copying curated project memories and user-facing skills into `umem/` preserves rollback options and avoids data loss. The migration report records copied, already shared, skipped, private, operational, and conflicting items. Re-running migration compares stable IDs, slugs, and content hashes before writing.
+Rationale: Copying curated project memories and user-facing skills into `umem/` through safe-write preserves rollback snapshots and avoids data loss during interrupted writes. After a successful apply, migrated project facts are removed from legacy `.umem/memory/facts.jsonl` so users do not see normal post-migration overlaps. The migration report records copied, already shared, skipped, private, operational, and conflicting items. Re-running migration compares stable IDs, slugs, and content hashes before writing.
 
 Alternatives considered:
 
-- Move by default: rejected because interrupted migration could strand users between layouts.
+- Raw file move by default: rejected because interrupted migration could strand users between layouts without safe-write snapshots.
 - Always overwrite shared content: rejected because it could discard intentional shared edits.
 - Require manual file moves: rejected because it would not provide a reliable migration report.
 

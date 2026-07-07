@@ -170,7 +170,7 @@ User-facing summary of a dry run or applied migration.
 - `already_shared`: records already present with matching ID, slug, or hash.
 - `skipped`: global, private, operational, invalid, or unsupported records.
 - `conflicts`: overlapping IDs, slugs, or divergent content.
-- `remaining_local`: operational and private paths left under `.umem/`.
+- `remaining_local`: operational, private, global, or conflicting paths left under `.umem/`.
 - `affected_paths`: project-relative paths written or inspected.
 - `next_steps`: commit, review, ignore, or resolve guidance.
 
@@ -178,6 +178,7 @@ Validation rules:
 
 - Applied migration must be safe to re-run.
 - Migration must report every legacy project memory and canonical project skill as copied, already shared, skipped, private, operational, or conflicting.
+- Applied migration removes successfully migrated project facts from legacy storage while preserving private, global, and conflicting local facts.
 - Global facts and global skills must be reported as out of scope, not copied.
 
 ## Layout Health Check

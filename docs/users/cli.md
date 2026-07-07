@@ -38,6 +38,11 @@ skills can be reviewed. Use `--include facts`, `--include rules`, or
 Use `--share-operational-skill <slug>` only after intentionally approving an
 operational skill for repository sharing.
 
+When migration is applied, migrated project facts are written to
+`umem/memory/facts.jsonl` and removed from legacy `.umem/memory/facts.jsonl`.
+Private, global, or conflicting legacy facts stay local. Operational files such
+as context summaries remain under `.umem/`.
+
 ## Facts
 
 ```bash
