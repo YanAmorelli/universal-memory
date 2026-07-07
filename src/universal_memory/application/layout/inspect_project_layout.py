@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import asdict
@@ -221,9 +222,26 @@ def _run_git(project_root: Path, *args: str) -> subprocess.CompletedProcess[str]
             check=False,
             capture_output=True,
             text=True,
+            env=_sanitized_git_env(),
         )
     except OSError:
         return subprocess.CompletedProcess(args=["git", *args], returncode=1, stdout="", stderr="")
+
+
+def _sanitized_git_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in (
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG",
+        "GIT_CONFIG_COUNT",
+        "GIT_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_PREFIX",
+        "GIT_WORK_TREE",
+    ):
+        env.pop(key, None)
+    return env
 
 
 def _relative_path(path: Path, project_root: Path) -> str:

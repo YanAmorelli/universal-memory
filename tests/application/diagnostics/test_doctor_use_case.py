@@ -1,7 +1,10 @@
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from universal_memory.application.diagnostics import DoctorCommand, DoctorUseCase
 from universal_memory.application.host import ConfigureHostCommand, ConfigureHostResult
@@ -332,6 +335,39 @@ def test_doctor_warns_when_git_metadata_is_unavailable(tmp_path: Path) -> None:
     assert checks["operational_root_privacy"].status == "warning"
 
 
+def test_doctor_ignores_inherited_git_hook_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ambient_repo = tmp_path / "ambient"
+    ambient_repo.mkdir()
+    _git(ambient_repo, "init")
+    (ambient_repo / ".umem" / "audit").mkdir(parents=True)
+    (ambient_repo / ".umem" / "audit" / "events.jsonl").write_text("", encoding="utf-8")
+    _git(ambient_repo, "add", ".umem/audit/events.jsonl")
+    target_project = tmp_path / "target"
+    ensure_shared_project_layout(target_project)
+    xdg_data_home, xdg_config_home = prepare_global_paths(tmp_path)
+    monkeypatch.setenv("GIT_DIR", (ambient_repo / ".git").as_posix())
+    monkeypatch.setenv("GIT_WORK_TREE", ambient_repo.as_posix())
+    monkeypatch.setenv("GIT_INDEX_FILE", (ambient_repo / ".git" / "index").as_posix())
+
+    use_case = DoctorUseCase(
+        which=lambda _name: "/bin/tool",
+        home=tmp_path / "home",
+        xdg_data_home=xdg_data_home,
+        xdg_config_home=xdg_config_home,
+    )
+
+    result = use_case.execute(DoctorCommand(project_root=target_project))
+    checks = {check.name: check for check in result.checks}
+
+    assert result.ok is True
+    assert checks["shared_root_visibility"].status == "warning"
+    assert checks["operational_root_privacy"].status == "warning"
+    assert checks["operational_root_privacy"].error is None
+
+
 def test_doctor_warns_for_legacy_shared_overlaps(tmp_path: Path) -> None:
     ensure_shared_project_layout(tmp_path)
     _git_init(tmp_path)
@@ -371,6 +407,7 @@ def _git(project_root: Path, *args: str) -> None:
         [git, "-C", project_root.as_posix(), *args],
         check=True,
         capture_output=True,
+        env=_sanitized_git_env(),
     )
 
 
@@ -378,3 +415,19 @@ def _append_jsonl(path: Path, payload: dict[str, str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload) + "\n")
+
+
+def _sanitized_git_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in (
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG",
+        "GIT_CONFIG_COUNT",
+        "GIT_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_PREFIX",
+        "GIT_WORK_TREE",
+    ):
+        env.pop(key, None)
+    return env
