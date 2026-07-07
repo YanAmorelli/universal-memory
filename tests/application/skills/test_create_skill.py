@@ -25,7 +25,7 @@ def make_shared_project_root(tmp_path: Path) -> Path:
     (tmp_path / ".umem").mkdir()
     (tmp_path / "umem").mkdir()
     (tmp_path / "umem" / "project.toml").write_text(
-        "[project]\nlayout = \"shared\"\nversion = \"1\"\n",
+        '[project]\nlayout = "shared"\nversion = "1"\n',
         encoding="utf-8",
     )
     return tmp_path

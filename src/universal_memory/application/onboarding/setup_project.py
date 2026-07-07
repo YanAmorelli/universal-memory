@@ -855,10 +855,22 @@ def setup_project(  # noqa: PLR0913
 ) -> SetupProjectResult:
     normalized_project_root = project_root.resolve()
     layout_result = layout_port.ensure_project_layout(normalized_project_root)
+    shared_created_paths: list[str] = []
+    shared_existing_paths: list[str] = []
     shared_paths: list[str] = []
     if layout == "shared":
-        layout_port.write_project_layout_metadata(normalized_project_root, layout="shared")
         shared_paths = ["umem/project.toml", "umem/memory", "umem/skills"]
+        existing_shared_paths = {
+            shared_path
+            for shared_path in shared_paths
+            if (normalized_project_root / shared_path).exists()
+        }
+        layout_port.write_project_layout_metadata(normalized_project_root, layout="shared")
+        for shared_path in shared_paths:
+            if shared_path in existing_shared_paths:
+                shared_existing_paths.append(shared_path)
+            else:
+                shared_created_paths.append(shared_path)
     seeded_skill_paths = _ensure_default_umem_skill(normalized_project_root)
     loaded_config = load_config(normalized_project_root, global_config_path=global_config_path)
     requested_runtime_ids = (
@@ -917,8 +929,24 @@ def setup_project(  # noqa: PLR0913
         benchmarks_path=umem_root / "benchmarks",
         created=layout_result.created,
         already_initialized=not layout_result.created,
-        created_paths=[*layout_result.created_paths, *shared_paths, *seeded_skill_paths["created"]],
-        existing_paths=[*layout_result.existing_paths, *seeded_skill_paths["existing"]],
+        created_paths=[
+            *layout_result.created_paths,
+            *[
+                shared_path
+                for shared_path in shared_created_paths
+                if shared_path not in layout_result.created_paths
+            ],
+            *seeded_skill_paths["created"],
+        ],
+        existing_paths=[
+            *layout_result.existing_paths,
+            *[
+                shared_path
+                for shared_path in shared_existing_paths
+                if shared_path not in layout_result.existing_paths
+            ],
+            *seeded_skill_paths["existing"],
+        ],
         layout=layout,
         shared_root=Path("umem") if layout == "shared" else None,
         operational_root=Path(".umem"),

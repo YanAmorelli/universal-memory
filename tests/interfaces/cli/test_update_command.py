@@ -435,7 +435,8 @@ def test_update_skills_json_updates_managed_default_umem_skill_and_reports_prese
     assert skill["audit_reference"]
     assert skill["snapshot_reference"]
     assert (
-        "umem skills import .agents/skills/<skill-name> --scope project --visibility shared --category user-facing --sync"
+        "umem skills import .agents/skills/<skill-name> --scope project "
+        "--visibility shared --category user-facing --sync"
         in lifecycle_path.read_text(encoding="utf-8")
     )
 

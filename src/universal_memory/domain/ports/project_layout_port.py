@@ -20,14 +20,17 @@ class ProjectLayoutPort(ABC):
         """Return whether the canonical `.umem/` layout already exists."""
         ...
 
+    @abstractmethod
     def inspect_project_layout(self, project_root: Path) -> ProjectLayoutInspection:
         """Return the active layout mode and non-mutating guidance."""
         ...
 
+    @abstractmethod
     def resolve_project_layout(self, project_root: Path) -> ResolvedProjectLayout:
         """Resolve effective shared and operational storage paths."""
         ...
 
+    @abstractmethod
     def write_project_layout_metadata(
         self,
         project_root: Path,

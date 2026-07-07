@@ -67,9 +67,7 @@ def test_share_user_facing_skill_copies_private_skill_to_shared_root(tmp_path: P
         )
     )
 
-    result = share.execute(
-        ShareSkillCommand(skill_id_or_name=private_skill.slug, origin="test")
-    )
+    result = share.execute(ShareSkillCommand(skill_id_or_name=private_skill.slug, origin="test"))
 
     stored = repository.read(result.agent_skill.id)
     assert result.old_canonical_path == ".umem/skills/private-review-helper/SKILL.md"

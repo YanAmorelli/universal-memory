@@ -108,7 +108,9 @@ class MigrateProjectLayoutUseCase:
         self._report_global_records(include=include, skipped=skipped)
 
         if not command.dry_run:
-            self._write_metadata(shared_operational_skill_slugs=command.shared_operational_skill_slugs)
+            self._write_metadata(
+                shared_operational_skill_slugs=command.shared_operational_skill_slugs
+            )
             self._persist_report(
                 copied=copied,
                 already_shared=already_shared,
@@ -286,12 +288,9 @@ class MigrateProjectLayoutUseCase:
             explicitly_shared_operational = (
                 is_operational and skill.slug in command.shared_operational_skill_slugs
             )
-            if (
-                not explicitly_shared_operational
-                and (
-                    skill.slug in command.private_skill_slugs
-                    or skill.metadata.get("visibility") == "private"
-                )
+            if not explicitly_shared_operational and (
+                skill.slug in command.private_skill_slugs
+                or skill.metadata.get("visibility") == "private"
             ):
                 skipped.append(
                     self._item(
@@ -358,9 +357,10 @@ class MigrateProjectLayoutUseCase:
                         layout.shared_skills_root / skill.slug,
                     )
                 )
-            elif self._entity_hash(candidate) == self._entity_hash(
-                existing
-            ) and skill_dir_state == "missing":
+            elif (
+                self._entity_hash(candidate) == self._entity_hash(existing)
+                and skill_dir_state == "missing"
+            ):
                 copied.append(
                     self._item(
                         "skill",
@@ -489,8 +489,11 @@ class MigrateProjectLayoutUseCase:
         data["shared_operational_skills"] = sorted(
             {*existing_shared_operational, *shared_operational_skill_slugs}
         )
+        migration_data = data.get("migration")
+        if not isinstance(migration_data, dict):
+            migration_data = {}
         data["migration"] = {
-            **(data.get("migration") if isinstance(data.get("migration"), dict) else {}),
+            **migration_data,
             "status": "applied",
             "target_layout": "shared",
             "last_run_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -498,7 +501,7 @@ class MigrateProjectLayoutUseCase:
         }
         self._write_text(project_toml, tomli_w.dumps(data), action="layout_migrate_metadata")
         rendered = render_project_layout_metadata(layout="shared")
-        if "layout = \"shared\"" not in rendered:
+        if 'layout = "shared"' not in rendered:
             raise StorageError("Failed to render shared layout metadata.")
 
     def _load_project_toml_data(self, project_toml: Path) -> dict[str, Any]:

@@ -31,7 +31,13 @@ from universal_memory.domain.ports import (
     LatentSkillRepository,
     RuleRepository,
 )
-from universal_memory.domain.project_layout import ProjectLayoutInspection
+from universal_memory.domain.project_layout import (
+    ProjectLayoutInspection,
+    ProjectLayoutMode,
+    ProjectLayoutPolicy,
+    ProjectLayoutPrecedence,
+    ResolvedProjectLayout,
+)
 
 EXPECTED_MIN_SIZE_BYTES = 3
 MIN_SHARED_LAYOUT_PATHS = 2
@@ -61,6 +67,41 @@ class RecordingLayoutPort(ProjectLayoutPort):
             precedence="shared_over_legacy",
             warnings=[],
             recommended_actions=[],
+        )
+
+    def resolve_project_layout(self, project_root: Path) -> ResolvedProjectLayout:
+        shared_root = project_root / "umem"
+        operational_root = project_root / ".umem"
+        return ResolvedProjectLayout(
+            project_root=project_root,
+            policy=ProjectLayoutPolicy(
+                schema_version="1",
+                layout=ProjectLayoutMode(self.layout),
+                shared_root="umem",
+                operational_root=".umem",
+                precedence=ProjectLayoutPrecedence.shared_over_legacy,
+            ),
+            shared_root_path=shared_root,
+            operational_root_path=operational_root,
+            shared_memory_root=shared_root / "memory",
+            shared_skills_root=shared_root / "skills",
+            operational_memory_root=operational_root / "memory",
+            operational_skills_root=operational_root / "skills",
+            operational_locks_root=operational_root / "locks",
+        )
+
+    def write_project_layout_metadata(
+        self,
+        project_root: Path,
+        *,
+        layout: str = "shared",
+    ) -> ProjectLayoutPolicy:
+        return ProjectLayoutPolicy(
+            schema_version="1",
+            layout=ProjectLayoutMode(layout),
+            shared_root="umem",
+            operational_root=".umem",
+            precedence=ProjectLayoutPrecedence.shared_over_legacy,
         )
 
 
@@ -381,6 +422,7 @@ def test_status_counts_initialized_memory_and_detects_hosts(
     assert result.layout == "legacy"
     assert result.shared_root == "umem"
     assert result.operational_root == ".umem"
+    assert result.path_counts is not None
     assert result.path_counts["operational_paths"] >= 1
     assert result.approximate_size_bytes >= EXPECTED_MIN_SIZE_BYTES
     assert result.last_health_check is not None
@@ -442,6 +484,7 @@ def test_status_reports_shared_layout_roots_and_path_counts(
     assert result.layout == "shared"
     assert result.shared_root == "umem"
     assert result.operational_root == ".umem"
+    assert result.path_counts is not None
     assert result.path_counts["shared_paths"] >= MIN_SHARED_LAYOUT_PATHS
     assert result.path_counts["operational_paths"] >= 1
 

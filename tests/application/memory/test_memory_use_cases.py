@@ -357,9 +357,7 @@ def test_list_facts_delegates_filters_to_repository() -> None:
 
 
 def test_list_facts_filters_by_visibility() -> None:
-    shared = make_fact(content="Shared").model_copy(
-        update={"metadata": {"visibility": "shared"}}
-    )
+    shared = make_fact(content="Shared").model_copy(update={"metadata": {"visibility": "shared"}})
     private = make_fact(content="Private").model_copy(
         update={"metadata": {"visibility": "private"}}
     )

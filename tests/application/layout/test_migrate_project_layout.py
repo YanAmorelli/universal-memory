@@ -216,9 +216,7 @@ def test_migration_can_share_private_operational_skill_when_explicitly_allowed(
 
     assert _ids(result["data"]["copied"]) == {"use-universal-memory"}
     assert (tmp_path / "umem" / "skills" / "use-universal-memory" / "SKILL.md").is_file()
-    project_toml = tomllib.loads(
-        (tmp_path / "umem" / "project.toml").read_text(encoding="utf-8")
-    )
+    project_toml = tomllib.loads((tmp_path / "umem" / "project.toml").read_text(encoding="utf-8"))
     assert "use-universal-memory" in project_toml["shared_operational_skills"]
 
 
@@ -261,9 +259,7 @@ def test_migration_preserves_existing_project_toml_policy(tmp_path: Path) -> Non
         shared_operational_skill_slugs=("new-op",),
     )
 
-    project_toml = tomllib.loads(
-        (tmp_path / "umem" / "project.toml").read_text(encoding="utf-8")
-    )
+    project_toml = tomllib.loads((tmp_path / "umem" / "project.toml").read_text(encoding="utf-8"))
     assert project_toml["shared_operational_skills"] == ["existing-op", "new-op"]
     assert project_toml["migration"]["status"] == "applied"
 
@@ -361,8 +357,7 @@ def _write_jsonl(path: Path, records: list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "".join(
-            json.dumps(record.model_dump(mode="json"), sort_keys=True) + "\n"
-            for record in records
+            json.dumps(record.model_dump(mode="json"), sort_keys=True) + "\n" for record in records
         ),
         encoding="utf-8",
     )

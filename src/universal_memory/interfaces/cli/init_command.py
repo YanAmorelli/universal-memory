@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from inspect import signature
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import click
 import typer
@@ -32,6 +32,7 @@ from universal_memory.application.layout import (
     MigrateProjectLayoutCommand,
     MigrateProjectLayoutUseCase,
 )
+from universal_memory.application.layout.migrate_project_layout import MigrationInclude
 from universal_memory.application.memory import (
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
@@ -608,9 +609,9 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         ] = None,
         output_format: OutputFormatOption = None,
     ) -> None:
-        command_handler = layout_migrate_command or MigrateProjectLayoutUseCase(
-            project_root=Path.cwd()
-        ).execute
+        command_handler = (
+            layout_migrate_command or MigrateProjectLayoutUseCase(project_root=Path.cwd()).execute
+        )
         _ = target_layout
         if dry_run and apply_changes:
             _print_expected_error(
@@ -623,7 +624,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 target_layout="shared",
                 dry_run=not apply_changes,
                 include=tuple(
-                    value.lower() for value in (include or ["facts", "rules", "skills"])
+                    cast(MigrationInclude, value.lower())
+                    for value in (include or ["facts", "rules", "skills"])
                 ),
                 private_fact_ids=tuple(private_fact_ids or []),
                 private_skill_slugs=tuple(private_skill_slugs or []),
@@ -1369,9 +1371,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
 
     @skills_app.command(
         "share",
-        help=(
-            "Copy an existing project skill into umem/skills. Operational skills require --yes."
-        ),
+        help=("Copy an existing project skill into umem/skills. Operational skills require --yes."),
     )
     def skills_share(
         ctx: typer.Context,
