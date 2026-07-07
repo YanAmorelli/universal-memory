@@ -187,16 +187,16 @@
 
 **Purpose**: Update user-facing guidance, parity documentation, and quickstart validation after the stories work.
 
-- [ ] T083 [P] Update user CLI documentation for shared layout commands, visibility flags, and migration examples in `docs/users/cli.md`
-- [ ] T084 [P] Update agent operating guidance for shared root usage, operational privacy, and when to ask before publishing context in `docs/agents/operating-protocol.md`
-- [ ] T085 [P] Update instruction file guidance for `AGENTS.md`, `.umem/`, and `umem/` responsibilities in `docs/agents/instruction-files.md`
-- [ ] T086 [P] Update skill lifecycle documentation for shared, private, and operational project skill paths in `docs/reference/skill-lifecycle.md`
-- [ ] T087 [P] Update CLI/MCP parity reference with `layout.status`, `layout.migrate`, visibility fields, and `share_skill` in `docs/reference/cli-mcp-parity.md`
-- [ ] T088 [P] Update UMEM skill memory guidance for shared root and private operational state in `.umem/skills/use-universal-memory/references/memory-facts.md`
-- [ ] T089 [P] Update UMEM skill lifecycle guidance for shared and operational skill decisions in `.umem/skills/use-universal-memory/references/skills-lifecycle.md`
-- [ ] T090 [P] Update CLI/MCP parity guidance inside the UMEM skill reference in `.umem/skills/use-universal-memory/references/cli-mcp-parity.md`
-- [ ] T091 Run the quickstart static check command and update validation notes if needed in `specs/002-shared-project-root/quickstart.md`
-- [ ] T092 Run formatting and targeted test suites, then document any deferred follow-up in `specs/002-shared-project-root/quickstart.md`
+- [X] T083 [P] Update user CLI documentation for shared layout commands, visibility flags, and migration examples in `docs/users/cli.md`
+- [X] T084 [P] Update agent operating guidance for shared root usage, operational privacy, and when to ask before publishing context in `docs/agents/operating-protocol.md`
+- [X] T085 [P] Update instruction file guidance for `AGENTS.md`, `.umem/`, and `umem/` responsibilities in `docs/agents/instruction-files.md`
+- [X] T086 [P] Update skill lifecycle documentation for shared, private, and operational project skill paths in `docs/reference/skill-lifecycle.md`
+- [X] T087 [P] Update CLI/MCP parity reference with `layout.status`, `layout.migrate`, visibility fields, and `share_skill` in `docs/reference/cli-mcp-parity.md`
+- [X] T088 [P] Update UMEM skill memory guidance for shared root and private operational state in `.umem/skills/use-universal-memory/references/memory-facts.md`
+- [X] T089 [P] Update UMEM skill lifecycle guidance for shared and operational skill decisions in `.umem/skills/use-universal-memory/references/skills-lifecycle.md`
+- [X] T090 [P] Update CLI/MCP parity guidance inside the UMEM skill reference in `.umem/skills/use-universal-memory/references/cli-mcp-parity.md`
+- [X] T091 Run the quickstart static check command and update validation notes if needed in `specs/002-shared-project-root/quickstart.md`
+- [X] T092 Run formatting and targeted test suites, then document any deferred follow-up in `specs/002-shared-project-root/quickstart.md`
 
 ---
 

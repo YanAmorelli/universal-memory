@@ -22,6 +22,15 @@ Expected outcome:
 - Doctor reports layout health without stopping unrelated checks.
 - Docs tests cover shared-root guidance and operational privacy.
 
+Validation notes:
+
+- Quickstart static check passed with 519 tests.
+- `uv run pytest tests/docs` passed with 15 tests.
+- `uv run --group docs mkdocs build --strict` passed; Material for MkDocs emitted
+  its upstream MkDocs 2.0 compatibility warning.
+- `git diff --check` passed.
+- No deferred follow-up is recorded for Phase 7.
+
 ## Scenario 1: Initialize A Shared-Layout Project
 
 ```bash
