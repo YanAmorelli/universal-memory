@@ -18,11 +18,11 @@
 
 **Purpose**: Add empty extension points and test helpers so the layout feature can be implemented without scattering ad hoc fixtures.
 
-- [ ] T001 Create the layout application package exports in `src/universal_memory/application/layout/__init__.py`
-- [ ] T002 [P] Add shared layout application test fixtures in `tests/application/layout/conftest.py`
-- [ ] T003 [P] Add storage path fixture helpers for legacy, shared, and private layouts in `tests/infrastructure/storage/conftest.py`
-- [ ] T004 [P] Extend interface fixture helpers for layout CLI and MCP payload assertions in `tests/interfaces/conftest.py`
-- [ ] T005 [P] Add shared root documentation assertions to the docs test helper coverage in `tests/docs/test_mkdocs_content_contracts.py`
+- [X] T001 Create the layout application package exports in `src/universal_memory/application/layout/__init__.py`
+- [X] T002 [P] Add shared layout application test fixtures in `tests/application/layout/conftest.py`
+- [X] T003 [P] Add storage path fixture helpers for legacy, shared, and private layouts in `tests/infrastructure/storage/conftest.py`
+- [X] T004 [P] Extend interface fixture helpers for layout CLI and MCP payload assertions in `tests/interfaces/conftest.py`
+- [X] T005 [P] Add shared root documentation assertions to the docs test helper coverage in `tests/docs/test_mkdocs_content_contracts.py`
 
 ---
 
@@ -34,24 +34,24 @@
 
 ### Tests for Foundational Layout Behavior
 
-- [ ] T006 [P] Add layout metadata validation tests for `umem/project.toml`, relative paths, precedence, and invalid roots in `tests/infrastructure/test_project_layout.py`
-- [ ] T007 [P] Add fact repository path routing tests for legacy, shared, private, and global facts in `tests/infrastructure/storage/test_local_fact_repository.py`
-- [ ] T008 [P] Add rule repository path routing tests for legacy, shared, private, and global rules in `tests/infrastructure/storage/test_local_rule_repository.py`
-- [ ] T009 [P] Add agent skill repository path routing tests for shared, operational, private, and global project skills in `tests/infrastructure/storage/test_local_agent_skill_repository.py`
-- [ ] T010 [P] Add safe write path tests proving shared content uses `umem/` while locks, audit, and snapshots stay under `.umem/` in `tests/application/security/test_safe_write_use_case.py`
+- [X] T006 [P] Add layout metadata validation tests for `umem/project.toml`, relative paths, precedence, and invalid roots in `tests/infrastructure/test_project_layout.py`
+- [X] T007 [P] Add fact repository path routing tests for legacy, shared, private, and global facts in `tests/infrastructure/storage/test_local_fact_repository.py`
+- [X] T008 [P] Add rule repository path routing tests for legacy, shared, private, and global rules in `tests/infrastructure/storage/test_local_rule_repository.py`
+- [X] T009 [P] Add agent skill repository path routing tests for shared, operational, private, and global project skills in `tests/infrastructure/storage/test_local_agent_skill_repository.py`
+- [X] T010 [P] Add safe write path tests proving shared content uses `umem/` while locks, audit, and snapshots stay under `.umem/` in `tests/application/security/test_safe_write_use_case.py`
 
 ### Implementation for Foundational Layout Behavior
 
-- [ ] T011 Expand layout domain models, enums, visibility values, precedence values, and report dataclasses in `src/universal_memory/domain/project_layout.py`
-- [ ] T012 Extend project layout port contracts for inspect, resolve, metadata write, and migration report operations in `src/universal_memory/domain/ports/project_layout_port.py`
-- [ ] T013 Implement shared layout metadata loading, validation, and `umem/project.toml` rendering in `src/universal_memory/infrastructure/config/project_layout.py`
-- [ ] T014 Extend TOML config loading so committed `umem/project.toml` can influence project layout without replacing `.umem/config.toml` in `src/universal_memory/infrastructure/config/toml_loader.py`
-- [ ] T015 Add project fact storage routing, private fact path support, shared-over-legacy precedence, and `.umem/locks` lock placement in `src/universal_memory/infrastructure/storage/local_fact_repository.py`
-- [ ] T016 Add project rule storage routing, private rule path support, shared-over-legacy precedence, and `.umem/locks` lock placement in `src/universal_memory/infrastructure/storage/local_rule_repository.py`
-- [ ] T017 Add project skill registry routing, shared canonical root support, operational skill root support, and shared-over-legacy precedence in `src/universal_memory/infrastructure/storage/local_agent_skill_repository.py`
-- [ ] T018 Add layout resolver dependencies to CLI bootstrap wiring for repositories and layout use cases in `src/universal_memory/bootstrap/cli.py`
-- [ ] T019 Add layout resolver dependencies to MCP bootstrap wiring for repositories and layout use cases in `src/universal_memory/bootstrap/mcp.py`
-- [ ] T020 Export new layout commands and repository-aware use cases from package initializers in `src/universal_memory/application/__init__.py`
+- [X] T011 Expand layout domain models, enums, visibility values, precedence values, and report dataclasses in `src/universal_memory/domain/project_layout.py`
+- [X] T012 Extend project layout port contracts for inspect, resolve, metadata write, and migration report operations in `src/universal_memory/domain/ports/project_layout_port.py`
+- [X] T013 Implement shared layout metadata loading, validation, and `umem/project.toml` rendering in `src/universal_memory/infrastructure/config/project_layout.py`
+- [X] T014 Extend TOML config loading so committed `umem/project.toml` can influence project layout without replacing `.umem/config.toml` in `src/universal_memory/infrastructure/config/toml_loader.py`
+- [X] T015 Add project fact storage routing, private fact path support, shared-over-legacy precedence, and `.umem/locks` lock placement in `src/universal_memory/infrastructure/storage/local_fact_repository.py`
+- [X] T016 Add project rule storage routing, private rule path support, shared-over-legacy precedence, and `.umem/locks` lock placement in `src/universal_memory/infrastructure/storage/local_rule_repository.py`
+- [X] T017 Add project skill registry routing, shared canonical root support, operational skill root support, and shared-over-legacy precedence in `src/universal_memory/infrastructure/storage/local_agent_skill_repository.py`
+- [X] T018 Add layout resolver dependencies to CLI bootstrap wiring for repositories and layout use cases in `src/universal_memory/bootstrap/cli.py`
+- [X] T019 Add layout resolver dependencies to MCP bootstrap wiring for repositories and layout use cases in `src/universal_memory/bootstrap/mcp.py`
+- [X] T020 Export new layout commands and repository-aware use cases from package initializers in `src/universal_memory/application/__init__.py`
 
 **Checkpoint**: Layout resolution, storage routing, and safe path handling are ready for user stories.
 
@@ -65,31 +65,31 @@
 
 ### Tests for User Story 1
 
-- [ ] T021 [P] [US1] Add CLI tests for `umem init --layout shared` output and created paths in `tests/interfaces/cli/test_init_command.py`
-- [ ] T022 [P] [US1] Add MCP tests for `initialize_project(layout="shared")` output and created paths in `tests/interfaces/mcp/test_compliance.py`
-- [ ] T023 [P] [US1] Add project fact visibility tests for shared and private writes in `tests/application/memory/test_memory_use_cases.py`
-- [ ] T024 [P] [US1] Add project fact list visibility filter tests for shared, private, all, and legacy labels in `tests/application/memory/test_memory_use_cases.py`
-- [ ] T025 [P] [US1] Add user-facing project skill creation tests for shared canonical paths in `tests/application/skills/test_create_skill.py`
-- [ ] T026 [P] [US1] Add layout status tests for legacy, shared, partial, and uninitialized projects in `tests/application/layout/test_inspect_project_layout.py`
+- [X] T021 [P] [US1] Add CLI tests for `umem init --layout shared` output and created paths in `tests/interfaces/cli/test_init_command.py`
+- [X] T022 [P] [US1] Add MCP tests for `initialize_project(layout="shared")` output and created paths in `tests/interfaces/mcp/test_compliance.py`
+- [X] T023 [P] [US1] Add project fact visibility tests for shared and private writes in `tests/application/memory/test_memory_use_cases.py`
+- [X] T024 [P] [US1] Add project fact list visibility filter tests for shared, private, all, and legacy labels in `tests/application/memory/test_memory_use_cases.py`
+- [X] T025 [P] [US1] Add user-facing project skill creation tests for shared canonical paths in `tests/application/skills/test_create_skill.py`
+- [X] T026 [P] [US1] Add layout status tests for legacy, shared, partial, and uninitialized projects in `tests/application/layout/test_inspect_project_layout.py`
 
 ### Implementation for User Story 1
 
-- [ ] T027 [US1] Add `layout` input and shared layout result fields to setup project models in `src/universal_memory/application/onboarding/setup_project.py`
-- [ ] T028 [US1] Update project initialization to create `.umem/` operational storage plus `umem/project.toml`, `umem/memory`, and `umem/skills` for shared layout in `src/universal_memory/application/onboarding/setup_project.py`
-- [ ] T029 [US1] Add `--layout legacy|shared` to `umem init` and include layout fields in human, summary, and JSON output in `src/universal_memory/interfaces/cli/init_command.py`
-- [ ] T030 [US1] Add `layout` support to MCP `initialize_project` and return shared path fields in `src/universal_memory/interfaces/mcp/server.py`
-- [ ] T031 [US1] Implement `InspectProjectLayoutUseCase` for `layout.status` results in `src/universal_memory/application/layout/inspect_project_layout.py`
-- [ ] T032 [US1] Add `umem layout status` CLI command, output formatting, and JSON envelope in `src/universal_memory/interfaces/cli/init_command.py`
-- [ ] T033 [US1] Add MCP `inspect_project_layout` tool and response envelope in `src/universal_memory/interfaces/mcp/server.py`
-- [ ] T034 [US1] Add project fact `visibility` input, `storage_path` output, and global-scope validation to remember fact use case in `src/universal_memory/application/memory/remember_fact_use_case.py`
-- [ ] T035 [US1] Add project fact visibility filtering and legacy/shared/private labels to list facts use case in `src/universal_memory/application/memory/list_facts_use_case.py`
-- [ ] T036 [US1] Add `umem remember --visibility shared|private`, `umem remember --private`, and `umem facts list --visibility` CLI handling in `src/universal_memory/interfaces/cli/init_command.py`
-- [ ] T037 [US1] Add MCP `remember_fact(visibility=...)` and `list_facts(visibility=...)` support in `src/universal_memory/interfaces/mcp/server.py`
-- [ ] T038 [US1] Add `visibility`, `category`, and shared canonical path handling to create skill command models in `src/universal_memory/application/skills/create_skill.py`
-- [ ] T039 [US1] Add CLI `skills create --visibility shared|private --category user-facing|operational` handling and output fields in `src/universal_memory/interfaces/cli/init_command.py`
-- [ ] T040 [US1] Add MCP `create_skill` visibility and category parameters in `src/universal_memory/interfaces/mcp/server.py`
-- [ ] T041 [US1] Extend memory status to report active layout, shared root, operational root, and path counts in `src/universal_memory/application/memory/get_memory_status_use_case.py`
-- [ ] T042 [US1] Update CLI and MCP status payload serialization for layout fields in `src/universal_memory/interfaces/cli/init_command.py`
+- [X] T027 [US1] Add `layout` input and shared layout result fields to setup project models in `src/universal_memory/application/onboarding/setup_project.py`
+- [X] T028 [US1] Update project initialization to create `.umem/` operational storage plus `umem/project.toml`, `umem/memory`, and `umem/skills` for shared layout in `src/universal_memory/application/onboarding/setup_project.py`
+- [X] T029 [US1] Add `--layout legacy|shared` to `umem init` and include layout fields in human, summary, and JSON output in `src/universal_memory/interfaces/cli/init_command.py`
+- [X] T030 [US1] Add `layout` support to MCP `initialize_project` and return shared path fields in `src/universal_memory/interfaces/mcp/server.py`
+- [X] T031 [US1] Implement `InspectProjectLayoutUseCase` for `layout.status` results in `src/universal_memory/application/layout/inspect_project_layout.py`
+- [X] T032 [US1] Add `umem layout status` CLI command, output formatting, and JSON envelope in `src/universal_memory/interfaces/cli/init_command.py`
+- [X] T033 [US1] Add MCP `inspect_project_layout` tool and response envelope in `src/universal_memory/interfaces/mcp/server.py`
+- [X] T034 [US1] Add project fact `visibility` input, `storage_path` output, and global-scope validation to remember fact use case in `src/universal_memory/application/memory/remember_fact_use_case.py`
+- [X] T035 [US1] Add project fact visibility filtering and legacy/shared/private labels to list facts use case in `src/universal_memory/application/memory/list_facts_use_case.py`
+- [X] T036 [US1] Add `umem remember --visibility shared|private`, `umem remember --private`, and `umem facts list --visibility` CLI handling in `src/universal_memory/interfaces/cli/init_command.py`
+- [X] T037 [US1] Add MCP `remember_fact(visibility=...)` and `list_facts(visibility=...)` support in `src/universal_memory/interfaces/mcp/server.py`
+- [X] T038 [US1] Add `visibility`, `category`, and shared canonical path handling to create skill command models in `src/universal_memory/application/skills/create_skill.py`
+- [X] T039 [US1] Add CLI `skills create --visibility shared|private --category user-facing|operational` handling and output fields in `src/universal_memory/interfaces/cli/init_command.py`
+- [X] T040 [US1] Add MCP `create_skill` visibility and category parameters in `src/universal_memory/interfaces/mcp/server.py`
+- [X] T041 [US1] Extend memory status to report active layout, shared root, operational root, and path counts in `src/universal_memory/application/memory/get_memory_status_use_case.py`
+- [X] T042 [US1] Update CLI and MCP status payload serialization for layout fields in `src/universal_memory/interfaces/cli/init_command.py`
 
 **Checkpoint**: User Story 1 is independently testable as the MVP.
 
@@ -103,25 +103,25 @@
 
 ### Tests for User Story 2
 
-- [ ] T043 [P] [US2] Add migration dry-run, apply, and second-apply idempotency tests in `tests/application/layout/test_migrate_project_layout.py`
-- [ ] T044 [P] [US2] Add migration conflict tests for overlapping fact IDs, rule IDs, and skill slugs in `tests/application/layout/test_migrate_project_layout.py`
-- [ ] T045 [P] [US2] Add CLI tests for `umem layout migrate --to shared --dry-run` and `--apply` in `tests/interfaces/cli/test_layout_command.py`
-- [ ] T046 [P] [US2] Add MCP tests for `migrate_project_layout(target_layout="shared")` in `tests/interfaces/mcp/test_compliance.py`
-- [ ] T047 [P] [US2] Add CLI/MCP parity tests for `layout.status` and `layout.migrate` JSON operation keys in `tests/interfaces/test_parity.py`
+- [X] T043 [P] [US2] Add migration dry-run, apply, and second-apply idempotency tests in `tests/application/layout/test_migrate_project_layout.py`
+- [X] T044 [P] [US2] Add migration conflict tests for overlapping fact IDs, rule IDs, and skill slugs in `tests/application/layout/test_migrate_project_layout.py`
+- [X] T045 [P] [US2] Add CLI tests for `umem layout migrate --to shared --dry-run` and `--apply` in `tests/interfaces/cli/test_layout_command.py`
+- [X] T046 [P] [US2] Add MCP tests for `migrate_project_layout(target_layout="shared")` in `tests/interfaces/mcp/test_compliance.py`
+- [X] T047 [P] [US2] Add CLI/MCP parity tests for `layout.status` and `layout.migrate` JSON operation keys in `tests/interfaces/test_parity.py`
 
 ### Implementation for User Story 2
 
-- [ ] T048 [US2] Implement migration candidate discovery for legacy project facts, project rules, and project canonical skills in `src/universal_memory/application/layout/migrate_project_layout.py`
-- [ ] T049 [US2] Implement migration classification for shared, already shared, skipped global, private, operational, and conflicting records in `src/universal_memory/application/layout/migrate_project_layout.py`
-- [ ] T050 [US2] Implement idempotent copy/apply behavior and content hash comparison for facts, rules, and skill directories in `src/universal_memory/application/layout/migrate_project_layout.py`
-- [ ] T051 [US2] Implement migration report persistence and `umem/project.toml` migration metadata updates in `src/universal_memory/application/layout/migrate_project_layout.py`
-- [ ] T052 [US2] Add `umem layout migrate --to shared` CLI options, dry-run default, apply behavior, and output formatting in `src/universal_memory/interfaces/cli/init_command.py`
-- [ ] T053 [US2] Add MCP `migrate_project_layout` tool parameters, validation, and response envelope in `src/universal_memory/interfaces/mcp/server.py`
-- [ ] T054 [US2] Add overlap labels and active precedence reporting to fact, rule, and skill list behavior in `src/universal_memory/infrastructure/storage/local_fact_repository.py`
-- [ ] T055 [US2] Add overlap labels and active precedence reporting to rule list behavior in `src/universal_memory/infrastructure/storage/local_rule_repository.py`
-- [ ] T056 [US2] Add overlap labels and active precedence reporting to project skill list/detail behavior in `src/universal_memory/infrastructure/storage/local_agent_skill_repository.py`
-- [ ] T057 [US2] Wire layout migration use case into CLI bootstrap in `src/universal_memory/bootstrap/cli.py`
-- [ ] T058 [US2] Wire layout migration use case into MCP bootstrap in `src/universal_memory/bootstrap/mcp.py`
+- [X] T048 [US2] Implement migration candidate discovery for legacy project facts, project rules, and project canonical skills in `src/universal_memory/application/layout/migrate_project_layout.py`
+- [X] T049 [US2] Implement migration classification for shared, already shared, skipped global, private, operational, and conflicting records in `src/universal_memory/application/layout/migrate_project_layout.py`
+- [X] T050 [US2] Implement idempotent copy/apply behavior and content hash comparison for facts, rules, and skill directories in `src/universal_memory/application/layout/migrate_project_layout.py`
+- [X] T051 [US2] Implement migration report persistence and `umem/project.toml` migration metadata updates in `src/universal_memory/application/layout/migrate_project_layout.py`
+- [X] T052 [US2] Add `umem layout migrate --to shared` CLI options, dry-run default, apply behavior, and output formatting in `src/universal_memory/interfaces/cli/init_command.py`
+- [X] T053 [US2] Add MCP `migrate_project_layout` tool parameters, validation, and response envelope in `src/universal_memory/interfaces/mcp/server.py`
+- [X] T054 [US2] Add overlap labels and active precedence reporting to fact, rule, and skill list behavior in `src/universal_memory/infrastructure/storage/local_fact_repository.py`
+- [X] T055 [US2] Add overlap labels and active precedence reporting to rule list behavior in `src/universal_memory/infrastructure/storage/local_rule_repository.py`
+- [X] T056 [US2] Add overlap labels and active precedence reporting to project skill list/detail behavior in `src/universal_memory/infrastructure/storage/local_agent_skill_repository.py`
+- [X] T057 [US2] Wire layout migration use case into CLI bootstrap in `src/universal_memory/bootstrap/cli.py`
+- [X] T058 [US2] Wire layout migration use case into MCP bootstrap in `src/universal_memory/bootstrap/mcp.py`
 
 **Checkpoint**: Existing legacy projects can migrate safely and re-run migration without duplicates.
 
@@ -135,24 +135,24 @@
 
 ### Tests for User Story 3
 
-- [ ] T059 [P] [US3] Add shared init tests proving `use-universal-memory` remains operational under `.umem/skills` by default in `tests/application/test_setup_project.py`
-- [ ] T060 [P] [US3] Add `skills share` use case tests for user-facing skills, operational confirmation, and allowlist updates in `tests/application/skills/test_share_skill.py`
-- [ ] T061 [P] [US3] Add visibility and category tests for `skills import`, `skills adopt`, and `skills publish` in `tests/application/skills/test_import_skill.py`
-- [ ] T062 [P] [US3] Add CLI tests for `umem skills share <skill> --category operational --yes` in `tests/interfaces/cli/test_skills_share.py`
-- [ ] T063 [P] [US3] Add MCP tests for `share_skill(confirm_operational=true)` in `tests/interfaces/mcp/test_skills.py`
+- [X] T059 [P] [US3] Add shared init tests proving `use-universal-memory` remains operational under `.umem/skills` by default in `tests/application/test_setup_project.py`
+- [X] T060 [P] [US3] Add `skills share` use case tests for user-facing skills, operational confirmation, and allowlist updates in `tests/application/skills/test_share_skill.py`
+- [X] T061 [P] [US3] Add visibility and category tests for `skills import`, `skills adopt`, and `skills publish` in `tests/application/skills/test_import_skill.py`
+- [X] T062 [P] [US3] Add CLI tests for `umem skills share <skill> --category operational --yes` in `tests/interfaces/cli/test_skills_share.py`
+- [X] T063 [P] [US3] Add MCP tests for `share_skill(confirm_operational=true)` in `tests/interfaces/mcp/test_skills.py`
 
 ### Implementation for User Story 3
 
-- [ ] T064 [US3] Add skill visibility and category convenience properties to `src/universal_memory/domain/entities/agent_skill.py`
-- [ ] T065 [US3] Implement `ShareSkillUseCase` with operational confirmation, allowlist updates, and shared canonical copy behavior in `src/universal_memory/application/skills/share_skill.py`
-- [ ] T066 [US3] Extend `skills import` visibility and category command handling in `src/universal_memory/application/skills/import_skill.py`
-- [ ] T067 [US3] Extend `skills adopt` visibility and category command handling in `src/universal_memory/application/skills/adopt_skill.py`
-- [ ] T068 [US3] Extend `skills publish` visibility and category command handling in `src/universal_memory/application/skills/draft_skill.py`
-- [ ] T069 [US3] Add `umem skills share` CLI command and output formatting in `src/universal_memory/interfaces/cli/init_command.py`
-- [ ] T070 [US3] Add MCP `share_skill` tool and response envelope in `src/universal_memory/interfaces/mcp/server.py`
-- [ ] T071 [US3] Export and wire `ShareSkillUseCase` in `src/universal_memory/application/skills/__init__.py`
-- [ ] T072 [US3] Wire `ShareSkillUseCase` into CLI bootstrap dependencies in `src/universal_memory/bootstrap/cli.py`
-- [ ] T073 [US3] Wire `ShareSkillUseCase` into MCP bootstrap dependencies in `src/universal_memory/bootstrap/mcp.py`
+- [X] T064 [US3] Add skill visibility and category convenience properties to `src/universal_memory/domain/entities/agent_skill.py`
+- [X] T065 [US3] Implement `ShareSkillUseCase` with operational confirmation, allowlist updates, and shared canonical copy behavior in `src/universal_memory/application/skills/share_skill.py`
+- [X] T066 [US3] Extend `skills import` visibility and category command handling in `src/universal_memory/application/skills/import_skill.py`
+- [X] T067 [US3] Extend `skills adopt` visibility and category command handling in `src/universal_memory/application/skills/adopt_skill.py`
+- [X] T068 [US3] Extend `skills publish` visibility and category command handling in `src/universal_memory/application/skills/draft_skill.py`
+- [X] T069 [US3] Add `umem skills share` CLI command and output formatting in `src/universal_memory/interfaces/cli/init_command.py`
+- [X] T070 [US3] Add MCP `share_skill` tool and response envelope in `src/universal_memory/interfaces/mcp/server.py`
+- [X] T071 [US3] Export and wire `ShareSkillUseCase` in `src/universal_memory/application/skills/__init__.py`
+- [X] T072 [US3] Wire `ShareSkillUseCase` into CLI bootstrap dependencies in `src/universal_memory/bootstrap/cli.py`
+- [X] T073 [US3] Wire `ShareSkillUseCase` into MCP bootstrap dependencies in `src/universal_memory/bootstrap/mcp.py`
 
 **Checkpoint**: Operational skills stay local by default and explicit publication is reviewable.
 

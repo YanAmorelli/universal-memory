@@ -130,7 +130,7 @@ def test_setup_project_skills_lifecycle_documents_valid_create_command(tmp_path:
 
     assert '--trigger "when to use it"' in skills_lifecycle_content
     assert (
-        "umem skills import .agents/skills/<skill-name> --scope project --sync"
+        "umem skills import .agents/skills/<skill-name> --scope project --visibility shared --category user-facing --sync"
         in skills_lifecycle_content
     )
     assert "umem skills sync <skill-id-or-name> --format json" in skills_lifecycle_content
