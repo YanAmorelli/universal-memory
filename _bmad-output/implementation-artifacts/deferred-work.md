@@ -1,3 +1,11 @@
+## Deferred from: UMEM 0.4 multi-repository adoption (2026-07-08)
+
+- Bug: legacy-to-shared skill migration can leave shadowed skill registry records in `.umem/memory/skills.jsonl` after copying the same skills into `umem/skills/skills.jsonl`. Facts are cleaned up after successful migration; skill registry records should receive equivalent cleanup so `layout status` and `doctor` do not report avoidable overlaps.
+- Bug: `umem layout migrate --to shared --apply --yes --format json` returned a generic unexpected error in some repositories, while retrying the same apply command without `--yes` succeeded. The CLI should either accept `--yes` consistently or return a specific validation error.
+- Improvement: multi-repository UMEM upgrades through Maestri/Codex hit repeated sandbox permission prompts for `umem doctor`, `umem host sync`, and cross-repository checks. Provide a documented orchestration checklist or pre-approved command set for release adoption across many repositories.
+- Improvement: `uv tool upgrade universal-memory` may keep the installed tool pinned at an exact package version and only upgrade dependencies. Upgrade guidance should instruct users to verify `umem --version` and reinstall with `uv tool install universal-memory@latest --force` when the installed tool was pinned or sourced outside normal PyPI latest resolution.
+- Improvement: partial `.umem/` operational layouts can coexist with shared `umem/` metadata and make `umem doctor` fail until `umem init --yes` repairs missing operational paths. Migration/apply flows should either repair required operational paths automatically or report that next step directly.
+
 ## Deferred from: code review of 1-4-create-local-umem-layout-and-toml-configuration.md (2026-05-24)
 
 - Define a resilient self-healing strategy for specific `.umem/` states, including explicit criteria to distinguish fatal corruption from safely repairable partial layout, before allowing automatic recovery during onboarding.
