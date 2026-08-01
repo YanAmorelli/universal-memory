@@ -10,7 +10,7 @@ from universal_memory.application.host.setup_host_use_case import (
     partition_instruction_blocks,
 )
 from universal_memory.application.security import SafeWriteUseCase
-from universal_memory.domain import SecretDetectedError, StorageError
+from universal_memory.domain import SecretDetectedError, StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEvent,
     AuditEventScope,
@@ -195,7 +195,7 @@ def test_setup_preserves_manual_content_outside_managed_block(
     assert "umem status --format json" in managed_block
     assert "umem skills list --format json" in managed_block
     assert "umem skills detail <skill-id-or-name> --format json" in managed_block
-    assert ".umem/skills/use-universal-memory/SKILL.md" in managed_block
+    assert ".umem/skills/universal-memory/SKILL.md" in managed_block
     assert "proactively capture new memory" in managed_block
     assert "MANDATORY OUTPUT FORMAT" in managed_block
     assert "Required Bootstrap" in managed_block
@@ -203,6 +203,38 @@ def test_setup_preserves_manual_content_outside_managed_block(
     assert "skill workflow, slash command, or structured agent workflow" in managed_block
     assert "If `umem` is unavailable or not initialized" in managed_block
     assert "Perform this bootstrap only at the start of a conversation" in managed_block
+
+
+def test_setup_points_to_an_existing_legacy_skill_without_creating_a_duplicate(
+    tmp_path: Path,
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    legacy_skill = tmp_path / ".umem/skills/use-universal-memory/SKILL.md"
+    legacy_skill.parent.mkdir(parents=True)
+    legacy_skill.write_text("# Legacy\n", encoding="utf-8")
+
+    configured_use_case.execute(ConfigureHostCommand(host_id="codex", apply=True, origin="test"))
+
+    content = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert ".umem/skills/use-universal-memory/SKILL.md" in content
+    assert not (tmp_path / ".umem/skills/universal-memory").exists()
+
+
+def test_setup_rejects_legacy_and_canonical_skill_split_brain(
+    tmp_path: Path,
+    configured_use_case: ConfigureHostUseCase,
+) -> None:
+    for slug in ("use-universal-memory", "universal-memory"):
+        skill = tmp_path / ".umem" / "skills" / slug / "SKILL.md"
+        skill.parent.mkdir(parents=True, exist_ok=True)
+        skill.write_text(f"# {slug}\n", encoding="utf-8")
+
+    with pytest.raises(ValidationFailedError, match="Both legacy and canonical"):
+        configured_use_case.execute(
+            ConfigureHostCommand(host_id="codex", apply=True, origin="test")
+        )
+
+    assert not (tmp_path / "AGENTS.md").exists()
 
 
 def test_check_rejects_massive_agents_md_dump(
@@ -405,7 +437,7 @@ def test_claude_code_setup_without_deltas_passes_own_read_validator(
     assert "umem status" in claude_content
     assert "umem skills list --format json" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
-    assert ".umem/skills/use-universal-memory/SKILL.md" in claude_content
+    assert ".umem/skills/universal-memory/SKILL.md" in claude_content
     assert "record it as global memory" in claude_content
     assert "MANDATORY OUTPUT FORMAT" in claude_content
     assert "--scope global" not in claude_content

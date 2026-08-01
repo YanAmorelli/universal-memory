@@ -288,17 +288,17 @@ class NativeSkillSync:
             return [
                 runtime
                 for runtime in self.runtime_registry.runtimes
-                if runtime.runtime_id.value in target_set and runtime.native_skill_targets
+                if runtime.runtime_id.value in target_set and runtime.supports_native_skill_sync
             ]
         enabled = self._enabled_runtime_ids_from_config()
         runtimes = self.runtime_registry.runtimes
         if enabled is None:
-            return [runtime for runtime in runtimes if runtime.native_skill_targets]
+            return [runtime for runtime in runtimes if runtime.supports_native_skill_sync]
         enabled_set = set(enabled)
         return [
             runtime
             for runtime in runtimes
-            if runtime.runtime_id.value in enabled_set and runtime.native_skill_targets
+            if runtime.runtime_id.value in enabled_set and runtime.supports_native_skill_sync
         ]
 
     def _enabled_runtime_ids_from_config(self) -> list[str] | None:
@@ -334,6 +334,7 @@ class NativeSkillSync:
         return {
             runtime.runtime_id.value: target.disable_policy
             for runtime in self.runtime_registry.runtimes
+            if runtime.supports_native_skill_sync
             for target in runtime.native_skill_targets
         }
 
@@ -387,6 +388,8 @@ def orphan_native_target_paths(
     registry = runtime_registry or default_runtime_registry()
     orphaned: list[str] = []
     for runtime in registry.runtimes:
+        if not runtime.supports_native_skill_sync:
+            continue
         for target in runtime.native_skill_targets:
             base = root / target.relative_path
             if not base.is_dir():

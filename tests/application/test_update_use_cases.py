@@ -143,12 +143,7 @@ def test_update_managed_skills_updates_legacy_default_umem_lifecycle(
 ) -> None:
     _setup_full_project(tmp_path)
     lifecycle_path = (
-        tmp_path
-        / ".umem"
-        / "skills"
-        / "use-universal-memory"
-        / "references"
-        / "skills-lifecycle.md"
+        tmp_path / ".umem" / "skills" / "universal-memory" / "references" / "skills-lifecycle.md"
     )
     lifecycle_path.write_text(LEGACY_SKILLS_LIFECYCLE, encoding="utf-8")
 
@@ -159,14 +154,14 @@ def test_update_managed_skills_updates_legacy_default_umem_lifecycle(
     assert len(result) == 1
     assert result[0].status == "updated"
     assert result[0].updated_paths == [
-        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+        ".umem/skills/universal-memory/references/skills-lifecycle.md"
     ]
     assert result[0].audit_reference
     assert result[0].snapshot_reference
     assert (
         lifecycle_path.read_text(encoding="utf-8")
         == DEFAULT_UMEM_SKILL_REFERENCES[
-            ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+            ".umem/skills/universal-memory/references/skills-lifecycle.md"
         ]
     )
 
@@ -177,12 +172,7 @@ def test_update_managed_skills_detects_default_umem_skill_without_latent_record(
     _setup_full_project(tmp_path)
     (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").unlink()
     lifecycle_path = (
-        tmp_path
-        / ".umem"
-        / "skills"
-        / "use-universal-memory"
-        / "references"
-        / "skills-lifecycle.md"
+        tmp_path / ".umem" / "skills" / "universal-memory" / "references" / "skills-lifecycle.md"
     )
     lifecycle_path.write_text(LEGACY_SKILLS_LIFECYCLE, encoding="utf-8")
 
@@ -193,7 +183,7 @@ def test_update_managed_skills_detects_default_umem_skill_without_latent_record(
     assert len(result) == 1
     assert result[0].status == "updated"
     assert result[0].updated_paths == [
-        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+        ".umem/skills/universal-memory/references/skills-lifecycle.md"
     ]
 
 
@@ -202,12 +192,7 @@ def test_update_managed_skills_preserves_custom_default_umem_skill_with_warning(
 ) -> None:
     _setup_full_project(tmp_path)
     lifecycle_path = (
-        tmp_path
-        / ".umem"
-        / "skills"
-        / "use-universal-memory"
-        / "references"
-        / "skills-lifecycle.md"
+        tmp_path / ".umem" / "skills" / "universal-memory" / "references" / "skills-lifecycle.md"
     )
     custom_content = "# Skills Lifecycle\n\nCustom team instructions.\n"
     lifecycle_path.write_text(custom_content, encoding="utf-8")
@@ -219,11 +204,26 @@ def test_update_managed_skills_preserves_custom_default_umem_skill_with_warning(
     assert result[0].status == "preserved"
     assert result[0].updated_paths == []
     assert (
-        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
-        in result[0].preserved_paths
+        ".umem/skills/universal-memory/references/skills-lifecycle.md" in result[0].preserved_paths
     )
     assert any("Preserved customized UMEM skill file" in warning for warning in result[0].warnings)
     assert lifecycle_path.read_text(encoding="utf-8") == custom_content
+
+
+def test_update_managed_skills_rejects_legacy_and_canonical_split_brain(
+    tmp_path: Path,
+) -> None:
+    _setup_full_project(tmp_path)
+    legacy_skill = tmp_path / ".umem/skills/use-universal-memory/SKILL.md"
+    legacy_skill.parent.mkdir(parents=True)
+    legacy_skill.write_text("# Legacy\n", encoding="utf-8")
+
+    with pytest.raises(ValidationFailedError, match="Both legacy and canonical"):
+        UpdateManagedSkillsUseCase(safe_write_use_case=_safe_write(tmp_path)).execute(
+            UpdateManagedSkillsCommand(project_root=tmp_path)
+        )
+
+    assert legacy_skill.read_text(encoding="utf-8") == "# Legacy\n"
 
 
 def test_update_check_treats_boolean_config_schema_as_invalid(tmp_path: Path) -> None:

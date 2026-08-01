@@ -107,8 +107,8 @@ def test_skills_share_default_umem_skill_after_shared_init(
 
     assert payload["operation"] == "skills.share"
     assert payload["data"]["category"] == "operational"
-    assert payload["data"]["new_canonical_path"] == "umem/skills/use-universal-memory/SKILL.md"
-    assert policy["shared_operational_skills"] == ["use-universal-memory"]
+    assert payload["data"]["new_canonical_path"] == "umem/skills/universal-memory/SKILL.md"
+    assert policy["shared_operational_skills"] == ["universal-memory"]
 
 
 def test_skills_share_existing_operational_default_category_requires_confirmation(

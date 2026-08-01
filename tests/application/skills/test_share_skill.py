@@ -155,11 +155,11 @@ def test_share_default_umem_skill_after_shared_setup_registers_and_allowlists(
 
     policy = tomllib.loads((tmp_path / "umem" / "project.toml").read_text(encoding="utf-8"))
     stored = repository.read(result.agent_skill.id)
-    assert policy["shared_operational_skills"] == ["use-universal-memory"]
-    assert stored.slug == "use-universal-memory"
+    assert policy["shared_operational_skills"] == ["universal-memory"]
+    assert stored.slug == "universal-memory"
     assert stored.category == "operational"
     assert stored.visibility == "shared"
-    assert stored.canonical_path == "umem/skills/use-universal-memory/SKILL.md"
+    assert stored.canonical_path == "umem/skills/universal-memory/SKILL.md"
 
 
 def test_share_existing_operational_skill_default_category_still_requires_confirmation(

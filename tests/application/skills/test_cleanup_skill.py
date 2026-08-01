@@ -9,6 +9,14 @@ from universal_memory.application.skills import (
     RepairSkillsCommand,
     RepairSkillsUseCase,
 )
+from universal_memory.application.skills.native_skill_sync import orphan_native_target_paths
+from universal_memory.domain.entities import (
+    RuntimeId,
+    RuntimeRegistry,
+    RuntimeSkillInstaller,
+    RuntimeSkillSupport,
+    default_runtime_registry,
+)
 from universal_memory.infrastructure.storage import LocalAgentSkillRepository
 
 
@@ -55,3 +63,31 @@ def test_repair_dry_run_lists_orphan_native_targets(
 
     assert result.plans[0].removable_paths == [".opencode/skills/orphan-helper"]
     assert orphan.is_file()
+
+
+def test_orphan_scan_ignores_targets_without_native_capability(tmp_path: Path) -> None:
+    orphan = tmp_path / ".opencode" / "skills" / "orphan-helper" / "SKILL.md"
+    orphan.parent.mkdir(parents=True)
+    orphan.write_text("orphan\n", encoding="utf-8")
+    registry = default_runtime_registry()
+    opencode = registry.get(RuntimeId.opencode).model_copy(
+        update={
+            "skill_support": RuntimeSkillSupport.portable,
+            "skill_installer": RuntimeSkillInstaller.npx_skills,
+        }
+    )
+    unsafe_registry = RuntimeRegistry.model_construct(
+        runtimes=[
+            opencode if runtime.runtime_id == RuntimeId.opencode else runtime
+            for runtime in registry.runtimes
+        ],
+        support_profiles=registry.support_profiles,
+    )
+
+    orphaned = orphan_native_target_paths(
+        project_root=tmp_path,
+        managed_installations=[],
+        runtime_registry=unsafe_registry,
+    )
+
+    assert orphaned == []

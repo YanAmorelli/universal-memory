@@ -423,6 +423,8 @@ class ImportSkillUseCase:
 
     def _supported_native_source(self, source_dir: Path, slug: str) -> tuple[str, str] | None:
         for runtime in self.runtime_registry.runtimes:
+            if not runtime.supports_native_skill_sync:
+                continue
             for target in runtime.native_skill_targets:
                 native_path = f"{target.relative_path}/{slug}"
                 if source_dir == (self.project_root / native_path).resolve():

@@ -262,9 +262,22 @@ class ShareSkillUseCase:
         raise StorageError(f"Agent skill not found: {skill_id_or_name}")
 
     def _unregistered_operational_skill(self, skill_id_or_name: str) -> AgentSkill | None:
-        slug = skill_id_or_name
-        if slug != "use-universal-memory" or not _is_safe_slug(slug):
+        requested_slug = skill_id_or_name
+        aliases = {"universal-memory", "use-universal-memory"}
+        if requested_slug not in aliases or not _is_safe_slug(requested_slug):
             return None
+        counterpart = (
+            "use-universal-memory" if requested_slug == "universal-memory" else "universal-memory"
+        )
+        candidates = (requested_slug, counterpart)
+        slug = next(
+            (
+                candidate
+                for candidate in candidates
+                if (self.project_root / ".umem" / "skills" / candidate / "SKILL.md").is_file()
+            ),
+            requested_slug,
+        )
         skill_file = self.project_root / ".umem" / "skills" / slug / "SKILL.md"
         if not skill_file.is_file():
             return None
@@ -272,7 +285,7 @@ class ShareSkillUseCase:
         assert_validation_passes(report)
         parsed = _parse_skill_markdown(skill_file.read_text(encoding="utf-8"))
         if (
-            skill_id_or_name not in {slug, parsed.name}
+            skill_id_or_name not in {slug, parsed.name, *aliases}
             and parsed.name.casefold() != skill_id_or_name.casefold()
         ):
             return None
@@ -293,7 +306,11 @@ class ShareSkillUseCase:
             metadata={
                 "triggers": parsed.triggers,
                 "visibility": "private",
-                "category": "operational" if slug == "use-universal-memory" else "user-facing",
+                "category": (
+                    "operational"
+                    if slug in {"universal-memory", "use-universal-memory"}
+                    else "user-facing"
+                ),
                 "creation_flow": "unregistered_share",
                 "validation": report.to_payload(),
             },
@@ -306,7 +323,7 @@ class ShareSkillUseCase:
             normalized = _normalize_category(stored_category)
             if normalized == "operational":
                 return "operational"
-        if skill.slug == "use-universal-memory":
+        if skill.slug in {"universal-memory", "use-universal-memory"}:
             return "operational"
         return requested_category
 
