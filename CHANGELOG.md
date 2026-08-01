@@ -5,6 +5,40 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.5.0] - Unreleased
+
+### Added
+
+- Added capability-aware support tiers, directed CLI onboarding, and post-initialization
+  agent connection planning.
+- Added the official portable Universal Memory Agent Skill with optional, deterministic
+  `npx skills` distribution and packaged offline fallbacks.
+- Added a reviewed agent-to-project-skill-path catalog pinned to the exact external
+  installer version.
+
+### Changed
+
+- Consolidated public distribution, package fallback, project initialization, and native
+  consumption around the complete `skills/universal-memory/` source tree.
+- Reduced fresh external installation from staged discovery and repeated adds to one
+  project-scoped `npx skills add` followed by byte-exact validation.
+- Preserved `use-universal-memory` as a non-destructive legacy alias and froze the
+  Windsurf-specific adapter contract.
+- Release provenance now validates prerelease tags against protected `dev` and final tags
+  against protected `main`.
+
+### Fixed
+
+- Authorized external skill installation failures now return a non-zero CLI exit code and
+  `ok: false` while preserving structured connection diagnostics.
+
+### Security
+
+- Added release provenance gates that require matching package/tag versions and
+  byte-identical public, packaged, and wheel Agent Skill assets before publication.
+- Unknown external agent IDs now fail closed before subprocess execution, and partial
+  external mutations are reported without unsafe automatic cleanup.
+
 ## [0.4.0] - 2026-07-07
 
 ### Added
@@ -226,7 +260,8 @@ corresponding Git tags when available.
 - Added secret scanning guardrails.
 - Added safe-write snapshots and audit trails before mutations.
 
-[0.4.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.3.0...HEAD
+[0.5.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.1.5...v0.2.0

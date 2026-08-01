@@ -119,11 +119,31 @@ which umem
 ## Quick Start Guide
 
 ### 1. Initialize your project
-Initialize `umem` in the current directory and hook it to your preferred runtimes/agents:
+
+Open your project directory and run:
+
 ```bash
-umem init --runtime claude-code --runtime opencode --runtime cursor
+umem init
 ```
-This sets up a local repository configuration, hooks up the necessary workspace instructions (`AGENTS.md`, `CLAUDE.md`), and prepares native skill folders.
+
+Universal Memory detects the agents already used in the workspace, presents one
+combined confirmation, configures the best available project integration, and
+verifies that the agent can read project context. You do not need to choose an
+integration mechanism or know which instruction files it uses.
+
+When a compatible agent needs the portable Agent Skill, UMEM discloses any
+network use and external project-scoped copy before confirmation, disables
+anonymous installer telemetry, and treats a missing prerequisite or failed
+installation as recoverable instead of blocking initialization.
+
+To connect another agent later, run:
+
+```bash
+umem connect
+```
+
+Explicit runtime selection remains available for automation and unusual setups,
+but it is not required for the normal path.
 
 ### 2. Save your first preferences and facts
 Tell `umem` what to keep in mind. You can target either the project scope (this folder) or the global scope (across all projects):

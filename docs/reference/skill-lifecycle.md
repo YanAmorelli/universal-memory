@@ -120,7 +120,7 @@ umem skills create --name "Review Protocol" --description "Recurring review work
 umem skills create --name "Local Bootstrap Helper" --description "Local bootstrap workflow" --category operational --format summary
 umem skills adopt .umem/skills/review-protocol --scope project
 umem skills import .agents/skills/review-protocol --scope project --visibility shared --category user-facing --sync
-umem skills share use-universal-memory --category operational --yes --format summary
+umem skills share universal-memory --category operational --yes --format summary
 umem skills validate review-protocol
 umem skills canonical update review-protocol --file <relative-skill-file>
 umem skills rename review-protocol --slug review-checklist

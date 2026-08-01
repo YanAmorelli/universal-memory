@@ -47,7 +47,7 @@ umem layout migrate --to shared --dry-run --format json
 umem remember "Project uses shared UMEM root." --scope project --visibility shared --format json
 umem facts list --scope project --visibility all --format json
 umem skills import .agents/skills/review-protocol --scope project --sync --format json
-umem skills share use-universal-memory --category operational --yes --format json
+umem skills share universal-memory --category operational --yes --format json
 umem skills sync review-protocol --format json
 ```
 

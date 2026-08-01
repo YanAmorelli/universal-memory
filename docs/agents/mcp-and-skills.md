@@ -107,7 +107,7 @@ Universal Memory writes snapshots, audit events, and managed targets
 The curated operational references live in:
 
 ```text
-.umem/skills/use-universal-memory/references/
+.umem/skills/universal-memory/references/
 ```
 
 Those files are the detailed agent-facing procedures for startup/context, memory facts,
