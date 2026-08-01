@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import traceback
 from collections.abc import Callable, Sequence
@@ -46,6 +47,12 @@ from universal_memory.application.memory import (
     PurgeFactResult,
     RememberFactCommand,
     RememberFactResult,
+)
+from universal_memory.application.onboarding import (
+    AgentConnectionExecution,
+    AgentConnectionPlan,
+    ExecuteAgentConnectionsUseCase,
+    default_agent_connection_planner,
 )
 from universal_memory.application.onboarding.setup_project import (
     DEFAULT_ENABLED_RUNTIME_IDS,
@@ -167,7 +174,19 @@ INIT_SPLASH_LINES = (
     "  persistent context for AI agents",
 )
 SetupProjectCommand = Callable[..., SetupProjectResult]
+AgentConnectionPlanCommand = Callable[..., AgentConnectionPlan]
 LEGACY_CONFIGURABLE_RUNTIME_IDS = {"claude_code", "codex"}
+FAILED_EXTERNAL_EXECUTION_STATUSES = frozenset(
+    {
+        "conflict",
+        "failed",
+        "persistence_failed",
+        "timeout",
+        "unavailable",
+        "unsafe",
+        "validation_failed",
+    }
+)
 ListAuditLogCommandHandler = Callable[[ListAuditLogCommand], ListAuditLogResult]
 ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResult]
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
@@ -255,6 +274,8 @@ def main(  # noqa: PLR0913
     argv: Sequence[str] | None = None,
     *,
     setup_project_command: SetupProjectCommand | None = None,
+    agent_connection_plan_command: AgentConnectionPlanCommand | None = None,
+    agent_connection_executor: ExecuteAgentConnectionsUseCase | None = None,
     audit_list_command: ListAuditLogCommandHandler | None = None,
     snapshots_list_command: ListSnapshotsCommandHandler | None = None,
     rollback_command: RollbackCommandHandler | None = None,
@@ -300,6 +321,8 @@ def main(  # noqa: PLR0913
 ) -> int:
     app = create_typer_app(
         setup_project_command=setup_project_command,
+        agent_connection_plan_command=agent_connection_plan_command,
+        agent_connection_executor=agent_connection_executor,
         audit_list_command=audit_list_command,
         snapshots_list_command=snapshots_list_command,
         rollback_command=rollback_command,
@@ -391,6 +414,8 @@ def _version_callback(value: bool) -> None:
 def create_typer_app(  # noqa: PLR0913, PLR0915
     *,
     setup_project_command: SetupProjectCommand | None = None,
+    agent_connection_plan_command: AgentConnectionPlanCommand | None = None,
+    agent_connection_executor: ExecuteAgentConnectionsUseCase | None = None,
     audit_list_command: ListAuditLogCommandHandler | None = None,
     snapshots_list_command: ListSnapshotsCommandHandler | None = None,
     rollback_command: RollbackCommandHandler | None = None,
@@ -522,6 +547,40 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
                 host_setup_command=host_setup_command,
                 host_check_command=host_check_command,
                 locale_resolver=locale_resolver,
+                agent_connection_plan_command=agent_connection_plan_command,
+                context_command=context_command,
+                agent_connection_executor=agent_connection_executor,
+            )
+        )
+
+    @app.command("connect")
+    def connect_command(
+        ctx: typer.Context,
+        agents: Annotated[
+            list[str] | None,
+            typer.Option("--agent", help="Agent to connect. May be used multiple times."),
+        ] = None,
+        unmanaged_mcp_hosts: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--unmanaged-mcp",
+                help="Advanced: record a manually configured MCP host.",
+            ),
+        ] = None,
+        yes: YesOption = False,
+        output_format: OutputFormatOption = None,
+    ) -> None:
+        raise typer.Exit(
+            code=_run_connect(
+                output_format=_effective_format(ctx, output_format),
+                selected_agents=agents,
+                unmanaged_mcp_hosts=unmanaged_mcp_hosts,
+                yes=yes,
+                host_setup_command=host_setup_command,
+                host_check_command=host_check_command,
+                context_command=context_command,
+                agent_connection_plan_command=agent_connection_plan_command,
+                agent_connection_executor=agent_connection_executor,
             )
         )
 
@@ -1903,6 +1962,8 @@ def build_main(  # noqa: PLR0913
     host_setup_command: ConfigureHostCommandHandler,
     host_check_command: ConfigureHostCommandHandler,
     host_sync_command: SyncInstructionsCommandHandler,
+    agent_connection_plan_command: AgentConnectionPlanCommand | None = None,
+    agent_connection_executor: ExecuteAgentConnectionsUseCase | None = None,
     propose_skill_command: ProposeSkillCommandHandler | None = None,
     track_latent_skill_command: TrackLatentSkillCommandHandler | None = None,
     generate_skill_command: GenerateSkillCommandHandler | None = None,
@@ -1941,6 +2002,8 @@ def build_main(  # noqa: PLR0913
         return main(
             argv,
             setup_project_command=command,
+            agent_connection_plan_command=agent_connection_plan_command,
+            agent_connection_executor=agent_connection_executor,
             audit_list_command=audit_list_command,
             snapshots_list_command=snapshots_list_command,
             rollback_command=rollback_command,
@@ -2072,7 +2135,7 @@ def _prompt(prompt: str) -> str:
     return input(prompt)
 
 
-def _run_init(  # noqa: PLR0913
+def _run_init(  # noqa: PLR0912, PLR0913
     command: SetupProjectCommand,
     output_format: str,
     *,
@@ -2083,19 +2146,37 @@ def _run_init(  # noqa: PLR0913
     host_setup_command: ConfigureHostCommandHandler | None = None,
     host_check_command: ConfigureHostCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
+    agent_connection_plan_command: AgentConnectionPlanCommand | None = None,
+    context_command: ContextCommandHandler | None = None,
+    agent_connection_executor: ExecuteAgentConnectionsUseCase | None = None,
 ) -> int:
     resolve_locale = locale_resolver or (lambda: DEFAULT_LOCALE)
     locale = resolve_locale() if output_format != "json" else DEFAULT_LOCALE
     try:
         if _should_render_init_splash(output_format):
             _render_init_splash()
-        runtime_ids = _selected_init_runtimes(
-            selected_runtimes,
-            selected_hosts=selected_hosts,
+        explicit_runtime_ids = _explicit_runtime_ids(
+            selected_runtimes, selected_hosts=selected_hosts
+        )
+        plan = _plan_connections(
+            Path.cwd(),
+            selected_agent_ids=explicit_runtime_ids,
+            command=agent_connection_plan_command,
+        )
+        accepted = _confirm_connection_plan(
+            plan,
             output_format=output_format,
             yes=yes,
-            locale=locale,
+            operation="init",
+            allow_prompt=explicit_runtime_ids is None,
         )
+        runtime_ids = (
+            explicit_runtime_ids
+            if explicit_runtime_ids is not None
+            else [item.agent_id for item in plan.detected_agents]
+        )
+        if not accepted:
+            runtime_ids = []
         if output_format == "json":
             result = _execute_setup_project(command, Path.cwd(), runtime_ids, layout=layout)
         else:
@@ -2104,12 +2185,22 @@ def _run_init(  # noqa: PLR0913
             ):
                 result = _execute_setup_project(command, Path.cwd(), runtime_ids, layout=layout)
             locale = resolve_locale()
-        host_results = _configure_init_hosts(
-            runtime_ids,
-            output_format=output_format,
-            locale=locale,
+        execution = _execute_agent_connection_plan(
+            plan,
+            accepted=accepted,
+            external_execution_authorized=_external_execution_authorized(
+                plan,
+                accepted=accepted,
+                output_format=output_format,
+                yes=yes,
+                allow_prompt=explicit_runtime_ids is None,
+            ),
             host_setup_command=host_setup_command,
             host_check_command=host_check_command,
+            context_command=context_command,
+            origin="cli_init",
+            executor=agent_connection_executor,
+            persist_connections=False,
         )
     except (KeyboardInterrupt, EOFError):
         _stdout_console().print("\n" + human_message("Operation cancelled by user.", locale=locale))
@@ -2121,18 +2212,119 @@ def _run_init(  # noqa: PLR0913
         _print_expected_error(error, output_format=output_format, locale=locale)
         return 1
 
+    external_execution_failed = _external_execution_failed(execution)
     if output_format == "json":
         payload = _success_envelope(result)
-        payload.update(_init_runtime_payload(runtime_ids, host_results))
-        if host_results:
-            payload["hosts"] = [asdict(res) for res in host_results]
+        payload.update(_init_runtime_payload(runtime_ids, execution.host_results))
+        payload["data"].update(_connection_payload(plan, execution))
+        if external_execution_failed:
+            payload["ok"] = False
+            payload["error"] = _external_execution_error()
+        if execution.host_results:
+            payload["hosts"] = [asdict(res) for res in execution.host_results]
         print(json.dumps(payload, sort_keys=True))
+    elif explicit_runtime_ids is None:
+        _stdout_console().print(
+            _format_human_connection_results(
+                plan,
+                execution,
+                project_initialized=True,
+                project_created=result.created,
+            )
+        )
     else:
         _stdout_console().print(_format_human_init_output(result, locale=locale))
-        if host_results:
-            _stdout_console().print(_format_human_init_host_results(host_results, locale=locale))
+        if execution.host_results:
+            _stdout_console().print(
+                _format_human_init_host_results(execution.host_results, locale=locale)
+            )
 
-    return 0
+    return 1 if external_execution_failed else 0
+
+
+def _run_connect(  # noqa: PLR0913
+    *,
+    output_format: str,
+    selected_agents: list[str] | None,
+    unmanaged_mcp_hosts: list[str] | None,
+    yes: bool,
+    host_setup_command: ConfigureHostCommandHandler | None,
+    host_check_command: ConfigureHostCommandHandler | None,
+    context_command: ContextCommandHandler | None,
+    agent_connection_plan_command: AgentConnectionPlanCommand | None,
+    agent_connection_executor: ExecuteAgentConnectionsUseCase | None,
+) -> int:
+    try:
+        project_root = Path.cwd()
+        if not (project_root / ".umem" / "config.toml").is_file():
+            raise ValidationFailedError("Universal Memory is not initialized. Run umem init first.")
+        normalized_agents = _normalize_agent_ids(selected_agents) if selected_agents else None
+        plan = _plan_connections(
+            project_root,
+            selected_agent_ids=normalized_agents,
+            unmanaged_mcp_host_ids=unmanaged_mcp_hosts,
+            command=agent_connection_plan_command,
+        )
+        accepted = _confirm_connection_plan(
+            plan,
+            output_format=output_format,
+            yes=yes,
+            operation="connect",
+        )
+        execution = _execute_agent_connection_plan(
+            plan,
+            accepted=accepted,
+            external_execution_authorized=_external_execution_authorized(
+                plan,
+                accepted=accepted,
+                output_format=output_format,
+                yes=yes,
+            ),
+            host_setup_command=host_setup_command,
+            host_check_command=host_check_command,
+            context_command=context_command,
+            origin="cli_connect",
+            executor=agent_connection_executor,
+            persist_connections=True,
+        )
+    except (KeyboardInterrupt, EOFError):
+        if output_format == "json":
+            print(json.dumps({"ok": False, "error": {"code": "aborted"}}))
+        else:
+            _stdout_console().print("Operation cancelled by user.")
+        return 1
+    except OSError as error:
+        _print_expected_error(StorageError(str(error)), output_format=output_format)
+        return 1
+    except DOMAIN_ERROR_TYPES as error:
+        _print_expected_error(error, output_format=output_format)
+        return 1
+
+    external_execution_failed = _external_execution_failed(execution)
+    if output_format == "json":
+        print(
+            json.dumps(
+                {
+                    "ok": not external_execution_failed,
+                    "operation": "connect",
+                    "scope": "project",
+                    "data": _connection_payload(plan, execution),
+                    **({"error": _external_execution_error()} if external_execution_failed else {}),
+                    "warnings": [],
+                },
+                sort_keys=True,
+            )
+        )
+    else:
+        _stdout_console().print(
+            _format_human_connection_results(
+                plan,
+                execution,
+                project_initialized=False,
+                project_created=False,
+            )
+        )
+    return 1 if external_execution_failed else 0
 
 
 def _execute_setup_project(
@@ -2170,6 +2362,175 @@ def _execute_setup_project(
     return command(project_root)  # type: ignore
 
 
+def _explicit_runtime_ids(
+    runtimes: list[str] | None,
+    *,
+    selected_hosts: list[str] | None = None,
+) -> list[str] | None:
+    if runtimes:
+        return _normalize_supported_runtimes(runtimes)
+    if selected_hosts:
+        return _normalize_supported_runtimes(selected_hosts)
+    return None
+
+
+def _plan_connections(
+    project_root: Path,
+    *,
+    selected_agent_ids: list[str] | None,
+    unmanaged_mcp_host_ids: list[str] | None = None,
+    command: AgentConnectionPlanCommand | None,
+) -> AgentConnectionPlan:
+    planner = command or default_agent_connection_planner(default_runtime_registry()).plan
+    return planner(
+        project_root,
+        selected_agent_ids=selected_agent_ids,
+        unmanaged_mcp_host_ids=unmanaged_mcp_host_ids,
+    )
+
+
+def _confirm_connection_plan(
+    plan: AgentConnectionPlan,
+    *,
+    output_format: str,
+    yes: bool,
+    operation: str,
+    allow_prompt: bool = True,
+) -> bool:
+    if not plan.is_safe_and_unambiguous:
+        raise ValidationFailedError(
+            "The connection plan is not safe and unambiguous for automatic execution."
+        )
+    if not plan.requires_confirmation:
+        return True
+    if yes or output_format == "json" or not sys.stdin.isatty() or not allow_prompt:
+        return True
+    recommended_names = {item.agent_id: item.display_name for item in plan.recommended_connections}
+    _stdout_console().print("Universal Memory")
+    evidence_groups: dict[str, list[str]] = {
+        "Found in this workspace:": [],
+        "Available locally:": [],
+        "Selected explicitly:": [],
+    }
+    for detected in plan.detected_agents:
+        name = recommended_names.get(detected.agent_id)
+        if name is None:
+            continue
+        if "explicit_selection" in detected.detected_by:
+            label = "Selected explicitly:"
+        elif any(
+            signal.startswith(("executable:", "global:")) for signal in detected.detected_by
+        ) and not any(
+            not signal.startswith(("executable:", "global:")) for signal in detected.detected_by
+        ):
+            label = "Available locally:"
+        else:
+            label = "Found in this workspace:"
+        evidence_groups[label].append(name)
+    for label, names in evidence_groups.items():
+        if names:
+            _stdout_console().print(f"\n{label}")
+            for name in names:
+                _stdout_console().print(f"  {name}")
+    if any(
+        action.available and action.network_required and action.argv
+        for action in plan.external_actions
+    ):
+        _stdout_console().print(
+            "\nThis connection uses network access and a deterministic project-scoped copy. "
+            "Anonymous installer telemetry is disabled. The external installer writes files "
+            "outside UMEM snapshot, file-audit, and rollback coverage."
+        )
+    noun = "it" if len(recommended_names) == 1 else "all"
+    prompt = (
+        f"\nConnect Universal Memory to {noun}? [Y/n] "
+        if operation == "init"
+        else f"\nConnect {noun} to Universal Memory? [Y/n] "
+    )
+    return _confirm(prompt, default=True)
+
+
+def _external_execution_authorized(
+    plan: AgentConnectionPlan,
+    *,
+    accepted: bool,
+    output_format: str,
+    yes: bool,
+    allow_prompt: bool = True,
+) -> bool:
+    if not accepted or not any(
+        action.action == "external_action" for action in plan.external_actions
+    ):
+        return False
+    if yes:
+        return True
+    return output_format != "json" and allow_prompt and sys.stdin.isatty()
+
+
+def _execute_agent_connection_plan(  # noqa: PLR0913
+    plan: AgentConnectionPlan,
+    *,
+    accepted: bool,
+    external_execution_authorized: bool,
+    host_setup_command: ConfigureHostCommandHandler | None,
+    host_check_command: ConfigureHostCommandHandler | None,
+    context_command: ContextCommandHandler | None,
+    origin: str,
+    executor: ExecuteAgentConnectionsUseCase | None,
+    persist_connections: bool,
+) -> AgentConnectionExecution:
+    use_case = executor or ExecuteAgentConnectionsUseCase(
+        host_setup_command=host_setup_command,
+        host_check_command=host_check_command,
+        context_read_command=context_command,
+        configurable_runtime_ids=frozenset(LEGACY_CONFIGURABLE_RUNTIME_IDS),
+        known_runtime_ids=frozenset(
+            runtime_id.value for runtime_id in default_runtime_registry().runtime_ids
+        ),
+        context_max_size_chars=DEFAULT_CONTEXT_MAX_SIZE_CHARS,
+    )
+    return use_case.execute(
+        plan,
+        accepted=accepted,
+        external_execution_authorized=external_execution_authorized,
+        origin=origin,
+        persist_connections=persist_connections,
+    )
+
+
+def _connection_payload(
+    plan: AgentConnectionPlan,
+    execution: AgentConnectionExecution,
+) -> dict[str, Any]:
+    payload = plan.to_payload()
+    payload.update(
+        {
+            "validation_results": execution.validation_results,
+            "connection_results": execution.connection_results,
+            "audit_references": execution.audit_references,
+            "persisted_connections": list(execution.persisted_connections),
+        }
+    )
+    return payload
+
+
+def _external_execution_failed(execution: AgentConnectionExecution) -> bool:
+    return any(
+        result.get("external_action_status") in FAILED_EXTERNAL_EXECUTION_STATUSES
+        for result in execution.connection_results
+    )
+
+
+def _external_execution_error() -> dict[str, str]:
+    return {
+        "code": "external_action_failed",
+        "detail": (
+            "One or more authorized external skill installations failed. "
+            "Inspect connection_results before retrying."
+        ),
+    }
+
+
 def _selected_init_runtimes(
     runtimes: list[str] | None,
     *,
@@ -2192,7 +2553,7 @@ def _selected_init_runtimes(
         human_message("Which runtime(s) would you like to install for?", locale=locale)
     )
     for index, runtime in enumerate(registry.runtimes, start=1):
-        _stdout_console().print(f"{index}. {runtime.display_name} ({runtime.support_tier.value})")
+        _stdout_console().print(f"{index}. {runtime.display_name}")
     answer = _prompt(
         human_message(
             "Which runtime(s) would you like to install for? [1 2 3 4 5]: ",
@@ -2212,6 +2573,24 @@ def _normalize_supported_runtimes(runtimes: list[str]) -> list[str]:
     unsupported = [runtime_id for runtime_id in normalized if runtime_id not in supported]
     if unsupported:
         raise ValidationFailedError(f"Unsupported runtimes: {', '.join(unsupported)}")
+    return normalized
+
+
+def _normalize_agent_ids(agent_ids: list[str]) -> list[str]:
+    normalized: list[str] = []
+    known_ids = {runtime_id.value for runtime_id in default_runtime_registry().runtime_ids}
+    for agent_id in agent_ids:
+        normalized_separator = "-".join(agent_id.strip().lower().split("_"))
+        cleaned = "-".join(normalized_separator.split())
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", cleaned):
+            raise ValidationFailedError(
+                f"Invalid agent identifier: {agent_id}. "
+                "Use lowercase letters, numbers, and hyphens."
+            )
+        known_alias = "_".join(cleaned.split("-"))
+        resolved = known_alias if known_alias in known_ids else cleaned
+        if resolved not in normalized:
+            normalized.append(resolved)
     return normalized
 
 
@@ -4835,6 +5214,60 @@ def _format_human_init_output(result: SetupProjectResult, *, locale: str = "en")
             human_message("Suggested next command: umem status", locale=locale),
         ]
     )
+
+
+def _format_human_connection_results(
+    plan: AgentConnectionPlan,
+    execution: AgentConnectionExecution,
+    *,
+    project_initialized: bool,
+    project_created: bool,
+) -> str:
+    lines = ["Universal Memory"]
+    if project_initialized:
+        lines.append(
+            "\n✓ Project memory initialized"
+            if project_created
+            else "\n✓ Project memory already initialized"
+        )
+
+    if not plan.detected_agents:
+        lines.extend(
+            [
+                "\nNo agent was detected in this workspace.",
+                (
+                    "Run umem connect after installing an agent."
+                    if project_initialized
+                    else "Use --agent <id> to select one manually."
+                ),
+            ]
+        )
+        return "\n".join(lines)
+
+    if plan.existing_connections:
+        lines.append("\nExisting connections reused:")
+        for item in plan.existing_connections:
+            lines.append(f"  {item.display_name}")
+
+    for result in execution.connection_results:
+        status = result["status"]
+        name = result["display_name"]
+        if status == "connected_and_validated":
+            lines.append(f"✓ {name} connected and context access verified")
+        elif status == "skipped":
+            lines.append(f"○ {name} skipped")
+        else:
+            lines.append(f"! {name} needs attention — run umem doctor")
+
+    ready = any(
+        result["status"] == "connected_and_validated" for result in execution.connection_results
+    )
+    pending = any(result["status"] == "action_required" for result in execution.connection_results)
+    if ready and not pending:
+        lines.append("\nYou're ready. Work with your agents normally.")
+    elif not execution.connection_results:
+        lines.append("\nNo changes needed.")
+    return "\n".join(lines)
 
 
 def _format_human_init_host_results(

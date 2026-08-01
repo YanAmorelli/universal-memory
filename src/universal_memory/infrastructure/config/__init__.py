@@ -15,6 +15,9 @@ from universal_memory.infrastructure.config.project_layout import (
     resolve_project_layout,
     write_project_layout_metadata,
 )
+from universal_memory.infrastructure.config.runtime_connection_state import (
+    LocalConnectionStatePort,
+)
 from universal_memory.infrastructure.config.toml_loader import (
     LoadedConfig,
     dump_toml_document,
@@ -26,6 +29,7 @@ __all__ = [
     "SHARED_LAYOUT_PATHS",
     "LoadedConfig",
     "LocalConfigValidationPort",
+    "LocalConnectionStatePort",
     "LocalProjectLayoutPort",
     "dump_toml_document",
     "ensure_project_layout",
