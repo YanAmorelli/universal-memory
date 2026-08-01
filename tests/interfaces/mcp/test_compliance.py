@@ -17,7 +17,10 @@ from universal_memory.application.memory import (
     PurgeFactResult,
     RememberFactResult,
 )
-from universal_memory.application.onboarding import SetupProjectResult
+from universal_memory.application.onboarding import (
+    ExecuteAgentConnectionsUseCase,
+    SetupProjectResult,
+)
 from universal_memory.application.security import (
     ListAuditLogResult,
     ListSnapshotsResult,
@@ -169,6 +172,19 @@ CONTRACT_KEYS_BY_TOOL = {
         "operational_root",
         "shared_paths",
         "operational_paths",
+        "detected_agents",
+        "existing_connections",
+        "recommended_connections",
+        "support_tiers",
+        "instruction_channels",
+        "directed_cli_agents",
+        "unmanaged_mcp_hosts",
+        "validation_results",
+        "connection_results",
+        "external_actions",
+        "manual_steps_pending",
+        "audit_references",
+        "persisted_connections",
     },
     "inspect_project_layout": {
         "operation",
@@ -488,6 +504,19 @@ CONTRACT_TYPES_BY_TOOL = {
         "operational_root": str,
         "shared_paths": list,
         "operational_paths": list,
+        "detected_agents": list,
+        "existing_connections": list,
+        "recommended_connections": list,
+        "support_tiers": dict,
+        "instruction_channels": dict,
+        "directed_cli_agents": list,
+        "unmanaged_mcp_hosts": list,
+        "validation_results": list,
+        "connection_results": list,
+        "external_actions": list,
+        "manual_steps_pending": list,
+        "audit_references": list,
+        "persisted_connections": list,
     },
     "inspect_project_layout": {
         "operation": str,
@@ -998,6 +1027,43 @@ async def test_mcp_initialize_project_accepts_shared_layout(tmp_path: Path) -> N
     assert payload["data"]["operational_root"] == ".umem"
     assert payload["data"]["shared_paths"] == ["umem/project.toml", "umem/memory", "umem/skills"]
     assert seen == ["shared"]
+
+
+@pytest.mark.anyio
+async def test_mcp_initialize_project_reuses_shared_connection_executor(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".codex").mkdir()
+    connection_calls: list[tuple[str, bool, bool]] = []
+
+    def connection_host(command) -> ConfigureHostResult:
+        connection_calls.append((command.host_id, command.apply, command.check))
+        return host_result(planned_changes=[])
+
+    executor = ExecuteAgentConnectionsUseCase(
+        host_setup_command=connection_host,
+        host_check_command=connection_host,
+        context_read_command=lambda _command: context_result(),
+        known_runtime_ids=frozenset({"codex"}),
+    )
+    use_cases = replace(
+        mcp_use_cases(tmp_path),
+        execute_agent_connections=executor,
+    )
+    server = configure_server(create_mcp_server(), use_cases, project_root=tmp_path)
+
+    payload = (await server.call_tool("initialize_project", {})).structured_content
+
+    assert payload is not None
+    assert payload["ok"] is True
+    codex_calls = [call for call in connection_calls if call[0] == "codex"]
+    assert ("codex", True, False) in codex_calls
+    assert ("codex", False, True) in codex_calls
+    codex_result = next(
+        result for result in payload["data"]["connection_results"] if result["agent_id"] == "codex"
+    )
+    assert codex_result["status"] == "connected_and_validated"
+    assert payload["data"]["persisted_connections"] == []
 
 
 @pytest.mark.anyio

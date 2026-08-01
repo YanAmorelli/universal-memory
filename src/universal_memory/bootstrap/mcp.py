@@ -33,6 +33,9 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         PurgeFactUseCase,
         RememberFactUseCase,
     )
+    from universal_memory.application.onboarding import (  # noqa: PLC0415
+        ExecuteAgentConnectionsUseCase,
+    )
     from universal_memory.application.onboarding.setup_project import setup_project  # noqa: PLC0415
     from universal_memory.application.security import (  # noqa: PLC0415
         ListAuditLogUseCase,
@@ -165,6 +168,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         project_root=root,
         safe_write_use_case=safe_write_use_case,
         fact_repository=fact_repository,
+    )
+    connection_executor = ExecuteAgentConnectionsUseCase(
+        host_setup_command=host_use_case.execute,
+        host_check_command=host_use_case.execute,
+        context_read_command=context_use_case.execute,
     )
     doctor_use_case = DoctorUseCase(host_check_command=host_use_case.execute)
     host_sync_use_case = SyncInstructionsUseCase(
@@ -307,6 +315,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         create_mcp_server(),
         MCPUseCases(
             initialize_project=initialize_project,
+            execute_agent_connections=connection_executor,
             status=status_use_case.execute,
             doctor=doctor_use_case.execute,
             context=context_use_case.execute,

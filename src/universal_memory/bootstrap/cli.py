@@ -16,6 +16,12 @@ from universal_memory.application.memory import (
     PurgeFactUseCase,
     RememberFactUseCase,
 )
+from universal_memory.application.onboarding import (
+    ExecuteAgentConnectionsUseCase,
+    OfficialSkillInstallerPlannerAdapter,
+    RegistrySignalAgentDetector,
+    default_agent_connection_planner,
+)
 from universal_memory.application.security import (
     ListAuditLogUseCase,
     ListSnapshotsUseCase,
@@ -64,12 +70,23 @@ from universal_memory.domain.entities import (
     SnapshotScope,
     SnapshotStatus,
 )
+from universal_memory.domain.entities.runtime import default_runtime_registry
 from universal_memory.domain.ports import LatentSkillRepository, RuleRepository
 from universal_memory.infrastructure.config import (
     LocalConfigValidationPort,
+    LocalConnectionStatePort,
     LocalProjectLayoutPort,
 )
 from universal_memory.infrastructure.config.toml_loader import load_config
+from universal_memory.infrastructure.onboarding import (
+    DEFAULT_OFFICIAL_SKILL_MAPPINGS,
+    LocalExternalActionAuditPort,
+    LocalOfficialSkillConnectionStatePort,
+    LocalOfficialSkillEnvironmentProbe,
+    OfficialSkillExternalActionExecutor,
+    OfficialSkillMappedAgentDetector,
+    StaticOfficialSkillMappingPort,
+)
 from universal_memory.infrastructure.security import (
     EntropySecretScanner,
     LocalAuditLogRepository,
@@ -199,6 +216,49 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         project_root=project_root,
         safe_write_use_case=safe_write_use_case,
         fact_repository=fact_repository,
+    )
+    runtime_registry = default_runtime_registry()
+    official_connection_state = LocalOfficialSkillConnectionStatePort(
+        project_root=project_root,
+        safe_write_use_case=safe_write_use_case,
+    )
+    official_mapping_port = StaticOfficialSkillMappingPort(
+        DEFAULT_OFFICIAL_SKILL_MAPPINGS,
+        project_root=project_root,
+        state_port=official_connection_state,
+    )
+    official_environment_probe = LocalOfficialSkillEnvironmentProbe(
+        mapping_port=official_mapping_port
+    )
+    official_installer_planner = OfficialSkillInstallerPlannerAdapter(
+        environment_port=official_environment_probe,
+        agent_mapping_port=official_mapping_port,
+    )
+    connection_planner = default_agent_connection_planner(
+        runtime_registry,
+        detector=OfficialSkillMappedAgentDetector(
+            delegate=RegistrySignalAgentDetector(),
+            mapping_port=official_mapping_port,
+        ),
+        external_skill_installer=official_installer_planner,
+    )
+    connection_executor = ExecuteAgentConnectionsUseCase(
+        host_setup_command=host_use_case.execute,
+        host_check_command=host_use_case.execute,
+        context_read_command=context_use_case.execute,
+        connection_state_port=LocalConnectionStatePort(
+            project_root=project_root,
+            safe_write_use_case=safe_write_use_case,
+        ),
+        external_action_executor=OfficialSkillExternalActionExecutor(
+            project_root=project_root,
+            mapping_port=official_mapping_port,
+            state_port=official_connection_state,
+            audit_port=LocalExternalActionAuditPort(repository=audit_log_repository),
+        ),
+        known_runtime_ids=frozenset(
+            runtime_id.value for runtime_id in runtime_registry.runtime_ids
+        ),
     )
     doctor_use_case = DoctorUseCase(host_check_command=host_use_case.execute)
     host_sync_use_case = SyncInstructionsUseCase(
@@ -384,6 +444,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         host_setup_command=host_use_case.execute,
         host_check_command=host_use_case.execute,
         host_sync_command=host_sync_use_case.execute,
+        agent_connection_plan_command=connection_planner.plan,
+        agent_connection_executor=connection_executor,
         propose_skill_command=propose_skill_use_case.execute,
         track_latent_skill_command=track_latent_skill_use_case.execute,
         generate_skill_command=generate_skill_use_case.execute,

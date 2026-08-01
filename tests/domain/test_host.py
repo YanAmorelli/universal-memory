@@ -15,9 +15,19 @@ from universal_memory.domain.entities.instruction_target import (
 )
 from universal_memory.domain.entities.runtime import (
     NativeSkillTarget,
+    RuntimeCliAccess,
+    RuntimeDetectionSignal,
+    RuntimeDetectionSignalKind,
     RuntimeId,
+    RuntimeInstructionChannel,
+    RuntimeMcpMode,
     RuntimeRegistry,
+    RuntimeSkillInstaller,
+    RuntimeSkillSupport,
+    RuntimeSupportCapabilities,
+    RuntimeSupportProfileId,
     RuntimeSupportTier,
+    RuntimeValidationLevel,
     default_runtime_registry,
 )
 
@@ -270,7 +280,7 @@ def test_host_and_instruction_target_exports_are_public() -> None:
     assert "InstructionTarget" in entities.__all__
 
 
-def test_default_runtime_registry_declares_mvp_runtime_tiers_and_stable_ids() -> None:
+def test_default_runtime_registry_declares_capability_aware_tiers_and_stable_ids() -> None:
     registry = default_runtime_registry()
 
     assert registry.runtime_ids == [
@@ -280,11 +290,257 @@ def test_default_runtime_registry_declares_mvp_runtime_tiers_and_stable_ids() ->
         RuntimeId.cursor,
         RuntimeId.antigravity,
     ]
-    assert registry.get(RuntimeId.claude_code).support_tier == RuntimeSupportTier.tier_1
-    assert registry.get(RuntimeId.opencode).support_tier == RuntimeSupportTier.tier_1
-    assert registry.get(RuntimeId.codex).support_tier == RuntimeSupportTier.tier_1
-    assert registry.get(RuntimeId.cursor).support_tier == RuntimeSupportTier.tier_2
-    assert registry.get(RuntimeId.antigravity).support_tier == RuntimeSupportTier.tier_2
+    assert (
+        registry.get(RuntimeId.claude_code).support_tier == RuntimeSupportTier.tier_1_native_managed
+    )
+    assert registry.get(RuntimeId.opencode).support_tier == RuntimeSupportTier.tier_1_native_managed
+    assert registry.get(RuntimeId.codex).support_tier == RuntimeSupportTier.tier_1_native_managed
+    assert registry.get(RuntimeId.cursor).support_tier == RuntimeSupportTier.tier_2_directed_cli
+    assert (
+        registry.get(RuntimeId.antigravity).support_tier == RuntimeSupportTier.tier_2_directed_cli
+    )
+
+
+def test_default_registry_declares_independent_capabilities_and_tier_1_evidence() -> None:
+    registry = default_runtime_registry()
+    codex = registry.get(RuntimeId.codex)
+
+    assert codex.managed_by_umem is True
+    assert codex.instruction_channels == [
+        RuntimeInstructionChannel.agents_md,
+        RuntimeInstructionChannel.agent_skill,
+    ]
+    assert codex.cli_access == RuntimeCliAccess.required
+    assert codex.skill_support == RuntimeSkillSupport.native
+    assert codex.skill_installer == RuntimeSkillInstaller.umem_native
+    assert codex.mcp_mode == RuntimeMcpMode.managed
+    assert codex.validation_level == RuntimeValidationLevel.native_context_read
+    assert codex.selection_evidence is not None
+    assert codex.selection_evidence.evaluated_on.isoformat() == "2026-07-31"
+    assert codex.selection_evidence.market_relevance
+    assert codex.selection_evidence.demand
+    assert codex.selection_evidence.internal_use
+    assert codex.selection_evidence.strategic_value
+    assert codex.selection_evidence.validation_feasibility
+    assert codex.selection_evidence.maintenance_capacity
+
+    cursor = registry.get(RuntimeId.cursor)
+    assert cursor.managed_by_umem is False
+    assert cursor.instruction_channels == [RuntimeInstructionChannel.native_file]
+    assert cursor.cli_access == RuntimeCliAccess.required
+    assert cursor.selection_evidence is None
+
+
+def test_runtime_detection_signals_are_explicit_and_separate_from_targets() -> None:
+    codex = default_runtime_registry().get(RuntimeId.codex)
+
+    assert codex.detection_signals == [
+        RuntimeDetectionSignal(
+            kind=RuntimeDetectionSignalKind.project_path,
+            value=".codex",
+        ),
+        RuntimeDetectionSignal(
+            kind=RuntimeDetectionSignalKind.executable,
+            value="codex",
+        ),
+    ]
+    assert codex.runtime_target.project_config_path == ".codex/config.toml"
+
+
+def test_runtime_detection_signal_rejects_unsafe_paths_and_commands() -> None:
+    with pytest.raises(ValidationError, match="safe relative path"):
+        RuntimeDetectionSignal(
+            kind=RuntimeDetectionSignalKind.project_path,
+            value="../.codex",
+        )
+    with pytest.raises(ValidationError, match="simple command name"):
+        RuntimeDetectionSignal(
+            kind=RuntimeDetectionSignalKind.executable,
+            value="bin/codex",
+        )
+    for empty_path in (".", "./"):
+        with pytest.raises(ValidationError, match="safe relative path"):
+            RuntimeDetectionSignal(
+                kind=RuntimeDetectionSignalKind.project_path,
+                value=empty_path,
+            )
+
+
+def test_default_registry_exposes_generic_directed_cli_profile() -> None:
+    profile = default_runtime_registry().get_profile(RuntimeSupportProfileId.directed_cli)
+
+    assert profile.support_tier == RuntimeSupportTier.tier_2_directed_cli
+    assert profile.managed_by_umem is False
+    assert profile.instruction_channels == [
+        RuntimeInstructionChannel.agents_md,
+        RuntimeInstructionChannel.agent_skill,
+    ]
+    assert profile.cli_access == RuntimeCliAccess.required
+    assert profile.skill_support == RuntimeSkillSupport.portable
+    assert profile.skill_installer == RuntimeSkillInstaller.npx_skills
+    assert profile.mcp_mode == RuntimeMcpMode.optional
+    assert profile.validation_level == RuntimeValidationLevel.directed_cli_context_read
+
+
+def test_default_registry_exposes_generic_unmanaged_mcp_profile() -> None:
+    profile = default_runtime_registry().get_profile(RuntimeSupportProfileId.unmanaged_mcp)
+
+    assert profile.support_tier == RuntimeSupportTier.tier_3_unmanaged_mcp
+    assert profile.managed_by_umem is False
+    assert profile.instruction_channels == []
+    assert profile.cli_access == RuntimeCliAccess.optional
+    assert profile.skill_support == RuntimeSkillSupport.unsupported
+    assert profile.skill_installer == RuntimeSkillInstaller.unavailable
+    assert profile.mcp_mode == RuntimeMcpMode.unmanaged
+    assert profile.validation_level == RuntimeValidationLevel.mcp_availability
+    assert profile.known_limitations
+
+
+def test_runtime_adapter_rejects_tier_1_without_selection_evidence() -> None:
+    codex = default_runtime_registry().get(RuntimeId.codex)
+    data = codex.model_dump() | {"selection_evidence": None}
+
+    with pytest.raises(ValidationError, match="Tier 1 requires selection_evidence"):
+        type(codex).model_validate(data)
+
+
+def test_runtime_adapter_rejects_directed_cli_without_required_cli_access() -> None:
+    cursor = default_runtime_registry().get(RuntimeId.cursor)
+    data = cursor.model_dump() | {"cli_access": RuntimeCliAccess.optional}
+
+    with pytest.raises(ValidationError, match="Tier 2 requires CLI access"):
+        type(cursor).model_validate(data)
+
+
+def test_runtime_adapter_rejects_directed_cli_without_any_instruction_contract() -> None:
+    cursor = default_runtime_registry().get(RuntimeId.cursor)
+    data = cursor.model_dump() | {"instruction_channels": []}
+
+    with pytest.raises(
+        ValidationError,
+        match=r"equivalent-rule skills require|Tier 2 requires",
+    ):
+        type(cursor).model_validate(data)
+
+
+def test_named_tier_2_adapter_can_declare_only_its_actual_native_instruction_surface() -> None:
+    cursor = default_runtime_registry().get(RuntimeId.cursor)
+    data = cursor.model_dump() | {"instruction_channels": [RuntimeInstructionChannel.native_file]}
+
+    validated = type(cursor).model_validate(data)
+
+    assert validated.instruction_channels == [RuntimeInstructionChannel.native_file]
+
+
+def test_tier_2_native_file_requires_an_explicit_equivalent_rule_contract() -> None:
+    cursor = default_runtime_registry().get(RuntimeId.cursor)
+    data = cursor.model_dump() | {"skill_support": RuntimeSkillSupport.native}
+
+    with pytest.raises(ValidationError, match="explicit equivalent-rule"):
+        type(cursor).model_validate(data)
+
+
+def test_directed_cli_profile_requires_portable_instruction_surface() -> None:
+    profile = default_runtime_registry().get_profile(RuntimeSupportProfileId.directed_cli)
+    data = profile.model_dump() | {"instruction_channels": [RuntimeInstructionChannel.native_file]}
+
+    with pytest.raises(
+        ValidationError,
+        match=r"portable skills require|requires AGENTS",
+    ):
+        type(profile).model_validate(data)
+
+
+def test_runtime_profile_rejects_unsupported_skill_with_available_installer() -> None:
+    profile = default_runtime_registry().get_profile(RuntimeSupportProfileId.unmanaged_mcp)
+    data = profile.model_dump() | {"skill_installer": RuntimeSkillInstaller.manual}
+
+    with pytest.raises(ValidationError, match="unsupported skills require"):
+        type(profile).model_validate(data)
+
+
+def test_runtime_profile_rejects_agent_skill_as_equivalent_rules_via_npx() -> None:
+    profile = default_runtime_registry().get_profile(RuntimeSupportProfileId.directed_cli)
+    data = profile.model_dump() | {
+        "instruction_channels": [RuntimeInstructionChannel.agent_skill],
+        "skill_support": RuntimeSkillSupport.equivalent_rules,
+        "skill_installer": RuntimeSkillInstaller.npx_skills,
+    }
+
+    with pytest.raises(ValidationError, match="Agent Skill instructions require"):
+        type(profile).model_validate(data)
+
+
+def test_runtime_profile_rejects_portable_skill_with_native_installer() -> None:
+    profile = default_runtime_registry().get_profile(RuntimeSupportProfileId.directed_cli)
+    data = profile.model_dump() | {
+        "skill_installer": RuntimeSkillInstaller.umem_native,
+    }
+
+    with pytest.raises(ValidationError, match="portable skills require"):
+        type(profile).model_validate(data)
+
+
+def test_runtime_profile_rejects_unmanaged_mcp_with_behavioral_validation() -> None:
+    profile = default_runtime_registry().get_profile(RuntimeSupportProfileId.unmanaged_mcp)
+    data = profile.model_dump() | {
+        "validation_level": RuntimeValidationLevel.directed_cli_context_read
+    }
+
+    with pytest.raises(ValidationError, match="Tier 3 validation must stop at MCP availability"):
+        type(profile).model_validate(data)
+
+
+def test_runtime_registry_rejects_duplicate_support_profiles() -> None:
+    registry = default_runtime_registry()
+    profile = registry.get_profile(RuntimeSupportProfileId.directed_cli)
+
+    with pytest.raises(ValidationError, match="support profile IDs must be unique"):
+        RuntimeRegistry(
+            runtimes=registry.runtimes,
+            support_profiles=[profile, profile],
+        )
+
+
+def test_runtime_adapter_rejects_native_targets_without_native_installer_capability() -> None:
+    opencode = default_runtime_registry().get(RuntimeId.opencode)
+    data = opencode.model_dump() | {
+        "skill_support": RuntimeSkillSupport.portable,
+        "skill_installer": RuntimeSkillInstaller.npx_skills,
+    }
+
+    with pytest.raises(ValidationError, match="native_skill_targets require"):
+        type(opencode).model_validate(data)
+
+
+def test_runtime_capabilities_allow_no_known_limitations() -> None:
+    profile = default_runtime_registry().get_profile(RuntimeSupportProfileId.directed_cli)
+    data = profile.model_dump() | {"known_limitations": []}
+
+    validated = type(profile).model_validate(data)
+
+    assert validated.known_limitations == []
+
+
+def test_capability_aware_runtime_types_are_public() -> None:
+    public_names = {
+        "RuntimeCliAccess",
+        "RuntimeDetectionSignal",
+        "RuntimeDetectionSignalKind",
+        "RuntimeInstructionChannel",
+        "RuntimeMcpMode",
+        "RuntimeSkillInstaller",
+        "RuntimeSkillSupport",
+        "RuntimeSupportProfile",
+        "RuntimeSupportProfileId",
+        "RuntimeSupportCapabilities",
+        "RuntimeValidationLevel",
+        "Tier1SelectionEvidence",
+    }
+
+    assert public_names <= set(entities.__all__)
+    assert entities.RuntimeSupportCapabilities is RuntimeSupportCapabilities
+    assert entities.RuntimeSupportProfileId is RuntimeSupportProfileId
 
 
 def test_runtime_registry_declares_paths_targets_and_native_skill_targets() -> None:
