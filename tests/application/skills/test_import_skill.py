@@ -30,7 +30,15 @@ from universal_memory.application.skills import (
     PublishSkillUseCase,
 )
 from universal_memory.domain import SecretDetectedError, StorageError, ValidationFailedError
-from universal_memory.domain.entities import AgentSkillStatus, LatentSkillScope
+from universal_memory.domain.entities import (
+    AgentSkillStatus,
+    LatentSkillScope,
+    RuntimeId,
+    RuntimeRegistry,
+    RuntimeSkillInstaller,
+    RuntimeSkillSupport,
+    default_runtime_registry,
+)
 from universal_memory.domain.ports import SecretScannerPort
 from universal_memory.infrastructure.storage import (
     LocalAgentSkillRepository,
@@ -343,6 +351,34 @@ def test_import_skill_adopts_matching_supported_native_source_by_default(tmp_pat
     assert result.warnings == []
 
 
+def test_import_skill_does_not_adopt_target_without_native_capability(tmp_path: Path) -> None:
+    registry = default_runtime_registry()
+    opencode = registry.get(RuntimeId.opencode).model_copy(
+        update={
+            "skill_support": RuntimeSkillSupport.portable,
+            "skill_installer": RuntimeSkillInstaller.npx_skills,
+        }
+    )
+    unsafe_registry = RuntimeRegistry.model_construct(
+        runtimes=[
+            opencode if runtime.runtime_id == RuntimeId.opencode else runtime
+            for runtime in registry.runtimes
+        ],
+        support_profiles=registry.support_profiles,
+    )
+    use_case, _repository, _safe_write = build_use_case(
+        tmp_path,
+        runtime_registry=unsafe_registry,
+    )
+    source = write_source_skill(tmp_path / ".opencode" / "skills" / "review-helper")
+
+    result = use_case.execute(
+        ImportSkillCommand(path=source, scope=LatentSkillScope.project, origin="test")
+    )
+
+    assert result.native_installations == []
+
+
 @pytest.mark.parametrize("path_suffix", ["", "SKILL.md"])
 def test_import_skill_adopts_agents_native_source_by_default(
     tmp_path: Path, path_suffix: str
@@ -462,6 +498,7 @@ def build_use_case(
     tmp_path: Path,
     *,
     scanner: SecretScannerPort | None = None,
+    runtime_registry: RuntimeRegistry | None = None,
 ) -> tuple[ImportSkillUseCase, LocalAgentSkillRepository, SafeWriteUseCase]:
     snapshots = RecordingSnapshotRepository()
     audit = RecordingAuditRepository()
@@ -478,6 +515,7 @@ def build_use_case(
             repository=repository,
             safe_write_use_case=safe_write,
             global_safe_write_use_case=repository.global_safe_write_use_case,
+            runtime_registry=runtime_registry,
         ),
         repository,
         safe_write,

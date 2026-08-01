@@ -408,12 +408,7 @@ def test_update_skills_json_updates_managed_default_umem_skill_and_reports_prese
     assert main(["init", "--yes", "--format", "json"]) == 0
     capsys.readouterr()
     lifecycle_path = (
-        tmp_path
-        / ".umem"
-        / "skills"
-        / "use-universal-memory"
-        / "references"
-        / "skills-lifecycle.md"
+        tmp_path / ".umem" / "skills" / "universal-memory" / "references" / "skills-lifecycle.md"
     )
     lifecycle_path.write_text(LEGACY_SKILLS_LIFECYCLE, encoding="utf-8")
 
@@ -426,12 +421,12 @@ def test_update_skills_json_updates_managed_default_umem_skill_and_reports_prese
     assert payload["data"]["preserved_count"] == 0
     skill = payload["data"]["skills"][0]
     assert skill["managed"] is True
-    assert skill["name"] == "use-universal-memory"
+    assert skill["name"] == "universal-memory"
     assert skill["status"] == "updated"
     assert skill["updated_paths"] == [
-        ".umem/skills/use-universal-memory/references/skills-lifecycle.md"
+        ".umem/skills/universal-memory/references/skills-lifecycle.md"
     ]
-    assert ".umem/skills/use-universal-memory/SKILL.md" in skill["preserved_paths"]
+    assert ".umem/skills/universal-memory/SKILL.md" in skill["preserved_paths"]
     assert skill["audit_reference"]
     assert skill["snapshot_reference"]
     assert (

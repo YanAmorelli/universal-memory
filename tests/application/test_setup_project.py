@@ -9,10 +9,16 @@ from universal_memory.application.onboarding.setup_project import (
     DEFAULT_UMEM_SKILL_REFERENCES,
     setup_project,
 )
+from universal_memory.domain import InvalidConfigError
 from universal_memory.infrastructure.config import (
     LocalConfigValidationPort,
     LocalProjectLayoutPort,
 )
+
+DEFAULT_UMEM_SKILL_PATHS = [
+    ".umem/skills/universal-memory/SKILL.md",
+    *DEFAULT_UMEM_SKILL_REFERENCES,
+]
 
 
 def test_setup_project_initializes_layout_and_returns_structured_result(
@@ -41,19 +47,13 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
         ".umem/skills",
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
-        ".umem/skills/use-universal-memory/SKILL.md",
-        ".umem/skills/use-universal-memory/references/startup-and-context.md",
-        ".umem/skills/use-universal-memory/references/memory-facts.md",
-        ".umem/skills/use-universal-memory/references/skills-lifecycle.md",
-        ".umem/skills/use-universal-memory/references/host-instructions-sync.md",
-        ".umem/skills/use-universal-memory/references/cli-mcp-parity.md",
-        ".umem/skills/use-universal-memory/references/guardrails-and-recording.md",
+        *DEFAULT_UMEM_SKILL_PATHS,
         ".umem/memory/latent_skills.jsonl",
     ]
-    default_skill = tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md"
+    default_skill = tmp_path / ".umem" / "skills" / "universal-memory" / "SKILL.md"
     assert default_skill.is_file()
     skill_content = default_skill.read_text(encoding="utf-8")
-    assert 'name: "use-universal-memory"' in skill_content
+    assert 'name: "universal-memory"' in skill_content
     assert 'name: "Use Universal Memory"' not in skill_content
     assert "umem context --scope project" in skill_content
     assert "umem status --format json" in skill_content
@@ -79,18 +79,18 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     ):
         assert expected_skill_guidance in skill_content
     assert "Mandatory Startup" in skill_content
-    assert "at the start of a work session or conversation" in skill_content
+    assert "At the start of a work session or conversation" in skill_content
     assert "UMEM unavailable or uninitialized" in skill_content
     assert "Do not repeat the full startup sequence" in skill_content
     for relative_path in DEFAULT_UMEM_SKILL_REFERENCES:
         reference_file = tmp_path / relative_path
         assert reference_file.is_file()
-        assert reference_file.read_text(encoding="utf-8").startswith("# ")
+        assert reference_file.read_text(encoding="utf-8").startswith("#")
     latent_skill_line = (tmp_path / ".umem" / "memory" / "latent_skills.jsonl").read_text(
         encoding="utf-8"
     )
     latent_skill = json.loads(latent_skill_line)
-    assert latent_skill["name"] == "use-universal-memory"
+    assert latent_skill["name"] == "universal-memory"
     assert latent_skill["description"] == (
         "Operational hub for using Universal Memory context, facts, host sync, "
         "and skills lifecycle."
@@ -120,12 +120,7 @@ def test_setup_project_skills_lifecycle_documents_valid_create_command(tmp_path:
     )
 
     skills_lifecycle_content = (
-        tmp_path
-        / ".umem"
-        / "skills"
-        / "use-universal-memory"
-        / "references"
-        / "skills-lifecycle.md"
+        tmp_path / ".umem" / "skills" / "universal-memory" / "references" / "skills-lifecycle.md"
     ).read_text(encoding="utf-8")
 
     assert '--trigger "when to use it"' in skills_lifecycle_content
@@ -178,8 +173,8 @@ def test_setup_project_shared_layout_creates_visible_root_and_keeps_umem_skill_p
     assert (tmp_path / "umem" / "project.toml").is_file()
     assert (tmp_path / "umem" / "memory").is_dir()
     assert (tmp_path / "umem" / "skills").is_dir()
-    assert (tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md").is_file()
-    assert not (tmp_path / "umem" / "skills" / "use-universal-memory").exists()
+    assert (tmp_path / ".umem" / "skills" / "universal-memory" / "SKILL.md").is_file()
+    assert not (tmp_path / "umem" / "skills" / "universal-memory").exists()
     policy = tomllib.loads((tmp_path / "umem" / "project.toml").read_text(encoding="utf-8"))
     assert policy["visibility_defaults"]["operational_skills"] == "private"
     assert policy["shared_operational_skills"] == []
@@ -283,13 +278,7 @@ def test_setup_project_is_idempotent_and_reports_existing_layout(tmp_path: Path)
         ".umem/skills",
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
-        ".umem/skills/use-universal-memory/SKILL.md",
-        ".umem/skills/use-universal-memory/references/startup-and-context.md",
-        ".umem/skills/use-universal-memory/references/memory-facts.md",
-        ".umem/skills/use-universal-memory/references/skills-lifecycle.md",
-        ".umem/skills/use-universal-memory/references/host-instructions-sync.md",
-        ".umem/skills/use-universal-memory/references/cli-mcp-parity.md",
-        ".umem/skills/use-universal-memory/references/guardrails-and-recording.md",
+        *DEFAULT_UMEM_SKILL_PATHS,
         ".umem/memory/latent_skills.jsonl",
     ]
 
@@ -329,12 +318,7 @@ def test_setup_project_does_not_overwrite_existing_default_umem_skill_reference(
         config_validation_port=LocalConfigValidationPort(),
     )
     lifecycle_path = (
-        tmp_path
-        / ".umem"
-        / "skills"
-        / "use-universal-memory"
-        / "references"
-        / "skills-lifecycle.md"
+        tmp_path / ".umem" / "skills" / "universal-memory" / "references" / "skills-lifecycle.md"
     )
     custom_content = "# Skills Lifecycle\n\nExisting project guidance must stay intact.\n"
     lifecycle_path.write_text(custom_content, encoding="utf-8")
@@ -347,9 +331,7 @@ def test_setup_project_does_not_overwrite_existing_default_umem_skill_reference(
 
     assert result.already_initialized is True
     assert lifecycle_path.read_text(encoding="utf-8") == custom_content
-    assert (
-        ".umem/skills/use-universal-memory/references/skills-lifecycle.md" in result.existing_paths
-    )
+    assert ".umem/skills/universal-memory/references/skills-lifecycle.md" in result.existing_paths
 
 
 def test_setup_project_repairs_partial_layout_state(tmp_path: Path) -> None:
@@ -371,21 +353,74 @@ def test_setup_project_repairs_partial_layout_state(tmp_path: Path) -> None:
         ".umem/skills",
         ".umem/benchmarks",
         ".umem/benchmarks/retrieval-results.json",
-        ".umem/skills/use-universal-memory/SKILL.md",
-        ".umem/skills/use-universal-memory/references/startup-and-context.md",
-        ".umem/skills/use-universal-memory/references/memory-facts.md",
-        ".umem/skills/use-universal-memory/references/skills-lifecycle.md",
-        ".umem/skills/use-universal-memory/references/host-instructions-sync.md",
-        ".umem/skills/use-universal-memory/references/cli-mcp-parity.md",
-        ".umem/skills/use-universal-memory/references/guardrails-and-recording.md",
+        *DEFAULT_UMEM_SKILL_PATHS,
         ".umem/memory/latent_skills.jsonl",
     ]
     assert result.existing_paths == [".umem/memory"]
 
 
 def test_default_umem_skill_templates_match_project_owned_skill_files() -> None:
-    skill_root = Path(".umem") / "skills" / "use-universal-memory"
+    skill_root = Path("skills/universal-memory")
 
     assert DEFAULT_UMEM_SKILL_MARKDOWN == (skill_root / "SKILL.md").read_text(encoding="utf-8")
+    managed_root = Path(".umem/skills/universal-memory")
     for relative_path, expected_content in DEFAULT_UMEM_SKILL_REFERENCES.items():
-        assert expected_content == Path(relative_path).read_text(encoding="utf-8")
+        public_path = skill_root / Path(relative_path).relative_to(managed_root)
+        assert expected_content == public_path.read_text(encoding="utf-8")
+
+
+def test_setup_project_preserves_legacy_skill_without_creating_a_duplicate(
+    tmp_path: Path,
+) -> None:
+    legacy_skill = tmp_path / ".umem/skills/use-universal-memory/SKILL.md"
+    legacy_skill.parent.mkdir(parents=True)
+    legacy_skill.write_text("# Customized legacy skill\n", encoding="utf-8")
+
+    result = setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+
+    assert legacy_skill.read_text(encoding="utf-8") == "# Customized legacy skill\n"
+    assert not (tmp_path / ".umem/skills/universal-memory").exists()
+    assert ".umem/skills/use-universal-memory/SKILL.md" in result.existing_paths
+    latent = json.loads((tmp_path / ".umem/memory/latent_skills.jsonl").read_text(encoding="utf-8"))
+    assert latent["name"] == "use-universal-memory"
+
+
+def test_setup_project_rejects_legacy_and_canonical_split_brain(tmp_path: Path) -> None:
+    for slug in ("use-universal-memory", "universal-memory"):
+        skill = tmp_path / ".umem" / "skills" / slug / "SKILL.md"
+        skill.parent.mkdir(parents=True, exist_ok=True)
+        skill.write_text(f"# {slug}\n", encoding="utf-8")
+
+    with pytest.raises(InvalidConfigError, match="Both legacy and canonical"):
+        setup_project(
+            tmp_path,
+            layout_port=LocalProjectLayoutPort(),
+            config_validation_port=LocalConfigValidationPort(),
+        )
+
+    assert (tmp_path / ".umem/skills/use-universal-memory/SKILL.md").read_text() == (
+        "# use-universal-memory\n"
+    )
+    assert (tmp_path / ".umem/skills/universal-memory/SKILL.md").read_text() == (
+        "# universal-memory\n"
+    )
+
+
+def test_setup_project_rejects_an_incomplete_legacy_skill_root(tmp_path: Path) -> None:
+    legacy_root = tmp_path / ".umem/skills/use-universal-memory"
+    legacy_root.mkdir(parents=True)
+    (legacy_root / "notes.md").write_text("preserve me\n", encoding="utf-8")
+
+    with pytest.raises(InvalidConfigError, match=r"legacy.*incomplete"):
+        setup_project(
+            tmp_path,
+            layout_port=LocalProjectLayoutPort(),
+            config_validation_port=LocalConfigValidationPort(),
+        )
+
+    assert (legacy_root / "notes.md").read_text() == "preserve me\n"
+    assert not (tmp_path / ".umem/skills/universal-memory").exists()
