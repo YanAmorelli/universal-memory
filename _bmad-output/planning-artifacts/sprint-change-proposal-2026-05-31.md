@@ -1,5 +1,14 @@
 # Sprint Change Proposal - universal-memory
 
+> Superseded note (2026-06-27): the agent-support tier recommendations in this
+> 2026-05-31 proposal were refined by
+> `sprint-change-proposal-2026-06-12-agent-support-evolution.md` and
+> `spec-agent-support-evolution-tiers-and-mcp-fallback.md`. The current direction
+> selects a small Tier 1 through market and maintenance analysis, scales Tier 2
+> through portable `AGENTS.md` or Agent Skill instructions plus the UMEM CLI,
+> treats manually configured/unprogrammed MCP as Tier 3, and keeps
+> `manual-context.md` as a cross-tier and unsupported-host handoff utility.
+
 **Date:** 2026-05-31
 **User:** Yan
 **Review Mode:** Batch
