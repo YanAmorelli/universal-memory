@@ -32,9 +32,9 @@ FR5: The system must allow selective purging of specific facts or complete memor
 
 FR6: The system must execute Context Hygiene routines to archive or remove obsolete short-term facts after task completion.
 
-FR7: During initial setup, the system must allow the user to select one or more supported runtimes/agents from a registry, including at least Claude Code, OpenCode and Codex/OpenAI-class AGENTS.md hosts, with Cursor and Antigravity represented according to their support tier.
+FR7: During initial setup, the system must internally distinguish release-selected Tier 1 Native Hosts, Tier 2 Directed CLI Agents, and advanced Tier 3 Unmanaged MCP guidance without requiring the user to choose a tier or requiring one adapter entry per portable Tier 2 agent.
 
-FR8: The system must configure the selected runtimes by writing or updating their supported instruction targets and native skill targets, such as `AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/`, `.cursor/`, `.opencode/` or equivalent runtime-specific paths, with snapshot and audit protection before every mutation.
+FR8: The system must configure Tier 1 native targets through protected UMEM mutations and configure Tier 2 through portable `AGENTS.md` or Agent Skill instructions plus CLI validation, while presenting detected agents and connection outcomes in the primary human experience and reporting technical tiers, externally delegated actions, and manual steps through progressive details and structured output.
 
 FR9: The user must be able to initialize `universal-memory` in a new project or directory via a CLI command, such as `umem init`.
 
@@ -58,7 +58,7 @@ FR18: The system must track and count Latent Skills, or recurring user instructi
 
 FR19: The system must request explicit approval, with Yes/Always/No options, when reaching the recurrence trigger to create a new Skill.
 
-FR20: The system must generate a canonical Agent Skill structure with `SKILL.md`, optional `scripts/` and optional `references/`, then install or link it into native skill directories for selected runtimes when supported by that runtime adapter.
+FR20: The system must generate a canonical Agent Skill structure with `SKILL.md`, optional `scripts/` and optional `references/`, then install or link it into native skill directories only when declared capability and the selected installation method allow it.
 
 FR21: The user must be able to list, activate, edit, disable and inspect both canonical skills and per-runtime installed skill targets through CLI and MCP-equivalent capabilities.
 
@@ -80,11 +80,21 @@ FR29: The product must use English as the default language for CLI prompts, help
 
 FR30: The CLI onboarding experience should include a compact terminal brand element for `umem`, implemented as ANSI/ASCII splash art with a no-color fallback and disabled automatically for JSON/non-interactive output.
 
-FR31: The system must allow the user to trigger updates and synchronize local canonical skills from `.umem/skills/` or local package templates to all active native runtime target paths.
+FR31: The system must allow the user to trigger updates and synchronize local canonical skills from `.umem/skills/` or local package templates to declared native targets, portable Tier 2 targets, or explicitly delegated external installers without assuming every agent uses the same path.
 
 FR32: During synchronization, if a native target file has been modified manually and diverges from the canonical source, the system must interactively prompt the user with choices (Keep Local Target / Overwrite with Canonical) and display a warning that overwriting could break the custom agent workflow.
 
 FR33: The CLI must support checking for new library versions, migrating local configuration schema safely, and updating local benchmark datasets without losing user history or custom rules.
+
+FR34: The system must generate a safe `manual-context.md` export, or equivalent command output, containing current context and operating instructions for explicit handoff, offline/debug workflows, and best-effort hosts outside the support matrix without assigning or changing support tier.
+
+FR35: The system must package an official UMEM Agent Skill for the Tier 2 directed-CLI contract and may distribute it through an optional bridge such as `npx skills`, with explicit confirmation, dependency and telemetry disclosure, external-mutation boundaries, and a non-Node fallback.
+
+FR36: Running `umem init` without runtime flags must detect relevant workspace agents, recommend a safe project-scoped plan, require at most one confirmation when the plan is unambiguous, connect and validate the agents, and finish with outcome-oriented readiness guidance without requiring tier, path, MCP, `npx`, or copy/symlink knowledge.
+
+FR37: The system must provide `umem connect` to discover or add agents after initialization without recreating memory, using the same connection planning, confirmation, fallback, validation, and output contracts as onboarding.
+
+FR38: UMEM-initiated `npx skills` installation must disable anonymous `skills` telemetry, default to project scope, remain optional, and never prevent core initialization when Node.js, `npx`, network access, or an external agent mapping is unavailable.
 
 ### NonFunctional Requirements
 
@@ -139,7 +149,16 @@ NFR12: CLI, persistence engine, and MCP server must execute reading, writing, qu
 - The default retrieval strategy must be justified in `.umem/benchmarks/retrieval-results.json`.
 - Storage ports must exist in `src/universal_memory/domain/ports/` for facts, rules, latent skills, snapshots, audit, and context summaries.
 - Contract tests must live in `tests/contracts/` and validate minimum operations and migration hooks of the repositories.
-- The MVP must implement host adapters for `codex`, `claude_code`, and `opencode` as Tier 1, and support Tier 2 detectors for `cursor` and `antigravity`.
+- Tier 1 must contain only release-selected hosts with maintained adapters and repeatable native setup plus context-read validation; market relevance informs selection but creates no fixed quota.
+- Tier 2 must use a portable `AGENTS.md` or official UMEM Agent Skill plus executable CLI contract and may use a generic profile instead of one adapter per agent.
+- Tier 3 must mean a manually configured/unprogrammed MCP connection and must claim capability availability only.
+- `manual-context.md` or equivalent safe export must remain a cross-tier and unsupported-host handoff utility rather than a support tier.
+- Optional `npx skills` distribution must not become a mandatory dependency or native-support authority and must disclose external mutations before confirmation.
+- Zero-flag `umem init` must be the primary quick start; explicit runtime flags remain advanced and automation controls.
+- Safe unambiguous project-scoped agent connection plans must require at most one confirmation.
+- Tier names, target paths, `npx`, copy/symlink mechanics, and MCP details must use progressive disclosure rather than appear in the default success path.
+- `umem init` and `umem connect` must share idempotent detection, planning, execution, fallback, and validation behavior.
+- UMEM-initiated `npx skills` execution must disable anonymous `skills` telemetry.
 - `AGENTS.md` must be treated as a shared manifesto and single-write target per mutation cycle.
 - `CLAUDE.md` must contain only Claude-specific deltas that do not fit in `AGENTS.md`.
 - Host-specific rule directories must be separate targets and must not duplicate the shared manifesto.
@@ -191,6 +210,11 @@ FR30: Epic 4 - Identidade visual (CLI interactive terminal splash banner)
 FR31: Epic 6 - Sincronização de skills canônicas para caminhos nativos
 FR32: Epic 6 - Alerta interativo de conflito manual (Keep/Overwrite)
 FR33: Epic 5 - CLI schema migrations, library check and benchmark updates
+FR34: Epic 4 - Portable context export for handoff, fallback, offline, and debug workflows
+FR35: Epic 6 - Official UMEM Agent Skill and optional multi-agent distribution
+FR36: Epic 5 - Zero-flag agent detection and connection golden path
+FR37: Epic 5 - Connect additional agents after initialization
+FR38: Epic 6 - Private-by-default optional external skill installation
 
 ## Epic List
 
@@ -207,16 +231,16 @@ The user and external agents can write, list, search, summarize, and manage the 
 **FRs covered:** FR3, FR5, FR6, FR10, FR16, FR17.
 
 ### Epic 4: Interfaces and Parity (CLI and MCP)
-Humans and external agents can operate the same system capabilities consistently through the terminal (with a secure ANSI/ASCII visual brand splash) or a FastMCP JSON-RPC server, with uniform handling of mapped errors.
-**FRs covered:** FR11, FR12, FR13, FR14, FR30.
+Humans and external agents can operate the same system capabilities consistently through the terminal (with a secure ANSI/ASCII visual brand splash), a FastMCP JSON-RPC server, or a safe portable context export for explicit handoff and fallback workflows, with uniform handling of mapped errors.
+**FRs covered:** FR11, FR12, FR13, FR14, FR30, FR34.
 
 ### Epic 5: Runtimes, Hosts, and Instruction Synchronization
-The user can select and configure multiple supported runtimes (Claude Code, OpenCode, Codex, Cursor, Antigravity) using a declarative model registry, manage instruction targets (shared `AGENTS.md`, delta `CLAUDE.md`), and update local schemas/benchmarks in a secure and transparent manner.
-**FRs covered:** FR7, FR8, FR15, FR33.
+The user can configure release-selected Tier 1 Native Hosts, broadly distribute Tier 2 Directed CLI instructions, and understand the limits of Tier 3 Unmanaged MCP through a capability-aware registry and onboarding flow.
+**FRs covered:** FR7, FR8, FR15, FR33, FR36, FR37.
 
 ### Epic 6: Latent Skills and Skill Management
-The user can transform recurring instructions into canonical Agent Skills (`SKILL.md`) and install them in a synchronized manner into native directories of supported runtimes, with interactive alerts for manual conflicts (Keep Local vs Overwrite Canonical).
-**FRs covered:** FR18, FR19, FR20, FR21, FR31, FR32.
+The user can transform recurring instructions into canonical Agent Skills (`SKILL.md`), package the official UMEM directed-CLI skill, and install them through declared native, portable, or explicitly delegated distribution paths with interactive conflict protection.
+**FRs covered:** FR18, FR19, FR20, FR21, FR31, FR32, FR35, FR38.
 
 ## Epic 1: Local Foundation, Models, and Contracts
 
@@ -661,7 +685,7 @@ So that obsolete context does not degrade future agent decisions.
 
 ## Epic 4: CLI and MCP Parity
 
-Humans and agents can operate the same capabilities via CLI and MCP, with thin adapters, a parity matrix, consistent error handling, and JSON-RPC validation.
+Humans and agents can operate the same capabilities via CLI and MCP, with thin adapters, a parity matrix, consistent error handling, JSON-RPC validation, and a manual export path for hosts that cannot use MCP.
 
 ### Story 4.1: Structure CLI Adapter with Typer and Rich
 
@@ -728,6 +752,7 @@ So that humans and agents have consistent access to the same behavior.
 **Given** the parity matrix of the architecture
 **When** a public capability is implemented
 **Then** equivalent CLI input and MCP input exist for `init`, `context`, `remember`, list/purge facts, propose rule, audit list, snapshots list, rollback, host setup/check, and skill proposal/list
+**And** capabilities that are intentionally CLI/manual-only, such as portable context export, are explicitly documented as parity exceptions
 **And** internal exceptions are explicitly documented
 
 **Given** parity tests
@@ -816,11 +841,39 @@ So that the tool has a recognizable visual identity without breaking automation.
 **When** the splash banner is rendered in interactive mode
 **Then** the system displays the banner in plain text (without color escape codes) in a readable manner
 
+### Story 4.7: Export Portable Context For Agent Handoff And Fallback
+
+As a user or orchestrating agent working with another agent,
+I want to export a safe portable context package,
+So that I can hand current memory guidance to any agent when an explicit, offline, debug, or best-effort context artifact is useful.
+
+**Requirements covered:** FR34.
+
+**Acceptance Criteria:**
+
+**Given** an initialized project with active context
+**When** the user runs a manual context export command such as `umem context export --manual --output manual-context.md`
+**Then** the system writes a Markdown file containing the project summary, universal preferences, active rules, source references, and generic operating instructions
+**And** the content passes through the same secret-safety constraints as context retrieval
+
+**Given** a portable export is generated
+**When** the user, orchestrating agent, or target agent opens the file
+**Then** it clearly states that generating or consuming the export does not assign or change support tier and that its context may become stale
+**And** instructs the executing agent to report durable facts or decisions after the session
+**And** states that facts may be recorded directly only by an agent with UMEM write access; otherwise the user or orchestrating agent must review and save safe durable facts through an available UMEM channel
+
+**Given** `--format json` is requested
+**When** the export command runs
+**Then** stdout contains pure JSON with `output_path`, `token_estimate`, `source_fact_ids`, `truncated`, and `warnings`
+**And** no Rich markup or ANSI splash is emitted
+
 ## Epic 5: Runtimes, Hosts, and Instruction Synchronization
 
-The user can select and configure multiple supported runtimes (Claude Code, OpenCode, Codex, Cursor, Antigravity) using a declarative model registry, manage instruction targets (shared `AGENTS.md`, delta `CLAUDE.md`), and update local schemas/benchmarks in a secure and transparent manner.
+The user can configure release-selected Tier 1 Native Hosts, broadly distribute Tier 2 Directed CLI instructions, and understand the limits of Tier 3 Unmanaged MCP through a capability-aware registry and onboarding flow.
 
 ### Story 5.1: Model Runtimes and Targets Registry
+
+> Historical completed scope. The capability-aware tier migration is tracked in Story 5.8.
 
 As a maintainer configuring agent integrations,
 I want a declarative model of the runtimes and targets registry (instruction and native skill targets),
@@ -833,7 +886,7 @@ So that each runtime has well-defined paths, capabilities, and support tiers.
 **Given** a declarative registry of runtimes
 **When** the adapters and Pydantic models are defined in the domain
 **Then** each runtime explicitly declares: `runtime_id`, display name, support tier (Tier 1 or 2), default paths (global and project), instruction targets, and native skill targets
-**And** the registry includes support for Claude Code, OpenCode, and Codex/OpenAI as Tier 1, and Cursor and Antigravity as Tier 2
+**And** the registry includes support for Claude Code, OpenCode, and Codex/OpenAI as Tier 1, and Cursor and Antigravity as Tier 2 under this story's original model
 
 **Given** the shared `agents_md` target
 **When** multiple runtimes support and consume `AGENTS.md`
@@ -896,6 +949,8 @@ So that Claude receives necessary instructions without diverging from the shared
 
 ### Story 5.4: Validate Context Reading by Host
 
+> Historical completed scope. Tier-specific validation changes are tracked in Story 5.9.
+
 As a user integrating a new agent,
 I want to verify that the host can read memory context,
 So that I know the operational identity has been correctly ported.
@@ -946,6 +1001,8 @@ So that different agents operate with consistent guidelines.
 
 ### Story 5.6: Multi-Runtime Selection CLI Onboarding
 
+> Historical completed scope. Revised tier grouping and portable onboarding are tracked in Story 5.9.
+
 As a user installing `universal-memory`,
 I want to select multiple runtimes simultaneously in an interactive or automatic manner,
 So that the initial setup configures all agents in my workspace in a cohesive and clean way.
@@ -991,6 +1048,117 @@ So that I do not lose my usage history, facts, or customized rules.
 **Given** new datasets or updates in local test definitions
 **When** the benchmark update is executed
 **Then** the new local benchmark datasets under `.umem/benchmarks/` are updated
+
+### Story 5.8: Evolve The Runtime Registry To Capability-Aware Support Tiers
+
+As a maintainer governing agent support,
+I want support tier and integration channels modeled independently,
+So that native investment remains selective while portable compatibility can scale broadly.
+
+**Requirements covered:** FR7, FR8, FR15.
+
+**Acceptance Criteria:**
+
+**Given** the completed legacy runtime registry
+**When** the support model is migrated
+**Then** supported tier values become `tier_1_native_managed`, `tier_2_directed_cli`, and `tier_3_unmanaged_mcp`
+**And** each profile declares `managed_by_umem`, `instruction_channels`, `cli_access`, skill support and installer, `mcp_mode`, validation level, limitations, and Tier 1 selection evidence when applicable
+
+**Given** a Tier 1 entry
+**When** the release support matrix is validated
+**Then** the host has a working maintained adapter and dated rationale covering market relevance, demand, internal use, strategic value, validation feasibility, and maintenance capacity
+**And** no fixed host quota or external compatibility catalog creates automatic Tier 1 membership
+
+**Given** a Tier 2 compatible agent
+**When** it uses the portable contract
+**Then** a generic directed-CLI profile can represent it without a host-specific adapter
+**And** optional named metadata may generate detection, documentation, or installation guidance without implying native support
+
+**Given** a manually configured MCP host without a programmed UMEM workflow
+**When** it is represented
+**Then** it is classified as Tier 3 Unmanaged MCP
+**And** only MCP capability availability is promised
+
+### Story 5.9: Onboard And Validate Directed CLI And Unmanaged MCP Paths
+
+As a user connecting different agents to UMEM,
+I want UMEM to find and connect the right agents with almost no configuration,
+So that I can start working normally without understanding tiers or integration mechanics.
+
+**Requirements covered:** FR7, FR8, FR36.
+
+**Acceptance Criteria:**
+
+**Given** relevant agents can be detected in the workspace
+**When** the user runs `umem init` without runtime flags
+**Then** UMEM shows the detected agent names and recommends a safe project-scoped connection plan
+**And** does not require tier, target-path, MCP, `npx`, or copy/symlink choices
+**And** requests at most one combined confirmation when the plan is safe and unambiguous
+
+**Given** the recommended plan is confirmed
+**When** setup executes
+**Then** Tier 1 agents use their protected native path and Tier 2 agents use `AGENTS.md`, the official Agent Skill, or both as resolved internally
+**And** user-facing progress describes connection outcomes rather than tier mechanics
+
+**Given** a Tier 2 setup
+**When** readiness is checked
+**Then** UMEM verifies `AGENTS.md` or official Agent Skill instructions, executable CLI access, and at least one successful `umem context` read
+**And** explains that the portable contract does not guarantee every host-specific surface
+
+**Given** a Tier 3 setup
+**When** readiness is checked
+**Then** UMEM verifies MCP server/tool availability only
+**And** warns that instruction loading, tool invocation, context use, and durable-memory behavior are unmanaged
+
+**Given** all selected agents finish setup
+**When** readiness is rendered
+**Then** only validated connections are marked ready
+**And** the message ends with guidance equivalent to `You're ready. Work with your agents normally.`
+
+**Given** no agent is detected
+**When** initialization runs
+**Then** project memory initialization still succeeds
+**And** the user is offered manual agent selection or `umem connect` as a later action
+
+**Given** non-interactive JSON output
+**When** onboarding completes
+**Then** it reports `support_tiers`, `instruction_channels`, `directed_cli_agents`, `unmanaged_mcp_hosts`, `validation_results`, `external_actions`, and `manual_steps_pending`
+**And** contains no prompts, ANSI, or human prose
+
+### Story 5.10: Connect Additional Agents After Initialization
+
+As a user who installs or adopts another agent,
+I want to connect it to the existing UMEM project with one simple command,
+So that I do not need to reinitialize memory or understand integration internals.
+
+**Requirements covered:** FR37.
+
+**Acceptance Criteria:**
+
+**Given** an initialized project and a newly available agent
+**When** the user runs `umem connect`
+**Then** UMEM detects agents not yet connected and reuses existing valid connections without rewriting them
+**And** recommends a project-scoped connection plan using the same resolver as `umem init`
+
+**Given** the plan is safe and unambiguous
+**When** it is presented
+**Then** the user sees agent names and expected outcomes with one combined confirmation
+**And** tier, paths, external commands, and installation mechanics remain progressively disclosed
+
+**Given** no new agent is detected
+**When** `umem connect` runs interactively
+**Then** UMEM offers manual agent selection or returns a clear no-change result
+**And** does not recreate or reset `.umem/`
+
+**Given** a connection attempt completes
+**When** results are rendered
+**Then** each agent is reported as connected and validated, skipped, or action required
+**And** unresolved environment problems point to `umem doctor`
+
+**Given** `--format json` is requested
+**When** `umem connect` runs
+**Then** the output contains detected agents, existing connections, recommended connections, tiers, channels, validations, external actions, pending steps, and audit references
+**And** contains no prompts, ANSI, or human prose
 
 ## Epic 6: Latent Skills and Skill Management
 
@@ -1068,8 +1236,13 @@ So that the capability is immediately usable by compatible agents.
 
 **Given** runtimes selected and active in the configuration (e.g., `claude_code`, `opencode`)
 **When** the canonical skill is generated or updated
-**Then** the system installs or creates symbolic links to the skill in the corresponding native directories (e.g., `.claude/skills/`, `.opencode/skills/`, `.cursor/rules/`)
+**Then** the system installs or creates symbolic links to the skill only for runtimes whose adapter declares native skill support or equivalent first-class rule support
 **And** each native installation records timestamp, target runtime, relative path, and audit reference
+
+**Given** no selected runtime supports native skills
+**When** the canonical skill is generated
+**Then** the skill remains valid under `.umem/skills/`
+**And** the user-facing output explains that the user may manually copy or adapt it for unsupported hosts
 
 **Given** a synchronization or write to a native target file that has been manually edited by the user (diverging from the canonical version)
 **When** the `umem update --skills` command or automatic synchronization runs
@@ -1155,3 +1328,54 @@ So that automations and hosts can use the same flow without duplicate logic.
 **Then** they validate semantic equivalence of responses
 **And** fail if a public skill capability exists in only one interface without justification
 **And** validate the confirmation, error, and output contracts defined in `_bmad-output/planning-artifacts/devex-interaction-spec.md`
+
+### Story 6.13: Package And Distribute The Official UMEM Agent Skill
+
+As a user working across different coding agents,
+I want an official portable UMEM Agent Skill and low-effort installation guidance,
+So that compatible agents can follow the same safe directed-CLI workflow without requiring a native UMEM adapter.
+
+**Requirements covered:** FR35, FR38.
+
+**Acceptance Criteria:**
+
+**Given** the official UMEM Agent Skill source
+**When** it is validated
+**Then** it follows the open Agent Skills structure with a concise `SKILL.md` and relative links to optional `references/`, `scripts/`, or `assets/`
+**And** instructs the agent to use `umem status`, `umem context`, safe durable-memory writes, confirmation rules, and final reporting consistently with Tier 2
+**And** complements a compact `AGENTS.md` bootstrap without duplicating its full content
+**And** allows normal user prompts to activate the UMEM workflow without requiring an explicit "use UMEM" request
+
+**Given** an Agent Skills-compatible target with Node.js and `npx` available
+**When** the user requests installation assistance
+**Then** UMEM generates an appropriate project-scoped `npx skills` command for the selected agent
+**And** does not treat the external catalog entry as evidence of Tier 1 native support
+
+**Given** UMEM can invoke the external installer
+**When** execution is proposed
+**Then** the primary connection prompt names the agent and intended outcome without requiring `npx` knowledge
+**And** it discloses external installer and network use before confirmation
+**And** details/logs contain the exact command, agent, project scope, deterministic copy behavior, disabled anonymous `skills` telemetry, and external-mutation boundary
+**And** execution is covered by the same combined confirmation as the safe project connection plan
+**And** UMEM does not claim snapshot, audit, or rollback coverage for writes it cannot inspect and protect
+
+**Given** the selected agent exists in the reviewed catalog pinned to the exact `skills` package version
+**When** the user confirms a fresh project installation
+**Then** UMEM preflights the pinned project target, invokes one `npx skills add`, invokes no discovery installation or `skills ls`, and validates the complete official tree afterward
+**And** an unknown agent ID does not execute `npx`
+
+**Given** project initialization needs the official UMEM workflow
+**When** the seed is materialized
+**Then** it uses the same complete `skills/universal-memory/` source distributed publicly and through package resources
+**And** an existing `use-universal-memory` tree is preserved as a legacy alias without creating a duplicate
+**And** the Windsurf adapter remains frozen without new host-specific behavior
+
+**Given** Node.js, `npx`, network access, or the selected external agent mapping is unavailable
+**When** Tier 2 setup continues
+**Then** UMEM offers `AGENTS.md`, manual skill copy, or an UMEM-native installation path
+**And** core initialization remains functional without Node.js
+**And** no fallback is marked ready until its instruction and CLI context-read checks pass
+
+**Given** any installation path completes
+**When** Tier 2 readiness is checked
+**Then** the system validates instruction presence, executable UMEM CLI access, and at least one successful context read before reporting success

@@ -26,8 +26,8 @@ so that each runtime has well-defined paths, capabilities, support tiers, instru
 
    **Given** the updated multi-runtime requirements,
    **When** the registry is loaded,
-   **Then** it includes Claude Code, OpenCode, and Codex/OpenAI-class as Tier 1,
-   **And** includes Cursor and Antigravity as Tier 2,
+   **Then** it includes Claude Code, OpenCode, and Codex/OpenAI-class as Tier 1 under the story's original model,
+   **And** includes Cursor and Antigravity as Tier 2 under the story's original model,
    **And** maintains stable English/snake_case IDs for config, CLI JSON, and MCP.
 
 3. **Shared targets ownership**
@@ -83,7 +83,8 @@ so that each runtime has well-defined paths, capabilities, support tiers, instru
 ### Completion Notes
 
 - Created domain model `runtime.py` with `RuntimeId`, `RuntimeSupportTier`, `RuntimeTarget`, `NativeSkillTarget`, `RuntimeInstructionTarget`, `RuntimeAdapter`, `RuntimeRegistry`, and `default_runtime_registry()`.
-- Declarative registry includes `claude_code`, `opencode`, `codex`, `cursor`, and `antigravity`; Claude Code/OpenCode/Codex as Tier 1; Cursor/Antigravity as Tier 2.
+- Declarative registry includes `claude_code`, `opencode`, `codex`, `cursor`, and `antigravity`; Claude Code/OpenCode/Codex as Tier 1 and Cursor/Antigravity as Tier 2 under the story's original model.
+- The 2026-07-31 agent-support evolution does not retroactively claim unimplemented registry entries. A follow-up story must migrate this completed model to Tier 1 Native/Managed, Tier 2 Directed CLI, and Tier 3 Unmanaged MCP with independent channel capabilities.
 - Ownership of `AGENTS.md`: `codex` is the only `single_writer` writer; `opencode` references `AGENTS.md` as a read-only consumer in the runtime model.
 - Migration decision: `[runtimes] enabled = [...]` is the new canonical key; `[hosts] enabled = [...]` remains only as a legacy entry. `load_config()` maps `[hosts]` to `[runtimes]` when the new key does not exist, `setup_project()` writes `[runtimes]`, `sync_instructions` reads/writes `[runtimes]`, and `update --migrate` materializes `[runtimes]` while preserving the legacy `[hosts]`.
 - Maintained operational compatibility of the CLI/existing use cases that still expose `host_id`/`--hosts` names, treating these values as stable runtime IDs until a subsequent public renaming.
