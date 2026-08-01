@@ -22,7 +22,8 @@ hide:
     </div>
     <div class="umem-terminal" aria-label="Universal Memory CLI example">
       <div class="umem-terminal__bar"><span></span><span></span><span></span></div>
-      <pre><code>$ umem init --runtime codex --runtime claude_code
+      <pre><code>$ uv tool install universal-memory
+$ umem init
 $ umem remember "Prefer typed Python and clean architecture." --scope project
 $ umem context --scope project --format json
 

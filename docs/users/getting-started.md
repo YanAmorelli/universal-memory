@@ -29,14 +29,46 @@ Run initialization from the project directory where agents should read project
 memory:
 
 ```bash
-umem init --runtime codex --runtime claude_code
+umem init
 ```
 
-Initialization creates the local `.umem/` layout and prepares selected host
-instruction targets.
+Initialization creates the local `.umem/` layout, detects agents available in or for
+the project, presents one combined confirmation, configures the best available
+project integration, and verifies a real project-context read.
 
-`--hosts` is still accepted as a legacy alias, but new examples should use
-`--runtime`.
+You do not need to select runtimes or understand the integration mechanism for
+the normal path. If a compatible agent needs the portable Agent Skill, UMEM
+discloses network use and the external project-scoped copy before confirmation,
+disables anonymous installer telemetry, and falls back gracefully when an
+optional prerequisite is unavailable.
+
+For a portable Tier 2 agent, UMEM resolves the project skill directory from a
+catalog pinned to the installed `skills` CLI version, checks that destination,
+runs one project-scoped `npx skills add`, and validates every file in the complete
+skill tree. It does not install into a second project and copy the result back.
+The temporary directory is used only to isolate the external process home and npm
+cache. Unknown agent IDs do not execute `npx`; they receive a managed or manual
+fallback.
+
+### Existing Legacy Projects
+
+If a project already contains only `.umem/skills/use-universal-memory/`, UMEM
+preserves that tree and keeps host instructions pointed to it. It does not create
+a second canonical tree or overwrite customizations. If both the legacy and
+`.umem/skills/universal-memory/` roots exist, initialization, skill updates, and
+host setup stop with an explicit conflict. Review both trees and choose an
+explicit migration before continuing; UMEM will not delete or merge either one
+automatically. An incomplete legacy root without `SKILL.md` is also reported for
+review instead of being treated as a valid installation.
+
+Connect another agent later with:
+
+```bash
+umem connect
+```
+
+Explicit `--runtime` selection remains available for automation and unusual
+setups. `--hosts` is still accepted as a legacy alias.
 
 ## Hand It To Your Agent
 

@@ -32,7 +32,7 @@ documentation decision explicitly creates an implementation archive.
 The Universal Memory operating skill references are:
 
 ```text
-.umem/skills/use-universal-memory/references/
+.umem/skills/universal-memory/references/
 ```
 
 Those files contain the agent-facing procedures for startup/context, memory facts, host

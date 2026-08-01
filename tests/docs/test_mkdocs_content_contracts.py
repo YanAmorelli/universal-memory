@@ -25,19 +25,23 @@ def test_public_docs_keep_python_312_as_runtime_floor() -> None:
     assert not re.search(r"Python 3\.11 (?:or newer|or later|\+|supported)", docs)
 
 
-def test_docs_use_runtime_based_init_examples() -> None:
-    docs = "\n".join(
+def test_user_docs_use_zero_flag_init_and_contributor_docs_keep_automation() -> None:
+    user_docs = "\n".join(
         read(path)
         for path in (
             "docs/index.md",
             "docs/users/getting-started.md",
-            "docs/contributors/alpha-validation.md",
         )
     )
+    contributor_docs = read("docs/contributors/alpha-validation.md")
 
-    assert "umem init --runtime codex --runtime claude_code" in docs
-    assert "umem init --yes --runtime codex --runtime claude_code --format json" in docs
-    assert "umem init --hosts" not in docs
+    assert "umem init" in user_docs
+    assert "umem init --runtime" not in user_docs
+    assert "umem connect" in user_docs
+    assert "umem init --yes --runtime codex --runtime claude_code --format json" in (
+        contributor_docs
+    )
+    assert "umem init --hosts" not in f"{user_docs}\n{contributor_docs}"
 
 
 def test_contributor_nav_uses_durable_release_and_alpha_names() -> None:
@@ -145,7 +149,7 @@ def test_skill_lifecycle_docs_cover_summary_and_gitignore_warnings() -> None:
 
 
 def test_agent_lifecycle_guidance_covers_purpose_safety_and_alternatives() -> None:
-    docs = read(".umem/skills/use-universal-memory/references/skills-lifecycle.md")
+    docs = read("skills/universal-memory/references/skills-lifecycle.md")
 
     for term in (
         "Draft a skill when content may need validation before publish",
@@ -166,7 +170,7 @@ def test_skill_lifecycle_docs_mention_new_mcp_tool_names() -> None:
         read(path)
         for path in (
             "docs/reference/skill-lifecycle.md",
-            ".umem/skills/use-universal-memory/references/skills-lifecycle.md",
+            "skills/universal-memory/references/skills-lifecycle.md",
         )
     )
 
