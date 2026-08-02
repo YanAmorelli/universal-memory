@@ -192,6 +192,8 @@ gpt-5.5
 - Added regression coverage against proprietary Agent Skills fields and against every real CLI command/option taught by the portable workflow.
 - Advanced the prerelease feature line to `0.5.0rc1` so the exact remote installer can be
   exercised against `v0.5.0rc1` before promotion to the final `v0.5.0` tag.
+- Promoted the validated prerelease to final `0.5.0` metadata and the matching
+  `v0.5.0` official skill source after the RC release and installation checks passed.
 - Added an injectable immutable source ref for development while keeping the published plan tied to the installed version's release tag.
 - Added a release provenance gate that proves tag/version/commit identity and byte-for-byte parity across public source, packaged resources, and built wheel contents.
 - Hardened the PyPI workflow so only the validation job checks out the explicit release tag and `workflow_dispatch` can validate an existing tag but cannot publish it.

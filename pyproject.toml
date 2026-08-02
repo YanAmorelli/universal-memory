@@ -1,6 +1,6 @@
 [project]
 name = "universal-memory"
-version = "0.5.0rc1"
+version = "0.5.0"
 description = "Vendor-agnostic cognitive persistence layer for AI agents."
 readme = "README.md"
 license = { text = "Apache-2.0" }

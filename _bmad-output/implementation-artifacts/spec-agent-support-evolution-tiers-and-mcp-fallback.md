@@ -200,7 +200,7 @@ Initial integration rules:
 The intended project-scoped external command is equivalent to:
 
 ```bash
-DISABLE_TELEMETRY=1 npx --yes skills@1.5.20 add https://github.com/YanAmorelli/universal-memory/tree/v0.5.0rc1/skills/universal-memory --skill universal-memory --agent <agent> --copy -y
+DISABLE_TELEMETRY=1 npx --yes skills@1.5.20 add https://github.com/YanAmorelli/universal-memory/tree/v0.5.0/skills/universal-memory --skill universal-memory --agent <agent> --copy -y
 ```
 
 The exact command may evolve with the external CLI, but the product contract remains: UMEM selects the official skill and detected agent, project scope is the default, anonymous installer telemetry is disabled, the user confirms once, and readiness is validated afterward.
