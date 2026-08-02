@@ -37,7 +37,7 @@ dependencies = [
     "pydantic>=2.13.4,<3",
     "rich>=15.0.0",
     "tomli-w>=1.2.0",
-    "typer>=0.25.1",
+    "typer>=0.25.1,<0.27",
 ]
 
 [project.urls]
