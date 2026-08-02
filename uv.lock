@@ -1583,7 +1583,7 @@ wheels = [
 
 [[package]]
 name = "universal-memory"
-version = "0.5.0rc1"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },

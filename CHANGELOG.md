@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2026-08-01
 
 ### Added
 
