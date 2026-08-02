@@ -42,7 +42,7 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
 
@@ -77,7 +77,7 @@ jobs:
           --github-output "$GITHUB_OUTPUT"
 
       - name: Upload the validated release wheel
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: universal-memory-wheel-${{ steps.validate-release.outputs.checkout_commit }}
           path: dist/*.whl
@@ -95,7 +95,7 @@ jobs:
       id-token: write  # Required for OIDC authentication via Trusted Publishers
     steps:
       - name: Download the validated release wheel
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: universal-memory-wheel-${{ needs.checks.outputs.checkout_commit }}
           path: dist

@@ -198,12 +198,12 @@ def test_publish_workflow_builds_validates_and_publishes_one_identical_wheel() -
     assert "github.event_name == 'release'" in workflow
     assert workflow.count("uv build") == 1
     assert "uv build --wheel --out-dir dist --clear --no-create-gitignore" in workflow
-    assert "uses: actions/upload-artifact@v4" in workflow
+    assert "uses: actions/upload-artifact@v7" in workflow
     assert "path: dist/*.whl" in workflow
     assert "if-no-files-found: error" in workflow
     assert "wheel_sha256:" in workflow
     assert "checkout_commit:" in workflow
-    assert "uses: actions/download-artifact@v4" in publish_job
+    assert "uses: actions/download-artifact@v8" in publish_job
     assert "EXPECTED_WHEEL_SHA256" in publish_job
     assert "sha256sum --check --strict" in publish_job
     assert 'uv publish "dist/$WHEEL_NAME"' in publish_job
