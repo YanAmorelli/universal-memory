@@ -1,9 +1,9 @@
 # generated: 2026-06-01T23:27:13Z
-# last_updated: 2026-06-02T01:34:48Z
+# last_updated: 2026-07-31T19:35:21-03:00
 # project: universal-memory
 # project_key: NOKEY
 # tracking_system: file-system
-# story_location: /Users/amorelliaoyan/projects/personal/lab/universal-memory/_bmad-output/implementation-artifacts
+# story_location: _bmad-output/implementation-artifacts
 
 # STATUS DEFINITIONS:
 # ==================
@@ -35,11 +35,11 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-01T23:27:13Z"
-last_updated: "2026-06-13T12:07:43-03:00"
+last_updated: "2026-07-31T19:35:21-03:00"
 project: universal-memory
 project_key: NOKEY
 tracking_system: file-system
-story_location: /Users/amorelliaoyan/projects/personal/lab/universal-memory/_bmad-output/implementation-artifacts
+story_location: _bmad-output/implementation-artifacts
 
 development_status:
   epic-1: in-progress
@@ -75,6 +75,7 @@ development_status:
   4-4-map-domain-errors-to-cli-and-json-rpc: done
   4-5-validate-mcp-compliance-and-interface-contracts: done
   4-6-safely-display-terminal-visual-identity: done
+  4-7-export-portable-context-for-agent-handoff-and-fallback: backlog
   epic-4-retrospective: optional
 
   epic-5: in-progress
@@ -85,6 +86,9 @@ development_status:
   5-5-synchronize-consolidated-rules-to-instructions: done
   5-6-cli-multi-runtime-selection-onboarding: done
   5-7-library-updates-schema-migration-and-benchmarks: done
+  5-8-evolve-runtime-registry-to-capability-aware-support-tiers: done
+  5-9-onboard-and-validate-directed-cli-and-unmanaged-mcp-paths: done
+  5-10-connect-additional-agents-after-initialization: done
   epic-5-retrospective: optional
 
   epic-6: in-progress
@@ -100,5 +104,6 @@ development_status:
   6-10-agent-skills-promote-approved-candidates: done
   6-11-agent-skills-sync-canonical-to-native-targets: done
   6-12-agent-skills-import-existing-native-skills: done
+  6-13-package-and-distribute-official-umem-agent-skill: done
   spec-publish-to-pypi: done
   epic-6-retrospective: optional

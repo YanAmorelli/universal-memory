@@ -117,8 +117,14 @@ Domain error mapping:
 
 Human output:
 - Indicates whether `.umem/` was created or already existed.
-- Lists created or reused relative paths.
-- Shows next command suggestion.
+- Keeps created or reused relative paths in details/verbose output rather than the golden-path summary.
+- Detects relevant workspace agents and shows their names plus the recommended connection outcome without displaying tiers by default.
+- Uses a single combined confirmation such as `Connect Universal Memory to both? [Y/n]` for safe, unambiguous project-scoped actions.
+- Does not require runtime flags, target paths, MCP modes, `npx`, or copy/symlink choices in the golden path.
+- When the plan uses optional `npx skills`, states before confirmation that an open external installer and network access will be used and that anonymous `skills` telemetry is disabled; exact command, scope, method, and mutation ownership remain available through details and logs.
+- Reports each agent as connected and validated, skipped, or action required; it never marks an unvalidated fallback as ready.
+- Ends successful onboarding with concise guidance equivalent to `You're ready. Work with your agents normally.`
+- Shows a next command only when action is required; healthy success ends with natural-work guidance.
 
 JSON `data` keys:
 - `project_path`
@@ -128,7 +134,52 @@ JSON `data` keys:
 - `snapshots_path`
 - `created`
 - `already_initialized`
+- `detected_agents`
+- `recommended_connections`
+- `support_tiers`
+- `instruction_channels`
+- `directed_cli_agents`
+- `unmanaged_mcp_hosts`
+- `validation_results`
+- `connection_results`
+- `external_actions`
+- `manual_steps_pending`
 - `audit_reference`
+
+### `umem connect`
+
+Human output:
+- Detects agents not yet connected and reuses valid existing connections without rewriting them.
+- If one or more agents are found, shows their names and recommends a project-scoped connection plan without tier terminology.
+- If none are found, offers manual agent selection or a clear no-change result without recreating project memory.
+- Uses the same combined confirmation, external-installer disclosure, graceful fallback, validation, and readiness language as `umem init`.
+- Directs unresolved environment failures to `umem doctor`.
+
+JSON `data` keys:
+- `detected_agents`
+- `existing_connections`
+- `recommended_connections`
+- `support_tiers`
+- `instruction_channels`
+- `validation_results`
+- `connection_results`
+- `external_actions`
+- `manual_steps_pending`
+- `audit_references`
+
+### `umem context export --manual`
+
+Human output:
+- Writes or previews a safe portable context package for agent handoff, offline/debug workflows, and best-effort usage outside the support matrix.
+- States that generating or consuming the export does not assign or change support tier and that the content may become stale.
+- Includes next-step guidance for the target agent to report durable facts and for the user or orchestrating agent to save them only through an available UMEM channel when the target host lacks write access.
+
+JSON `data` keys:
+- `output_path`
+- `token_estimate`
+- `source_fact_ids`
+- `truncated`
+- `warnings`
 
 ### `umem status`
 

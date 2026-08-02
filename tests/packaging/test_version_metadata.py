@@ -4,7 +4,7 @@ import re
 import tomllib
 from pathlib import Path
 
-EXPECTED_VERSION = "0.4.0"
+EXPECTED_VERSION = "0.5.0"
 
 
 def test_package_version_metadata_is_consistent() -> None:

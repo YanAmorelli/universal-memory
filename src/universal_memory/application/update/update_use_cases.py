@@ -19,6 +19,9 @@ from universal_memory.application.onboarding.setup_project import (
     DEFAULT_UMEM_SKILL_NAME,
     DEFAULT_UMEM_SKILL_REFERENCES,
     DEFAULT_UMEM_SKILL_RELATIVE_PATH,
+    LEGACY_DEFAULT_UMEM_SKILL_NAME,
+    LEGACY_DEFAULT_UMEM_SKILL_RELATIVE_PATH,
+    LEGACY_DEFAULT_UMEM_SKILL_ROOT,
 )
 from universal_memory.application.security import (
     PreparedSafeWrite,
@@ -390,6 +393,36 @@ class UpdateManagedSkillsUseCase:
         if not self._default_umem_skill_is_registered(root):
             return []
 
+        legacy_skill = root / LEGACY_DEFAULT_UMEM_SKILL_RELATIVE_PATH
+        canonical_skill = root / DEFAULT_UMEM_SKILL_RELATIVE_PATH
+        if legacy_skill.exists() and canonical_skill.exists():
+            raise ValidationFailedError(
+                "Both legacy and canonical Universal Memory skill roots exist. Preserve "
+                "both trees and choose an explicit migration before updating skills."
+            )
+        if legacy_skill.is_file() and not canonical_skill.exists():
+            preserved = [
+                path.relative_to(root).as_posix()
+                for path in sorted((root / LEGACY_DEFAULT_UMEM_SKILL_ROOT).rglob("*"))
+                if path.is_file()
+            ]
+            return [
+                UpdateManagedSkillTemplateResult(
+                    name=LEGACY_DEFAULT_UMEM_SKILL_NAME,
+                    status="preserved",
+                    skill_file=LEGACY_DEFAULT_UMEM_SKILL_RELATIVE_PATH,
+                    updated_paths=[],
+                    preserved_paths=preserved,
+                    audit_reference="",
+                    snapshot_reference="",
+                    warnings=[
+                        "Preserved the legacy use-universal-memory skill without creating "
+                        "a duplicate canonical tree. Review an explicit migration to "
+                        "universal-memory."
+                    ],
+                )
+            ]
+
         templates = {
             DEFAULT_UMEM_SKILL_RELATIVE_PATH: DEFAULT_UMEM_SKILL_MARKDOWN,
             **DEFAULT_UMEM_SKILL_REFERENCES,
@@ -467,12 +500,16 @@ class UpdateManagedSkillsUseCase:
             if (
                 payload.get("id") == DEFAULT_UMEM_SKILL_ID
                 or payload.get("name") == DEFAULT_UMEM_SKILL_NAME
+                or payload.get("name") == LEGACY_DEFAULT_UMEM_SKILL_NAME
             ):
                 return True
         return False
 
     def _default_umem_skill_has_managed_paths(self, project_root: Path) -> bool:
         skill_file = project_root / DEFAULT_UMEM_SKILL_RELATIVE_PATH
+        legacy_skill_file = project_root / LEGACY_DEFAULT_UMEM_SKILL_RELATIVE_PATH
+        if legacy_skill_file.is_file():
+            return True
         if not skill_file.is_file():
             return False
         expected_paths = [

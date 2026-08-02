@@ -756,6 +756,7 @@ class ConfigureHostUseCase:
         return path.read_text(encoding="utf-8")
 
     def _render_managed_block(self, partition: InstructionPartition) -> str:
+        operational_skill = self._operational_skill_path()
         lines = [
             UMEM_START,
             "# Universal Memory Active Policy",
@@ -769,7 +770,7 @@ class ConfigureHostUseCase:
             "bootstrap on every interaction; instead, query, add, or remove facts and skills "
             "only when necessary.",
             "> Use the equivalent MCP/FastMCP tools when they are available.",
-            "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a relevant "
+            f"> Read and follow `{operational_skill}`. If a relevant "
             "active skill exists, inspect it with "
             "`umem skills detail <skill-id-or-name> --format json` before acting.",
             "> For repeated durable workflows, consider latent skill tracking via the UMEM guide; "
@@ -833,6 +834,7 @@ class ConfigureHostUseCase:
         *,
         shared_manifest_available: bool,
     ) -> str:
+        operational_skill = self._operational_skill_path()
         if shared_manifest_available:
             title = "# Claude Delta Instructions"
             scope_line = (
@@ -847,7 +849,7 @@ class ConfigureHostUseCase:
                 "Do not repeat this full bootstrap on every interaction."
             )
             policy_line = (
-                "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a "
+                f"> Read and follow `{operational_skill}`. If a "
                 "relevant active skill exists, inspect it with "
                 "`umem skills detail <skill-id-or-name> --format json` before acting."
             )
@@ -888,10 +890,11 @@ class ConfigureHostUseCase:
                 "facts and skills only when necessary."
             )
             policy_line = (
-                "> Read and follow `.umem/skills/use-universal-memory/SKILL.md`. If a "
+                f"> Read and follow `{operational_skill}`. If a "
                 "relevant active skill exists, inspect it with "
                 "`umem skills detail <skill-id-or-name> --format json` before acting."
             )
+
             latent_skill_line = (
                 "> For repeated durable workflows, consider latent skill tracking via the UMEM guide; "
                 "do not track one-off work, raw evidence, secrets, or private data."
@@ -972,6 +975,20 @@ class ConfigureHostUseCase:
             lines.append(empty_line)
         lines.append(UMEM_END)
         return "\n".join(lines) + "\n"
+
+    def _operational_skill_path(self) -> str:
+        canonical = ".umem/skills/universal-memory/SKILL.md"
+        legacy = ".umem/skills/use-universal-memory/SKILL.md"
+        canonical_exists = (self.project_root / canonical).exists()
+        legacy_exists = (self.project_root / legacy).exists()
+        if canonical_exists and legacy_exists:
+            raise ValidationFailedError(
+                "Both legacy and canonical Universal Memory skill roots exist. Preserve "
+                "both trees and choose an explicit migration before configuring hosts."
+            )
+        if legacy_exists:
+            return legacy
+        return canonical
 
     def _target_manifest_blocks(
         self,

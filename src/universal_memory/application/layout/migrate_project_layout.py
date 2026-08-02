@@ -30,7 +30,7 @@ from universal_memory.infrastructure.config.project_layout import (
 )
 
 MigrationInclude = Literal["facts", "rules", "skills"]
-OPERATIONAL_SKILL_SLUGS = {"use-universal-memory"}
+OPERATIONAL_SKILL_SLUGS = {"universal-memory", "use-universal-memory"}
 
 
 @dataclass(frozen=True, slots=True)

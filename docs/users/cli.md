@@ -9,6 +9,7 @@ debug behavior.
 ```bash
 umem --help
 umem init
+umem connect
 umem init --layout shared --yes
 umem status
 umem layout status
@@ -71,6 +72,16 @@ umem host sync --apply --yes
 Host commands configure instruction targets such as `AGENTS.md`, `CLAUDE.md`,
 and supported native rule or skill directories.
 
+`umem init` and `umem connect` keep portable installation simple: after consent,
+UMEM uses the target pinned to the selected `skills` CLI version, executes one
+project-scoped add, and validates the complete installed `universal-memory` tree.
+Windsurf retains its legacy adapter, but receives no new host-specific behavior.
+
+Projects containing only `.umem/skills/use-universal-memory/` continue using that
+legacy root without automatic duplication or overwrite. If both legacy and
+canonical Universal Memory roots exist, `init`, `update --skills`, and host setup
+report a conflict and preserve both trees for an explicit migration decision.
+
 ## Skills
 
 Skill placement depends on project layout and visibility. In legacy projects,
@@ -86,7 +97,7 @@ umem skills detail <skill-id-or-name>
 umem skills create --name "Review Protocol" --description "Recurring review workflow" --visibility shared --category user-facing
 umem skills create --name "Local Bootstrap Helper" --description "Local agent bootstrap" --category operational
 umem skills import .agents/skills/review-protocol --scope project --visibility shared --category user-facing --sync
-umem skills share use-universal-memory --category operational --yes --format summary
+umem skills share universal-memory --category operational --yes --format summary
 umem skills sync review-protocol
 umem skills sync review-protocol --drift-decision overwrite
 umem skills track --name "Review Protocol" --description "Recurring review workflow"
@@ -104,7 +115,7 @@ Use `skills create` for a new canonical skill. Use `skills import <path> --sync`
 when a skill already exists under a native directory such as
 `.agents/skills/...`. Use `skills share <skill>` when an existing project skill
 should move from private or operational storage into `umem/skills`. Operational
-skills, including `use-universal-memory`, require explicit confirmation before
+skills, including `universal-memory`, require explicit confirmation before
 they can be shared.
 
 Use `skills sync <skill-id-or-name>` when validating or refreshing one skill; a

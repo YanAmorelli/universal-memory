@@ -48,14 +48,11 @@ def test_init_in_clean_directory_creates_layout_with_human_output(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert captured.err == ""
-    assert ".umem/" in captured.out
-    assert "Local memory created" in captured.out
+    assert "Universal Memory" in captured.out
+    assert "Project memory initialized" in captured.out
     assert "criada" not in captured.out
-    assert ".umem/config.toml" in captured.out
-    assert ".umem/memory" in captured.out
-    assert ".umem/audit/events.jsonl" in captured.out
-    assert ".umem/snapshots" in captured.out
-    assert "umem status" in captured.out
+    assert "tier_" not in captured.out
+    assert "npx" not in captured.out
     assert (tmp_path / ".umem" / "config.toml").is_file()
     assert (tmp_path / ".umem" / "memory").is_dir()
     config = tomllib.loads((tmp_path / ".umem" / "config.toml").read_text(encoding="utf-8"))
@@ -155,6 +152,8 @@ def test_skills_propose_accepts_english_decision_alias(
 def test_init_json_outputs_pure_parseable_payload_with_required_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".codex").mkdir()
     monkeypatch.chdir(tmp_path)
 
     exit_code = main(["init", "--format", "json"])
@@ -176,14 +175,17 @@ def test_init_json_outputs_pure_parseable_payload_with_required_keys(
     assert data["audit_path"] == ".umem/audit/events.jsonl"
     assert data["snapshots_path"] == ".umem/snapshots"
     assert data["already_initialized"] is False
-    assert payload["runtimes_selected"] == [
-        "claude_code",
-        "opencode",
-        "codex",
-        "cursor",
-        "antigravity",
-    ]
-    assert payload["runtimes_skipped"] == []
+    assert payload["runtimes_selected"] == [item["agent_id"] for item in data["detected_agents"]]
+    assert set(data) >= {
+        "detected_agents",
+        "recommended_connections",
+        "support_tiers",
+        "instruction_channels",
+        "validation_results",
+        "connection_results",
+        "external_actions",
+        "manual_steps_pending",
+    }
     assert payload["target_paths"] == {
         "claude_code": ["CLAUDE.md"],
         "codex": ["AGENTS.md"],
@@ -221,8 +223,8 @@ def test_init_shared_layout_json_outputs_shared_paths(
     assert (tmp_path / "umem" / "project.toml").is_file()
     assert (tmp_path / "umem" / "memory").is_dir()
     assert (tmp_path / "umem" / "skills").is_dir()
-    assert (tmp_path / ".umem" / "skills" / "use-universal-memory" / "SKILL.md").is_file()
-    assert not (tmp_path / "umem" / "skills" / "use-universal-memory").exists()
+    assert (tmp_path / ".umem" / "skills" / "universal-memory" / "SKILL.md").is_file()
+    assert not (tmp_path / "umem" / "skills" / "universal-memory").exists()
 
 
 def test_init_json_runtime_option_persists_selection_and_runs_selected_runtime_setup(
@@ -313,17 +315,19 @@ def test_init_json_accepts_repeated_runtime_flags_with_hyphen_alias(
     ).read_text(encoding="utf-8")
 
 
-def test_init_human_interactive_prompts_for_runtime_indices(
+def test_init_human_interactive_uses_one_combined_confirmation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     prompts: list[str] = []
 
-    def prompt(prompt_text: str) -> str:
+    def confirm(prompt_text: str, default: bool = False) -> bool:
         prompts.append(prompt_text)
-        return "1, 3"
+        assert default is True
+        return True
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("universal_memory.interfaces.cli.init_command._prompt", prompt)
+    (tmp_path / ".codex").mkdir()
+    monkeypatch.setattr("universal_memory.interfaces.cli.init_command._confirm", confirm)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
     exit_code = cli_main(
@@ -332,16 +336,11 @@ def test_init_human_interactive_prompts_for_runtime_indices(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert prompts == ["Which runtime(s) would you like to install for? [1 2 3 4 5]: "]
-    assert "Which runtime(s) would you like to install for?" in captured.out
-    assert "1. Claude Code (tier_1)" in captured.out
-    assert "2. OpenCode (tier_1)" in captured.out
-    assert "3. Codex/OpenAI-class (tier_1)" in captured.out
-    assert "4. Cursor (tier_2)" in captured.out
-    assert "5. Antigravity (tier_2)" in captured.out
-    assert '[runtimes]\nenabled = [\n    "claude_code",\n    "codex",\n]\n' in (
-        tmp_path / ".umem" / "config.toml"
-    ).read_text(encoding="utf-8")
+    assert len(prompts) == 1
+    assert "Connect" in prompts[0]
+    assert "Found in this workspace:" in captured.out
+    assert "Codex/OpenAI-class" in captured.out
+    assert "tier_" not in captured.out
 
 
 def test_init_rejects_invalid_runtime_with_english_message(
@@ -377,8 +376,7 @@ def test_init_human_uses_pt_br_overlay_when_configured(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "Memoria local ja inicializada." in captured.out
-    assert "Local memory already initialized." not in captured.out
+    assert "Project memory already initialized" in captured.out
 
 
 def test_init_human_interactive_renders_terminal_splash(
@@ -623,7 +621,7 @@ def test_init_json_data_contains_required_keys(
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert exit_code == 0
-    assert set(payload["data"]) == {
+    assert set(payload["data"]) >= {
         "project_path",
         "config_path",
         "memory_path",

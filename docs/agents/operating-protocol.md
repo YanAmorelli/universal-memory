@@ -52,7 +52,7 @@ private facts, audit logs, snapshots, locks, and operational skills stay under
 
 Ask before publishing context that could expose local operating details,
 private investigations, customer data, credentials, or an operational skill.
-Sharing an operational skill such as `use-universal-memory` requires explicit
+Sharing an operational skill such as `universal-memory` requires explicit
 approval through `umem skills share ... --category operational --yes` or MCP
 `share_skill(..., category="operational", confirm_operational=true)`.
 
@@ -87,8 +87,8 @@ unless the command payload identifies the target as a latent/generated skill.
 The operational skill reference location is:
 
 ```text
-.umem/skills/use-universal-memory/references/
+.umem/skills/universal-memory/references/
 ```
 
-Agents should rely on the installed `use-universal-memory` skill instructions when
+Agents should rely on the installed `universal-memory` skill instructions when
 available, then open the focused reference file for the current task.

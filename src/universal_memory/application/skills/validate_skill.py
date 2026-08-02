@@ -13,12 +13,16 @@ from universal_memory.domain.entities import LatentSkillScope
 from universal_memory.domain.ports import AgentSkillRepository
 
 SkillValidationStatus = Literal["pass", "warning", "fail"]
+SkillFrontmatterStandard = Literal["umem", "agent_skills"]
 
 _PLACEHOLDER_RE = re.compile(r"(TODO|TBD|FIXME|\\$ARGUMENTS|\\[.+?\\])", re.IGNORECASE)
 _MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 _ABSOLUTE_PATH_RE = re.compile(r"(?<![\w.-])/(?:[^/\s:]+/)+[^/\s:]+")
 _RISKY_COMMAND_RE = re.compile(
     r"\b(rm\s+-rf|sudo\s+|curl\b.*\|\s*(?:sh|bash)|wget\b.*\|\s*(?:sh|bash))"
+)
+_AGENT_SKILLS_FRONTMATTER_KEYS = frozenset(
+    {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 )
 
 
@@ -117,6 +121,7 @@ def validate_skill_tree(
     *,
     project_root: Path,
     subject: str | None = None,
+    frontmatter_standard: SkillFrontmatterStandard = "umem",
 ) -> SkillValidationReport:
     skill_file = _skill_file_from_path(skill_file)
     skill_dir = skill_file.parent
@@ -145,7 +150,7 @@ def validate_skill_tree(
                 affected[0],
             )
         )
-        if not parsed.triggers:
+        if not parsed.triggers and frontmatter_standard == "umem":
             warnings.append("Skill frontmatter has no triggers.")
             checks.append(
                 SkillValidationCheck(
@@ -155,10 +160,12 @@ def validate_skill_tree(
                     affected[0],
                 )
             )
-        else:
+        elif parsed.triggers:
             checks.append(
                 SkillValidationCheck("triggers", "pass", "Triggers are present.", affected[0])
             )
+        if frontmatter_standard == "agent_skills":
+            _check_agent_skills_frontmatter(markdown, affected[0], checks, blocking)
 
     _check_placeholders(markdown, affected[0], checks, blocking)
     _check_absolute_paths(markdown, affected[0], checks, warnings)
@@ -228,6 +235,34 @@ def _check_placeholders(
         checks.append(SkillValidationCheck("placeholders", "fail", message, path))
         return
     checks.append(SkillValidationCheck("placeholders", "pass", "No placeholders found.", path))
+
+
+def _check_agent_skills_frontmatter(
+    markdown: str,
+    path: str,
+    checks: list[SkillValidationCheck],
+    blocking: list[str],
+) -> None:
+    frontmatter = markdown.lstrip("\ufeff").replace("\r\n", "\n").split("---\n", 2)[1]
+    keys = {
+        line.split(":", 1)[0].strip()
+        for line in frontmatter.splitlines()
+        if line and not line[0].isspace() and ":" in line
+    }
+    unsupported = sorted(keys - _AGENT_SKILLS_FRONTMATTER_KEYS)
+    if unsupported:
+        message = "Agent Skills frontmatter contains unsupported fields: " + ", ".join(unsupported)
+        blocking.append(message)
+        checks.append(SkillValidationCheck("agent_skills_frontmatter", "fail", message, path))
+        return
+    checks.append(
+        SkillValidationCheck(
+            "agent_skills_frontmatter",
+            "pass",
+            "Frontmatter uses only open Agent Skills fields.",
+            path,
+        )
+    )
 
 
 def _check_absolute_paths(

@@ -17,7 +17,14 @@ from universal_memory.application.skills import (
     SyncSkillsUseCase,
 )
 from universal_memory.domain import ValidationFailedError
-from universal_memory.domain.entities import LatentSkillScope
+from universal_memory.domain.entities import (
+    LatentSkillScope,
+    RuntimeId,
+    RuntimeRegistry,
+    RuntimeSkillInstaller,
+    RuntimeSkillSupport,
+    default_runtime_registry,
+)
 from universal_memory.infrastructure.storage import LocalAgentSkillRepository
 
 
@@ -124,6 +131,34 @@ def test_sync_skills_codex_target_materializes_agents_native_target(tmp_path: Pa
     assert result.skills[0].targets[0]["status"] == "synced"
     assert stored.native_installations[0]["path"] == ".agents/skills/repair-skill"
     assert result.affected_paths == [".agents/skills/repair-skill/SKILL.md"]
+
+
+def test_sync_skills_gates_native_targets_by_declared_capability(tmp_path: Path) -> None:
+    safe_write, repository, _skill_id = _create_skill(tmp_path)
+    registry = default_runtime_registry()
+    opencode = registry.get(RuntimeId.opencode).model_copy(
+        update={
+            "skill_support": RuntimeSkillSupport.portable,
+            "skill_installer": RuntimeSkillInstaller.npx_skills,
+        }
+    )
+    unsafe_registry = RuntimeRegistry.model_construct(
+        runtimes=[
+            opencode if runtime.runtime_id == RuntimeId.opencode else runtime
+            for runtime in registry.runtimes
+        ],
+        support_profiles=registry.support_profiles,
+    )
+
+    result = SyncSkillsUseCase(
+        project_root=tmp_path,
+        repository=repository,
+        safe_write_use_case=safe_write,
+        runtime_registry=unsafe_registry,
+    ).execute(SyncSkillsCommand(origin="test", targets=["opencode"]))
+
+    assert not (tmp_path / ".opencode" / "skills" / "repair-skill").exists()
+    assert result.skills[0].targets == []
 
 
 def test_sync_one_skill_by_exact_name_only_syncs_selected_skill(tmp_path: Path) -> None:

@@ -37,6 +37,12 @@ from universal_memory.application.memory import (
     RememberFactCommand,
     RememberFactResult,
 )
+from universal_memory.application.onboarding import (
+    AgentConnectionExecution,
+    AgentConnectionPlan,
+    ExecuteAgentConnectionsUseCase,
+    default_agent_connection_planner,
+)
 from universal_memory.application.onboarding.setup_project import SetupProjectResult
 from universal_memory.application.security import (
     ListAuditLogCommand,
@@ -104,6 +110,7 @@ from universal_memory.domain.entities import (
     SnapshotStatus,
 )
 from universal_memory.domain.entities.base import format_utc_iso
+from universal_memory.domain.entities.runtime import default_runtime_registry
 from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.interfaces import errors as interface_errors
 from universal_memory.interfaces.errors import (
@@ -191,6 +198,7 @@ class MCPUseCases:
     context: ContextCommandHandler
     doctor: DoctorCommandHandler = _missing_use_case
     initialize_project: SetupProjectCommandHandler = _missing_use_case
+    execute_agent_connections: ExecuteAgentConnectionsUseCase | None = None
     remember: RememberCommandHandler = _missing_use_case
     list_facts: ListFactsCommandHandler = _missing_use_case
     purge_fact: PurgeFactCommandHandler = _missing_use_case
@@ -252,10 +260,27 @@ def configure_server(  # noqa: PLR0915
         """Initialize the local Universal Memory project layout."""
         try:
             result = _execute_initialize_project(use_cases.initialize_project, root, layout=layout)
+            payload = _init_payload(result, root)
+            plan = default_agent_connection_planner(default_runtime_registry()).plan(root)
+            executor = use_cases.execute_agent_connections or ExecuteAgentConnectionsUseCase(
+                host_setup_command=use_cases.host_setup,
+                host_check_command=use_cases.host_check,
+                context_read_command=use_cases.context,
+                known_runtime_ids=frozenset(
+                    runtime_id.value for runtime_id in default_runtime_registry().runtime_ids
+                ),
+            )
+            execution = executor.execute(
+                plan,
+                accepted=True,
+                origin="mcp_init",
+                persist_connections=False,
+            )
+            payload.update(_mcp_connection_plan_payload(plan, execution=execution))
             return _success_envelope(
                 operation="init",
                 scope="project",
-                data=_init_payload(result, root),
+                data=payload,
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="init", scope="project")
@@ -1316,6 +1341,23 @@ def _init_payload(result: SetupProjectResult, project_root: Path) -> dict[str, A
             "operational_root": _relative_path(result.operational_root, project_root),
             "shared_paths": result.shared_paths or [],
             "operational_paths": result.operational_paths or [],
+        }
+    )
+    return payload
+
+
+def _mcp_connection_plan_payload(
+    plan: AgentConnectionPlan,
+    *,
+    execution: AgentConnectionExecution,
+) -> dict[str, Any]:
+    payload = plan.to_payload()
+    payload.update(
+        {
+            "validation_results": execution.validation_results,
+            "connection_results": execution.connection_results,
+            "audit_references": execution.audit_references,
+            "persisted_connections": list(execution.persisted_connections),
         }
     )
     return payload
