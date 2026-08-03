@@ -136,6 +136,27 @@ def test_readme_uses_absolute_image_urls_for_pypi_rendering() -> None:
     assert all(url.startswith(("https://", "http://")) for url in image_urls)
 
 
+def test_readme_covers_released_agent_support_and_existing_project_maintenance() -> None:
+    readme = read("README.md")
+
+    for term in (
+        "Tier 1 — Native/Managed",
+        "Tier 2 — Directed CLI",
+        "Tier 3 — Unmanaged MCP",
+        "skills@1.5.20",
+        "/tree/v0.5.1/skills/universal-memory",
+        "--agent pi --copy -y",
+        ".antigravity/rules/universal-memory.md",
+        "Windsurf",
+        "Frozen legacy adapter",
+        "umem update --check",
+        "umem update --skills",
+        "umem connect",
+        ".umem/skills/use-universal-memory/",
+    ):
+        assert term in readme
+
+
 def test_skill_lifecycle_docs_cover_summary_and_gitignore_warnings() -> None:
     docs = read("docs/reference/skill-lifecycle.md")
 
