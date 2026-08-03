@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.5.1] - 2026-08-03
+
+### Fixed
+
+- Aligned the PyPI and repository README with the released Tier 1 Native/Managed,
+  Tier 2 Directed CLI, and Tier 3 Unmanaged MCP support contracts.
+- Corrected current runtime targets, documented the pinned project-scoped `npx skills`
+  bridge, and clarified maintenance and legacy-skill behavior for existing projects.
+
 ## [0.5.0] - 2026-08-01
 
 ### Added
@@ -260,7 +269,8 @@ corresponding Git tags when available.
 - Added secret scanning guardrails.
 - Added safe-write snapshots and audit trails before mutations.
 
-[0.5.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.4.0...HEAD
+[0.5.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.0...v0.2.1
