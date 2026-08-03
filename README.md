@@ -24,7 +24,7 @@ To see the core idea visually, check out the [Excalidraw design](https://excalid
     *   **Short-Term Memory**
     *   **User Preferences**
 *   **Skill Creator:** Encapsulates understanding of specific workflows. When a user explains a task pattern multiple times, the system translates it into structured, reusable agent skills.
-*   **Unified Instruction File (`AGENT.MD`):** The shared persistence endpoint consumed by all local agent instances (e.g., Agent A, Agent B, Agent C).
+*   **Unified Instruction File (`AGENTS.md`):** The shared persistence endpoint consumed by compatible local agent instances (e.g., Agent A, Agent B, Agent C).
 
 ---
 
@@ -58,10 +58,11 @@ Encapsulates complex, repetitive procedural instructions into formal Agent Skill
 structured directories containing `SKILL.md` instructions, helper `scripts/`, and
 documentation `references/`.
 
-Universal Memory treats `.umem/skills/<slug>/SKILL.md` as the canonical source of
-truth. Native runtime folders such as `.agents/skills/`, `.opencode/skills/`, and
-`.antigravity/rules/` receive complete synchronized copies so each agent can consume
-the same skill in its own expected layout.
+Universal Memory keeps one canonical source for each skill. Shared, user-facing project
+skills live under `umem/skills/<slug>/SKILL.md`; private, operational, and legacy project
+skills live under `.umem/skills/<slug>/SKILL.md`. Native runtime folders such as
+`.agents/skills/`, `.opencode/skills/`, and `.antigravity/rules/` receive complete
+synchronized copies so each agent can consume the same skill in its expected layout.
 
 ---
 
@@ -114,6 +115,23 @@ umem --version
 which umem
 ```
 
+Upgrading the executable does not silently mutate existing projects. The next time you
+work in an initialized project, reconcile it locally:
+
+```bash
+umem update --check
+umem update
+umem update --skills
+umem connect
+umem doctor
+```
+
+You do not need to run `umem init` again. Local maintenance creates snapshots and audit
+records before UMEM-owned writes. Existing `.umem/skills/use-universal-memory/` trees and
+customized managed files are preserved; if both legacy and canonical Universal Memory
+skill roots exist, UMEM stops for an explicit migration decision instead of merging or
+deleting either tree.
+
 ---
 
 ## Quick Start Guide
@@ -144,6 +162,27 @@ umem connect
 
 Explicit runtime selection remains available for automation and unusual setups,
 but it is not required for the normal path.
+
+<details>
+<summary>How the portable Tier 2 installation works</summary>
+
+UMEM resolves the detected agent's project skill directory from a reviewed catalog
+pinned to `skills@1.5.20`, runs one project-scoped installation, and validates the
+complete installed skill tree plus a real `umem context` read. It does not install into
+a second project and copy the result back.
+
+The command orchestrated by UMEM in `v0.5.1` is equivalent to:
+
+```bash
+DISABLE_TELEMETRY=1 npx --yes skills@1.5.20 add https://github.com/YanAmorelli/universal-memory/tree/v0.5.1/skills/universal-memory --skill universal-memory --agent pi --copy -y
+```
+
+Here `pi` is an example; UMEM supplies the detected agent ID. Node.js and `npx` are
+optional prerequisites for this external bridge. When either is unavailable,
+initialization remains usable and UMEM reports a managed or manual fallback. Unknown
+agent IDs never execute `npx`.
+
+</details>
 
 ### 2. Save your first preferences and facts
 Tell `umem` what to keep in mind. You can target either the project scope (this folder) or the global scope (across all projects):
@@ -211,21 +250,39 @@ umem status
 
 ## Host Integration & Support Matrix
 
-`umem` maps cognitive context and agent skills directly into native runtime paths:
+UMEM deliberately separates native ownership from portable compatibility:
+
+| Tier | Contract | Guarantee |
+| --- | --- | --- |
+| **Tier 1 — Native/Managed** | Maintained host adapter, native setup and repeatable validation | UMEM owns and tests the documented integration. |
+| **Tier 2 — Directed CLI** | `AGENTS.md` or the official Agent Skill directs a shell-capable agent to the UMEM CLI | UMEM validates portable instructions, CLI access, and context reading, but not every host-specific behavior. |
+| **Tier 3 — Unmanaged MCP** | The user manually connects MCP to a host without a programmed workflow | UMEM validates MCP availability only; agent behavior is not guaranteed. |
+
+The maintained and named integration surfaces are:
 
 | Runtime / Host | Support Tier | Config / Instructions Target |
 | --- | --- | --- |
-| **Claude Code** | Tier 1 (Full) | `CLAUDE.md`, `.claude/`, `~/.claude/` |
-| **OpenCode** | Tier 1 (Full) | `AGENTS.md`, `.opencode/`, `~/.config/opencode/` |
-| **Codex (OpenAI)** | Tier 1 (Full) | `AGENTS.md`, workspace configuration files |
-| **Cursor** | Tier 2 (Basic) | `.cursor/rules/`, `~/.cursor/` |
-| **Antigravity / Gemini** | Tier 2 (Basic) | `GEMINI.md`, `~/.gemini/` |
+| **Claude Code** | Tier 1 — Native/Managed | `CLAUDE.md`, `.claude/skills/`, `.claude/settings.json` |
+| **OpenCode** | Tier 1 — Native/Managed | `AGENTS.md`, `.opencode/skills/`, `.opencode/opencode.jsonc` |
+| **Codex (OpenAI)** | Tier 1 — Native/Managed | `AGENTS.md`, `.agents/skills/`, `.codex/config.toml` |
+| **Cursor** | Tier 2 — Directed CLI | `.cursor/rules/universal-memory.mdc` |
+| **Antigravity** | Tier 2 — Directed CLI | `.antigravity/rules/universal-memory.md` |
+| **Pi, Gemini CLI, GitHub Copilot, Cline, Zed, and other reviewed Agent Skills hosts** | Tier 2 — Directed CLI | Project skill directory pinned to the `skills@1.5.20` catalog |
+| **Windsurf** | Tier 2 — Frozen legacy adapter | `.windsurf/skills/universal-memory/` |
+| **Unmodeled MCP host** | Tier 3 — Unmanaged MCP | User-managed MCP configuration |
+
+An agent appearing in the external `skills` catalog does not make it Tier 1. Tier 1 is
+intentionally small and requires a maintained adapter, release evidence, and repeatable
+host-specific validation. See the [Getting Started guide](docs/users/getting-started.md)
+for legacy-project behavior and the portable installation flow.
 
 ---
 
-## Running as an Model Context Protocol (MCP) Server
+## Running as a Model Context Protocol (MCP) Server
 
 AI agents can interact directly with your memory over the Model Context Protocol.
+Manual MCP configuration for a host without a programmed UMEM workflow is Tier 3:
+tool availability is validated, but instruction loading and agent behavior are not guaranteed.
 
 ### One-off Launch Command
 ```bash
@@ -294,6 +351,10 @@ your shell `PATH`.
 *   **Skill Drift Protection:** `umem skills sync` detects managed native drift and
     keeps local changes by default. Use `--drift-decision overwrite` only when you
     intentionally want canonical UMEM content to replace the managed native copy.
+*   **External Bridge Boundary:** Tier 2 installation through `npx skills` is an
+    explicitly confirmed external mutation. UMEM disables anonymous installer telemetry,
+    constrains the target to the current project, and validates the complete result, but
+    labels the write as externally executed rather than claiming UMEM snapshot ownership.
 
 ---
 
