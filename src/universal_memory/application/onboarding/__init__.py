@@ -1,11 +1,5 @@
 """Onboarding use cases for universal-memory."""
 
-from universal_memory.application.onboarding.setup_project import (
-    SetupProjectResult,
-    setup_project,
-)
-
-__all__ = ["SetupProjectResult", "setup_project"]
 from universal_memory.application.onboarding.agent_connections import (
     AgentConnectionPlan,
     AgentConnectionPlanner,
@@ -33,6 +27,15 @@ from universal_memory.application.onboarding.execute_agent_connections import (
     PersistedConnections,
     UnavailableMcpAvailability,
 )
+from universal_memory.application.onboarding.session_bootstrap import (
+    SessionBootstrapCommand,
+    SessionBootstrapResult,
+    SessionBootstrapUseCase,
+)
+from universal_memory.application.onboarding.setup_project import (
+    SetupProjectResult,
+    setup_project,
+)
 
 __all__ = [
     "AgentConnectionExecution",
@@ -55,7 +58,12 @@ __all__ = [
     "PendingExternalActionExecutor",
     "PersistedConnections",
     "RegistrySignalAgentDetector",
+    "SessionBootstrapCommand",
+    "SessionBootstrapResult",
+    "SessionBootstrapUseCase",
+    "SetupProjectResult",
     "UnavailableExternalSkillInstaller",
     "UnavailableMcpAvailability",
     "default_agent_connection_planner",
+    "setup_project",
 ]

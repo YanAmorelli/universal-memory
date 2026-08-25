@@ -191,9 +191,11 @@ def test_setup_preserves_manual_content_outside_managed_block(
     assert "old" not in content
     assert "Universal Memory Active Policy" in content
     managed_block = content.split("<!-- UMEM: START -->", 1)[1].split("<!-- UMEM: END -->", 1)[0]
-    assert "umem context --scope project" in managed_block
-    assert "umem status --format json" in managed_block
-    assert "umem skills list --format json" in managed_block
+    assert "umem bootstrap --format json" in managed_block
+    assert "MCP/FastMCP `bootstrap()`" in managed_block
+    assert "data.context" in managed_block
+    assert "data.skills.list" in managed_block
+    assert "conversation, session, or new task" not in managed_block
     assert "umem skills detail <skill-id-or-name> --format json" in managed_block
     assert ".umem/skills/universal-memory/SKILL.md" in managed_block
     assert "proactively capture new memory" in managed_block
@@ -364,8 +366,8 @@ def test_claude_code_setup_without_agents_md_includes_shared_policy_in_claude_md
     assert "Use relative paths in specs, code and docs." in claude_content
     assert "Claude Code Universal Memory Instructions" in claude_content
     assert "mandatory preflight at the start of a conversation" in claude_content
-    assert "umem status --format json" in claude_content
-    assert "umem skills list --format json" in claude_content
+    assert "umem bootstrap --format json" in claude_content
+    assert "MCP/FastMCP `bootstrap()`" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
     assert "If `umem` is unavailable or not initialized" in claude_content
     assert "Perform this bootstrap only at the start of a conversation" in claude_content
@@ -409,7 +411,7 @@ def test_claude_code_setup_with_agents_md_writes_only_delta_blocks_to_claude_md(
     assert "Use CLAUDE.md only for Claude-specific deltas." in claude_content
     assert "Use relative paths in specs, code and docs." not in claude_content
     assert "contains only Claude Code-specific deltas" in claude_content
-    assert "umem status --format json" in claude_content
+    assert "umem bootstrap --format json" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
     assert "mandatory preflight at the start of a conversation" in claude_content
     assert "If `umem` is unavailable or not initialized" in claude_content
@@ -433,9 +435,9 @@ def test_claude_code_setup_without_deltas_passes_own_read_validator(
     assert result.validation_status == "success"
     assert result.warnings == []
     assert "universal-memory" in claude_content
-    assert "umem context" in claude_content
-    assert "umem status" in claude_content
-    assert "umem skills list --format json" in claude_content
+    assert "umem bootstrap --format json" in claude_content
+    assert "data.context" in claude_content
+    assert "data.skills.list" in claude_content
     assert "umem skills detail <skill-id-or-name> --format json" in claude_content
     assert ".umem/skills/universal-memory/SKILL.md" in claude_content
     assert "record it as global memory" in claude_content

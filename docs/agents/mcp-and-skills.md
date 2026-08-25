@@ -59,10 +59,28 @@ agents.
 
 | Agent need | CLI | MCP |
 | --- | --- | --- |
+| Bootstrap one session | `umem bootstrap --format json` | `bootstrap()` |
 | Retrieve project context | `umem context --scope project --format json` | `context(scope="project")` |
 | Record a durable fact | `umem remember "..." --scope project --format json` | `remember_fact(content="...", scope="project")` |
 | Adopt an existing skill | `umem skills import .agents/skills/review-protocol --scope project --sync --format json` | `import_skill(path=".agents/skills/review-protocol", scope="project", sync_after_import=true)` |
 | Refresh one skill | `umem skills sync review-protocol --format json` | `sync_skills(skill_id_or_name="review-protocol")` |
+
+### Measured Bootstrap Impact
+
+A controlled five-sample benchmark comparing the previous three-call routine with the
+single bootstrap measured:
+
+| Metric | Three calls | Bootstrap |
+| --- | ---: | ---: |
+| Public round-trips | 3 | 1 |
+| CLI subprocess median | 501.334 ms | 167.805 ms |
+| MCP in-process median | 6.407 ms | 3.545 ms |
+| CLI token proxy | 1791 | 1729 |
+| MCP token proxy | 1752 | 1710 |
+
+The token proxy divides serialized request-plus-response characters by four; it is a
+comparison aid, not an exact model-billing token count. The recorded evidence lives in
+`.umem/benchmarks/bootstrap-results.json`.
 
 ## Why Skills Exist
 
@@ -94,10 +112,15 @@ then sync it back to the runtimes that need it.
 
 ## Normal Agent Flow
 
+At the beginning of one conversation or session, prefer MCP `bootstrap()` and fall back to
+`umem bootstrap --format json`. Treat `data.context` as active context, inspect
+`data.skills.list`, and request details only for selected relevant skills. Do not repeat the
+bootstrap on later interactions in the same session.
+
 ```text
 Agent reads AGENTS.md or provider-specific bootstrap instructions
 Agent follows the Universal Memory operating skill
-Agent calls CLI or MCP to retrieve context
+Agent calls bootstrap once and selects relevant skills
 Agent proposes or records durable changes through the safe mutation pipeline
 Universal Memory writes snapshots, audit events, and managed targets
 ```

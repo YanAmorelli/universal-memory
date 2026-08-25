@@ -20,6 +20,7 @@ from universal_memory.application.onboarding import (
     ExecuteAgentConnectionsUseCase,
     OfficialSkillInstallerPlannerAdapter,
     RegistrySignalAgentDetector,
+    SessionBootstrapUseCase,
     default_agent_connection_planner,
 )
 from universal_memory.application.security import (
@@ -383,6 +384,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         repository=latent_skill_repository,
         agent_skill_repository=agent_skill_repository,
     )
+    session_bootstrap_use_case = SessionBootstrapUseCase(
+        status=status_use_case.execute,
+        context=context_use_case.execute,
+        list_skills=list_skills_use_case.execute,
+    )
     recommend_skills_use_case = RecommendSkillsUseCase(repository=latent_skill_repository)
     get_skill_detail_use_case = GetSkillDetailUseCase(
         project_root=project_root,
@@ -435,6 +441,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         rollback_command=rollback_use_case.execute,
         rollback_preview_command=rollback_preview,
         status_command=status_use_case.execute,
+        bootstrap_command=session_bootstrap_use_case.execute,
         doctor_command=doctor_use_case.execute,
         context_command=context_use_case.execute,
         remember_command=remember_use_case.execute,

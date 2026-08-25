@@ -77,6 +77,17 @@ agent use Universal Memory through MCP or the configured host instructions.
 Ask the agent to run the UMEM bootstrap before planning or editing, retrieve
 project context, inspect relevant skills, and record only durable learnings.
 
+At the start of each conversation or session, the agent should prefer MCP `bootstrap()` and
+fall back to:
+
+```bash
+umem bootstrap --format json
+```
+
+The returned `data.context` is active context. The agent reads `data.skills.list` and asks
+for details only for selected relevant skills. It should not repeat bootstrap during later
+interactions in the same session.
+
 Use manual CLI commands for inspection, review, and recovery. Let the agent
 handle routine context loading and safe memory updates so it does not need to
 ask you to repeat project constraints every session.

@@ -35,21 +35,18 @@ change.
 
 - `.umem/` project storage and generated project skills.
 - `AGENTS.md` and `CLAUDE.md` managed UMEM bootstrap instructions.
-- CLI output from `umem status`, `umem context`, `umem skills list`, and targeted read or
-  mutation commands.
+- CLI output from `umem bootstrap` and targeted read or mutation commands.
 - MCP tool results when available; treat them as equivalent automation surfaces over the
   CLI behavior contract.
 - `references/` files in this skill for deeper task-specific procedures.
 
 ## Mandatory Startup
 
-At the start of a conversation, session, or new task, load UMEM context before planning,
+At the start of a conversation or session, load UMEM context before planning,
 editing, investigating, reviewing, or activating another workflow:
 
 ```bash
-umem status --format json
-umem context --scope project --format json
-umem skills list --format json
+umem bootstrap --format json
 ```
 
 Then inspect any relevant active skill:
@@ -58,18 +55,18 @@ Then inspect any relevant active skill:
 umem skills detail <skill-id-or-name> --format json
 ```
 
-Prefer the equivalent MCP tools when they are available. Use the CLI examples in the
-references as the canonical behavior contract.
+Prefer MCP `bootstrap()` when it is available; otherwise use the CLI command above. Use the
+CLI examples in the references as the canonical behavior contract.
 
 ## Workflow And State Interpretation
 
-- If `status` reports UMEM unavailable or uninitialized, say so explicitly and continue
-  without external memory instead of inventing context.
-- Treat `context --scope project` output as active repository guidance for the current
+- If bootstrap reports UMEM unavailable or the project uninitialized, say so explicitly and
+  continue without external memory instead of inventing context.
+- Treat `data.context` as active repository guidance for the current
   work session.
 - Treat global context as cross-project user preference; do not let it override explicit
   project constraints or user instructions for the current task.
-- Treat `skills list` as discovery metadata. Inspect only relevant active skills with
+- Treat `data.skills.list` as discovery metadata. Inspect only relevant active skills with
   `skills detail`, and load deeper skill files only when the current task calls for them.
 - Do not repeat the full startup sequence on every user message in the same conversation;
   query only the specific UMEM state needed after the initial preflight.

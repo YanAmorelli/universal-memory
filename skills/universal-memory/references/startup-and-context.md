@@ -15,18 +15,17 @@ state before planning, editing, investigating, reviewing, or using another workf
 ## Canonical CLI
 
 ```bash
-umem status --format json
-umem context --scope project --format json
+umem bootstrap --format json
 umem context --scope project --max-size-chars 4000 --format json
 umem context --scope global --format json
-umem skills list --format json
 umem skills detail <skill-id-or-name> --format json
 ```
 
 ## Parameters
 
 - `--format json`: use for agent automation and deterministic parsing.
-- `--scope project|global`: choose project for repository context; choose global only
+- `bootstrap` uses project scope and the default 4000-character context limit.
+- `--scope project|global`: choose project for targeted repository context; choose global only
   when the task is explicitly cross-project.
 - `--max-size-chars <number>`: cap returned context when the caller has a tight context
   budget.
@@ -35,15 +34,15 @@ umem skills detail <skill-id-or-name> --format json
 
 ## MCP Equivalents
 
-- `status()`
-- `context(scope="project", max_size_chars=<number>)`
+- `bootstrap()`
+- `context(scope="project", max_size_chars=<number>)` for a targeted refresh
 - `context(scope="global")`
-- `list_skills()`
 - `get_skill_detail(name_or_id="<skill-id-or-name>")`
 
 ## Expected Behavior
 
-- Treat `context` output as active project guidance.
+- Treat bootstrap `data.context` as active project guidance.
+- Read bootstrap `data.skills.list` and select only relevant skills for detail lookup.
 - Treat `skills detail` as a lightweight metadata read; it should not force loading large
   files under a skill's `references/` directory.
 - Do not repeat the full startup sequence on every user message in the same conversation.
