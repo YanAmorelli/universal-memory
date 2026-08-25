@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [Unreleased]
+
+### Added
+
+- Added a single CLI/MCP session bootstrap that aggregates status, active project context,
+  and the skills catalog while preserving semantic error parity between adapters.
+
+### Performance
+
+- Reduced startup from three public round-trips to one (`66.7%`). In a controlled
+  five-sample benchmark, CLI subprocess median time changed from `501.334 ms` to
+  `167.805 ms`, MCP in-process median time changed from `6.407 ms` to `3.545 ms`, and the
+  serialized-character token proxy decreased from `1791` to `1729` for CLI and from
+  `1752` to `1710` for MCP.
+
 ## [0.5.1] - 2026-08-03
 
 ### Fixed
@@ -269,7 +284,8 @@ corresponding Git tags when available.
 - Added secret scanning guardrails.
 - Added safe-write snapshots and audit trails before mutations.
 
-[0.5.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/YanAmorelli/universal-memory/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.2.1...v0.3.0
