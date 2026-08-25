@@ -26,6 +26,7 @@ from universal_memory.application.layout import (
     MigrateProjectLayoutUseCase,
 )
 from universal_memory.application.memory import (
+    DEFAULT_CONTEXT_MAX_SIZE_CHARS,
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
     GetMemoryStatusCommand,
@@ -41,6 +42,8 @@ from universal_memory.application.onboarding import (
     AgentConnectionExecution,
     AgentConnectionPlan,
     ExecuteAgentConnectionsUseCase,
+    SessionBootstrapCommand,
+    SessionBootstrapResult,
     default_agent_connection_planner,
 )
 from universal_memory.application.onboarding.setup_project import SetupProjectResult
@@ -117,7 +120,17 @@ from universal_memory.interfaces.errors import (
     error_descriptor,
     error_payload,
     json_rpc_error_payload,
+    normalize_bootstrap_error,
     sanitize_error_detail,
+)
+from universal_memory.interfaces.payloads import (
+    context_payload as _context_payload,
+)
+from universal_memory.interfaces.payloads import (
+    session_bootstrap_payload,
+)
+from universal_memory.interfaces.payloads import (
+    status_payload as _status_payload,
 )
 
 JSON_RPC_SECRET_DETECTED = interface_errors.JSON_RPC_SECRET_DETECTED
@@ -128,10 +141,9 @@ JSON_RPC_INVALID_CONFIG = interface_errors.JSON_RPC_INVALID_CONFIG
 JSON_RPC_STORAGE_ERROR = interface_errors.JSON_RPC_STORAGE_ERROR
 JSON_RPC_UNEXPECTED_ERROR = interface_errors.JSON_RPC_UNEXPECTED_ERROR
 
-DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
-TOKEN_ESTIMATE_CHARS = 4
 SetupProjectCommandHandler = Callable[..., SetupProjectResult]
 StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
+BootstrapCommandHandler = Callable[[SessionBootstrapCommand], SessionBootstrapResult]
 DoctorCommandHandler = Callable[[DoctorCommand], DoctorResult]
 ContextCommandHandler = Callable[[AssembleContextSummaryCommand], AssembleContextSummaryResult]
 RememberCommandHandler = Callable[[RememberFactCommand], RememberFactResult]
@@ -196,6 +208,7 @@ def _execute_initialize_project(
 class MCPUseCases:
     status: StatusCommandHandler
     context: ContextCommandHandler
+    bootstrap: BootstrapCommandHandler = _missing_use_case
     doctor: DoctorCommandHandler = _missing_use_case
     initialize_project: SetupProjectCommandHandler = _missing_use_case
     execute_agent_connections: ExecuteAgentConnectionsUseCase | None = None
@@ -301,6 +314,23 @@ def configure_server(  # noqa: PLR0915
             )
         except Exception as error:
             return _mcp_tool_error(error, operation="status", scope="project")
+
+    @server.tool(name="bootstrap")
+    def bootstrap() -> ToolResponse:
+        """Load UMEM status, active project context, and the skills catalog once per session."""
+        try:
+            result = use_cases.bootstrap(SessionBootstrapCommand(project_root=root))
+            return _success_envelope(
+                operation="bootstrap",
+                scope="project",
+                data=session_bootstrap_payload(result),
+            )
+        except Exception as error:
+            return _mcp_tool_error(
+                normalize_bootstrap_error(error),
+                operation="bootstrap",
+                scope="project",
+            )
 
     @server.tool(name="inspect_project_layout")
     def inspect_layout() -> ToolResponse:
@@ -1261,36 +1291,6 @@ def _success_envelope(
     }
 
 
-def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
-    if not result.initialized:
-        return {
-            "initialized": False,
-            "project_path": result.project_path,
-            "installed_version": result.installed_version,
-            "recommended_action": result.recommended_action,
-            "layout": result.layout,
-            "shared_root": result.shared_root,
-            "operational_root": result.operational_root,
-            "path_counts": result.path_counts or {},
-        }
-
-    return {
-        "initialized": True,
-        "project_path": result.project_path,
-        "installed_version": result.installed_version,
-        "fact_counts": result.fact_counts,
-        "active_rules_count": result.active_rules_count,
-        "registered_skills_count": result.registered_skills_count,
-        "approximate_size_bytes": result.approximate_size_bytes,
-        "last_health_check": result.last_health_check,
-        "host_validation": result.host_validation,
-        "layout": result.layout,
-        "shared_root": result.shared_root,
-        "operational_root": result.operational_root,
-        "path_counts": result.path_counts or {},
-    }
-
-
 def _doctor_success_envelope(result: DoctorResult) -> dict[str, Any]:
     return {
         "ok": result.ok,
@@ -1298,24 +1298,6 @@ def _doctor_success_envelope(result: DoctorResult) -> dict[str, Any]:
         "scope": "environment",
         "data": result.to_payload(),
         "warnings": [],
-    }
-
-
-def _context_payload(
-    result: AssembleContextSummaryResult,
-    *,
-    max_size_chars: int,
-) -> dict[str, Any]:
-    summary = result.context_summary
-    markdown_size = len(result.context_markdown)
-    return {
-        "project_summary": summary.project_summary,
-        "universal_preferences": summary.universal_preferences,
-        "active_rules": summary.active_rules,
-        "source_fact_ids": result.included_fact_ids,
-        "truncated": markdown_size >= max_size_chars,
-        "token_estimate": max(1, round(markdown_size / TOKEN_ESTIMATE_CHARS)),
-        "last_read_at": format_utc_iso(summary.created_at),
     }
 
 

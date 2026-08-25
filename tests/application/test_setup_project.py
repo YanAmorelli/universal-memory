@@ -55,9 +55,10 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     skill_content = default_skill.read_text(encoding="utf-8")
     assert 'name: "universal-memory"' in skill_content
     assert 'name: "Use Universal Memory"' not in skill_content
-    assert "umem context --scope project" in skill_content
-    assert "umem status --format json" in skill_content
-    assert "umem skills list --format json" in skill_content
+    assert "umem bootstrap --format json" in skill_content
+    assert "MCP `bootstrap()`" in skill_content
+    assert "data.context" in skill_content
+    assert "data.skills.list" in skill_content
     assert "umem skills detail <skill-id-or-name> --format json" in skill_content
     assert "Reference Routing" in skill_content
     assert "references/startup-and-context.md" in skill_content
@@ -80,7 +81,7 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
         assert expected_skill_guidance in skill_content
     assert "Mandatory Startup" in skill_content
     assert "At the start of a work session or conversation" in skill_content
-    assert "UMEM unavailable or uninitialized" in skill_content
+    assert "If bootstrap reports UMEM unavailable or the project uninitialized" in skill_content
     assert "Do not repeat the full startup sequence" in skill_content
     for relative_path in DEFAULT_UMEM_SKILL_REFERENCES:
         reference_file = tmp_path / relative_path
@@ -112,6 +113,22 @@ def test_setup_project_initializes_layout_and_returns_structured_result(
     assert "hosts" not in config
 
 
+def test_setup_project_default_skill_documents_once_per_session_fail_fast(
+    tmp_path: Path,
+) -> None:
+    setup_project(
+        tmp_path,
+        layout_port=LocalProjectLayoutPort(),
+        config_validation_port=LocalConfigValidationPort(),
+    )
+    skill_path = tmp_path / ".umem" / "skills" / "universal-memory" / "SKILL.md"
+    skill_content = skill_path.read_text(encoding="utf-8")
+
+    assert "At the start of a work session or conversation" in skill_content
+    assert "conversation, session, or new task" not in skill_content
+    assert "If bootstrap reports UMEM unavailable or the project uninitialized" in skill_content
+
+
 def test_setup_project_skills_lifecycle_documents_valid_create_command(tmp_path: Path) -> None:
     setup_project(
         tmp_path,
@@ -134,8 +151,7 @@ def test_setup_project_skills_lifecycle_documents_valid_create_command(tmp_path:
     assert "umem host sync --apply --yes --format json" in skills_lifecycle_content
     assert "Decision Guide For Agents" in skills_lifecycle_content
     assert "Playbook: Adopt Existing Native Skill Into UMEM" in skills_lifecycle_content
-    assert "umem status --format json" in skills_lifecycle_content
-    assert "umem context --scope project --format json" in skills_lifecycle_content
+    assert "umem bootstrap --format json" in skills_lifecycle_content
     assert "umem skills detail foo --format json" in skills_lifecycle_content
     assert "native_installations" in skills_lifecycle_content
     assert "Normal\n   `git status` can hide" in skills_lifecycle_content

@@ -28,6 +28,7 @@ from universal_memory.domain.ports import (
 
 HIGH_PRIORITY_TAGS = {"preferences", "core-behavior"}
 MINIMUM_TEMPLATE_SIZE = 110
+DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 
 
 @dataclass(frozen=True, slots=True)

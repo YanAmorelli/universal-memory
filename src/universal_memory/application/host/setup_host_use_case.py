@@ -397,7 +397,7 @@ class ConfigureHostUseCase:
         else:
             failures.append(
                 "MCP configuration failure: UMEM block does not reference universal-memory, "
-                "MCP/FastMCP, or commands such as umem context/status."
+                "MCP/FastMCP, or commands such as umem bootstrap."
             )
 
         result = self._host_read_validation_result(method, checks, failures)
@@ -472,6 +472,7 @@ class ConfigureHostUseCase:
         normalized = content.lower()
         references = (
             "universal-memory",
+            "umem bootstrap",
             "umem context",
             "umem status",
             "mcp",
@@ -761,15 +762,15 @@ class ConfigureHostUseCase:
             UMEM_START,
             "# Universal Memory Active Policy",
             "> [!IMPORTANT]",
-            "> UMEM bootstrap is a mandatory preflight at the start of a conversation, "
-            "session, or new task (before planning, editing, investigation, review, "
+            "> UMEM bootstrap is a mandatory preflight at the start of a conversation or "
+            "session (before planning, editing, investigation, review, "
             "skill workflow, slash command, or structured agent workflow).",
-            "> Run `umem status --format json`, `umem context --scope project "
-            "--format json`, and `umem skills list --format json` only at the beginning of the "
-            "conversation to load the context. During the conversation, do not repeat the full "
+            "> Prefer MCP/FastMCP `bootstrap()` when available; otherwise run "
+            "`umem bootstrap --format json` only at the beginning of the conversation to load "
+            "status, active context, and the skill list. During the conversation, do not repeat the full "
             "bootstrap on every interaction; instead, query, add, or remove facts and skills "
             "only when necessary.",
-            "> Use the equivalent MCP/FastMCP tools when they are available.",
+            "> Treat `data.context` as active context and `data.skills.list` as discovery metadata.",
             f"> Read and follow `{operational_skill}`. If a relevant "
             "active skill exists, inspect it with "
             "`umem skills detail <skill-id-or-name> --format json` before acting.",
@@ -787,13 +788,10 @@ class ConfigureHostUseCase:
             "`[UMEM: No new facts/skills to record]`. Do not forget this footer.",
             "",
             "## Required Bootstrap",
-            "- Run `umem status --format json` to validate the integration.",
-            "- Run `umem context --scope project --format json` and treat the result as "
-            "active context.",
-            "- Run `umem skills list --format json`; for each relevant skill, run "
+            "- Prefer MCP/FastMCP `bootstrap()`; otherwise run `umem bootstrap --format json`.",
+            "- Treat `data.context` as active context and read `data.skills.list`.",
+            "- For each selected relevant skill, run "
             "`umem skills detail <skill-id-or-name> --format json`.",
-            "- If MCP/FastMCP is available, prefer the equivalent tools; otherwise, use the "
-            "CLI commands above.",
             "- Perform this bootstrap only at the start of a conversation/session. Do not repeat "
             "it on every interaction.",
             "- Keep `AGENTS.md` and `CLAUDE.md` compact: they should point to `umem`, not "
@@ -842,10 +840,11 @@ class ConfigureHostUseCase:
                 "Claude Code-specific deltas, but `umem` usage remains required."
             )
             memory_line = (
-                "> UMEM bootstrap is a mandatory preflight at the start of a conversation, "
-                "session, or new task (before any skill workflow, slash command, or structured "
-                "agent workflow): first run `umem status --format json`, `umem context --scope project "
-                "--format json` and `umem skills list --format json`, or use the equivalent MCP/FastMCP tools. "
+                "> UMEM bootstrap is a mandatory preflight at the start of a conversation or "
+                "session (before any skill workflow, slash command, or structured "
+                "agent workflow): prefer MCP/FastMCP `bootstrap()` or fall back to "
+                "`umem bootstrap --format json`. Treat `data.context` as active context and "
+                "`data.skills.list` as discovery metadata. "
                 "Do not repeat this full bootstrap on every interaction."
             )
             policy_line = (
@@ -878,14 +877,14 @@ class ConfigureHostUseCase:
         else:
             title = "# Claude Code Universal Memory Instructions"
             scope_line = (
-                "> UMEM bootstrap is a mandatory preflight at the start of a conversation, "
-                "session, or new task (before planning, editing, investigation, review, "
+                "> UMEM bootstrap is a mandatory preflight at the start of a conversation or "
+                "session (before planning, editing, investigation, review, "
                 "skill workflow, slash command, or structured agent workflow)."
             )
             memory_line = (
-                "> First run `umem status --format json`, `umem context --scope project "
-                "--format json`, and `umem skills list --format json` only at the beginning "
-                "of the conversation to load context; use equivalent MCP/FastMCP tools when available. "
+                "> Prefer MCP/FastMCP `bootstrap()` or fall back to `umem bootstrap --format json` "
+                "only at the beginning of the conversation. Treat `data.context` as active context "
+                "and `data.skills.list` as discovery metadata. "
                 "Do not repeat this full bootstrap on every interaction; query, add, or remove "
                 "facts and skills only when necessary."
             )
@@ -937,10 +936,9 @@ class ConfigureHostUseCase:
             lines.extend(
                 [
                     "## Standard Flow",
-                    "- Run `umem status --format json` to validate the integration.",
-                    "- Run `umem context --scope project --format json` and treat the result "
-                    "as active context.",
-                    "- Run `umem skills list --format json`; for each relevant skill, run "
+                    "- Prefer MCP/FastMCP `bootstrap()`; otherwise run `umem bootstrap --format json`.",
+                    "- Treat `data.context` as active context and read `data.skills.list`.",
+                    "- For each selected relevant skill, run "
                     "`umem skills detail <skill-id-or-name> --format json`.",
                     "- Perform this bootstrap only at the start of a conversation/session. Do not repeat "
                     "it on every interaction.",

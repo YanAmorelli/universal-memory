@@ -144,8 +144,13 @@ def test_agents_bootstrap_is_compact_and_complements_the_official_skill() -> Non
 
     assert len(bootstrap.split()) <= MAX_BOOTSTRAP_WORDS
     assert "universal-memory" in bootstrap
-    assert "umem status --format json" in bootstrap
-    assert "umem context --scope project --format json" in bootstrap
+    assert "umem bootstrap --format json" in bootstrap
+    assert "bootstrap()" in bootstrap
+    assert "data.context" in bootstrap
+    assert "data.skills.list" in bootstrap
+    assert "start of the conversation or session" in bootstrap
+    assert "umem status --format json" not in bootstrap
+    assert "umem context --scope project --format json" not in bootstrap
     assert "stable, reusable, and safe" in bootstrap
     assert "umem skills track" not in bootstrap
     assert "umem remember" not in bootstrap

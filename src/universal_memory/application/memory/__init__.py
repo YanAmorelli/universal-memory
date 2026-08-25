@@ -1,4 +1,5 @@
 from universal_memory.application.memory.assemble_context_summary_use_case import (
+    DEFAULT_CONTEXT_MAX_SIZE_CHARS,
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
     AssembleContextSummaryUseCase,
@@ -36,6 +37,7 @@ from universal_memory.application.memory.search_facts_use_case import (
 )
 
 __all__ = [
+    "DEFAULT_CONTEXT_MAX_SIZE_CHARS",
     "AssembleContextSummaryCommand",
     "AssembleContextSummaryResult",
     "AssembleContextSummaryUseCase",

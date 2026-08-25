@@ -1,0 +1,43 @@
+{
+  "cli_subprocess": {
+    "baseline": {
+      "median_duration_ms": 501.334,
+      "p95_duration_ms": 528.345,
+      "serialized_request_chars": 190,
+      "serialized_response_chars": 6975,
+      "token_proxy": 1791
+    },
+    "bootstrap": {
+      "median_duration_ms": 167.805,
+      "p95_duration_ms": 199.718,
+      "serialized_request_chars": 57,
+      "serialized_response_chars": 6859,
+      "token_proxy": 1729
+    }
+  },
+  "generated_at": "2026-08-25T14:04:52.227471Z",
+  "mcp_in_process": {
+    "baseline": {
+      "median_duration_ms": 6.407,
+      "p95_duration_ms": 6.9,
+      "serialized_request_chars": 102,
+      "serialized_response_chars": 6907,
+      "token_proxy": 1752
+    },
+    "bootstrap": {
+      "median_duration_ms": 3.545,
+      "p95_duration_ms": 3.668,
+      "serialized_request_chars": 35,
+      "serialized_response_chars": 6806,
+      "token_proxy": 1710
+    }
+  },
+  "round_trips": {
+    "baseline": 3,
+    "bootstrap": 1,
+    "reduction_percent": 66.7
+  },
+  "sample_count": 5,
+  "token_proxy_chars_per_token": 4,
+  "warmup_samples": 1
+}

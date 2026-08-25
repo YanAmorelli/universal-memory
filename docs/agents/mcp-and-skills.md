@@ -59,6 +59,7 @@ agents.
 
 | Agent need | CLI | MCP |
 | --- | --- | --- |
+| Bootstrap one session | `umem bootstrap --format json` | `bootstrap()` |
 | Retrieve project context | `umem context --scope project --format json` | `context(scope="project")` |
 | Record a durable fact | `umem remember "..." --scope project --format json` | `remember_fact(content="...", scope="project")` |
 | Adopt an existing skill | `umem skills import .agents/skills/review-protocol --scope project --sync --format json` | `import_skill(path=".agents/skills/review-protocol", scope="project", sync_after_import=true)` |
@@ -94,10 +95,15 @@ then sync it back to the runtimes that need it.
 
 ## Normal Agent Flow
 
+At the beginning of one conversation or session, prefer MCP `bootstrap()` and fall back to
+`umem bootstrap --format json`. Treat `data.context` as active context, inspect
+`data.skills.list`, and request details only for selected relevant skills. Do not repeat the
+bootstrap on later interactions in the same session.
+
 ```text
 Agent reads AGENTS.md or provider-specific bootstrap instructions
 Agent follows the Universal Memory operating skill
-Agent calls CLI or MCP to retrieve context
+Agent calls bootstrap once and selects relevant skills
 Agent proposes or records durable changes through the safe mutation pipeline
 Universal Memory writes snapshots, audit events, and managed targets
 ```

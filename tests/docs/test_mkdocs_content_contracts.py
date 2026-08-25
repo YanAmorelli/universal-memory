@@ -78,6 +78,10 @@ def test_agent_docs_show_cli_mcp_parity_and_canonical_skills() -> None:
     )
 
     assert "CLI is the canonical contract" in docs
+    assert "umem bootstrap --format json" in docs
+    assert "bootstrap()" in docs
+    assert "data.context" in docs
+    assert "data.skills.list" in docs
     assert 'context(scope="project")' in docs
     assert "remember_fact" in docs
     assert "import_skill" in docs
@@ -89,6 +93,9 @@ def test_user_docs_present_agent_handoff_and_mcp_launch() -> None:
     docs = read("docs/users/getting-started.md")
 
     assert "Hand It To Your Agent" in docs
+    assert "umem bootstrap --format json" in docs
+    assert "data.context" in docs
+    assert "data.skills.list" in docs
     assert '"command": "uvx"' in docs
     assert '"--from", "universal-memory", "umem-mcp"' in docs
     assert '"command": "umem-mcp"' in docs

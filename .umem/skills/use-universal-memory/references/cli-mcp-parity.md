@@ -28,6 +28,7 @@ CLI commands with `--format json` and MCP tools should return equivalent payload
 | Capability | Canonical CLI | MCP equivalent |
 | --- | --- | --- |
 | Initialize project | `umem init --yes --format json` | `initialize_project()` |
+| Session bootstrap | `umem bootstrap --format json` | `bootstrap()` |
 | Status | `umem status --format json` | `status()` |
 | Inspect project layout | `umem layout status --format json` | `inspect_project_layout()` |
 | Migrate project layout | `umem layout migrate --to shared --dry-run --format json` | `migrate_project_layout(target_layout="shared", dry_run=true)` |
