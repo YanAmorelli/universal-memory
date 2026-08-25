@@ -103,6 +103,17 @@ def test_user_docs_present_agent_handoff_and_mcp_launch() -> None:
     assert "global memory" in docs.lower()
 
 
+def test_readme_presents_one_call_session_bootstrap() -> None:
+    readme = read("README.md")
+
+    assert "Bootstrap one agent session" in readme
+    assert "umem bootstrap --format json" in readme
+    assert "bootstrap()" in readme
+    assert "data.context" in readme
+    assert "data.skills.list" in readme
+    assert "only once per conversation or session" in readme
+
+
 def test_contributor_docs_explain_testing_and_parity() -> None:
     docs = read("docs/contributors/development.md")
 

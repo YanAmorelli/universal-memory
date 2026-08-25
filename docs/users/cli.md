@@ -10,6 +10,7 @@ debug behavior.
 umem --help
 umem init
 umem connect
+umem bootstrap --format json
 umem init --layout shared --yes
 umem status
 umem layout status
@@ -19,6 +20,27 @@ umem context
 umem remember
 umem rollback
 ```
+
+## Session Bootstrap
+
+At the beginning of a conversation or agent session, use one bootstrap call instead of
+separate status, project-context, and skills-list commands:
+
+```bash
+umem bootstrap --format json
+```
+
+The response keeps the existing payloads under `data.status`, `data.context`, and
+`data.skills.list`. Treat `data.context` as active project guidance, inspect the catalog,
+and retrieve details only for selected relevant skills:
+
+```bash
+umem skills detail <skill-id-or-name> --format json
+```
+
+Run bootstrap only once per conversation or session. It does not install, synchronize,
+configure, or automatically expand skills. When MCP is available, prefer the semantically
+equivalent `bootstrap()` tool.
 
 ## Project Layout
 

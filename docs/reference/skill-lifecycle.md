@@ -67,9 +67,7 @@ approved repository-visible operational guidance.
 Use this path when a local or native skill already exists and should become UMEM-owned:
 
 ```bash
-umem status --format json
-umem context --scope project --format json
-umem skills list --format json
+umem bootstrap --format json
 umem skills import .agents/skills/review-protocol --scope project --visibility shared --category user-facing --sync --format json
 umem skills detail review-protocol --format json
 ```
