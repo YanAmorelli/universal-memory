@@ -151,7 +151,7 @@ def test_readme_covers_released_agent_support_and_existing_project_maintenance()
         "Tier 2 — Directed CLI",
         "Tier 3 — Unmanaged MCP",
         "skills@1.5.20",
-        "/tree/v0.5.1/skills/universal-memory",
+        "/tree/v0.6.0/skills/universal-memory",
         "--agent pi --copy -y",
         ".antigravity/rules/universal-memory.md",
         "Windsurf",
