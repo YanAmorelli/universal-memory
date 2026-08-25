@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.6.1] - 2026-08-25
+
+### Documentation
+
+- Added the one-command session bootstrap to the README quick start and MCP guidance.
+- Aligned the agent protocol, CLI guide, parity reference, skill lifecycle, and alpha
+  validation flow around one bootstrap call per conversation or session.
+
 ## [0.6.0] - 2026-08-25
 
 ### Added
@@ -284,6 +292,7 @@ corresponding Git tags when available.
 - Added secret scanning guardrails.
 - Added safe-write snapshots and audit trails before mutations.
 
+[0.6.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/YanAmorelli/universal-memory/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/YanAmorelli/universal-memory/compare/v0.4.0...v0.5.0

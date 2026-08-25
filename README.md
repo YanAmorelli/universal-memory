@@ -171,10 +171,10 @@ pinned to `skills@1.5.20`, runs one project-scoped installation, and validates t
 complete installed skill tree plus a real `umem context` read. It does not install into
 a second project and copy the result back.
 
-The command orchestrated by UMEM in `v0.6.0` is equivalent to:
+The command orchestrated by UMEM in `v0.6.1` is equivalent to:
 
 ```bash
-DISABLE_TELEMETRY=1 npx --yes skills@1.5.20 add https://github.com/YanAmorelli/universal-memory/tree/v0.6.0/skills/universal-memory --skill universal-memory --agent pi --copy -y
+DISABLE_TELEMETRY=1 npx --yes skills@1.5.20 add https://github.com/YanAmorelli/universal-memory/tree/v0.6.1/skills/universal-memory --skill universal-memory --agent pi --copy -y
 ```
 
 Here `pi` is an example; UMEM supplies the detected agent ID. Node.js and `npx` are

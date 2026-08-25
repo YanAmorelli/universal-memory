@@ -34,8 +34,8 @@ def _planner() -> OfficialSkillDistributionPlanner:
 def test_published_distribution_uses_the_current_release_tag() -> None:
     planner = OfficialSkillDistributionPlanner.for_published_distribution()
 
-    assert planner.source_ref == "v0.6.0"
-    assert "/tree/v0.6.0/skills/universal-memory" in planner.skill_source
+    assert planner.source_ref == "v0.6.1"
+    assert "/tree/v0.6.1/skills/universal-memory" in planner.skill_source
 
 
 @pytest.mark.parametrize("source_ref", ["main", "../v0.5.0", "deadbeef"])
