@@ -67,7 +67,7 @@ def _action(
             "--yes",
             "skills@1.5.20",
             "add",
-            "https://github.com/YanAmorelli/universal-memory/tree/v0.5.1/skills/universal-memory",
+            "https://github.com/YanAmorelli/universal-memory/tree/v0.6.0/skills/universal-memory",
             "--skill",
             "universal-memory",
             "--agent",

@@ -35,6 +35,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
     )
     from universal_memory.application.onboarding import (  # noqa: PLC0415
         ExecuteAgentConnectionsUseCase,
+        SessionBootstrapUseCase,
     )
     from universal_memory.application.onboarding.setup_project import setup_project  # noqa: PLC0415
     from universal_memory.application.security import (  # noqa: PLC0415
@@ -292,6 +293,11 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         repository=latent_skill_repository,
         agent_skill_repository=agent_skill_repository,
     )
+    session_bootstrap_use_case = SessionBootstrapUseCase(
+        status=status_use_case.execute,
+        context=context_use_case.execute,
+        list_skills=list_skills_use_case.execute,
+    )
     recommend_skills_use_case = RecommendSkillsUseCase(repository=latent_skill_repository)
     get_skill_detail_use_case = GetSkillDetailUseCase(
         project_root=root,
@@ -317,6 +323,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             initialize_project=initialize_project,
             execute_agent_connections=connection_executor,
             status=status_use_case.execute,
+            bootstrap=session_bootstrap_use_case.execute,
             doctor=doctor_use_case.execute,
             context=context_use_case.execute,
             remember=remember_use_case.execute,

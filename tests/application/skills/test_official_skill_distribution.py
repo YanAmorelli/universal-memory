@@ -34,8 +34,8 @@ def _planner() -> OfficialSkillDistributionPlanner:
 def test_published_distribution_uses_the_current_release_tag() -> None:
     planner = OfficialSkillDistributionPlanner.for_published_distribution()
 
-    assert planner.source_ref == "v0.5.1"
-    assert "/tree/v0.5.1/skills/universal-memory" in planner.skill_source
+    assert planner.source_ref == "v0.6.0"
+    assert "/tree/v0.6.0/skills/universal-memory" in planner.skill_source
 
 
 @pytest.mark.parametrize("source_ref", ["main", "../v0.5.0", "deadbeef"])
@@ -144,8 +144,13 @@ def test_agents_bootstrap_is_compact_and_complements_the_official_skill() -> Non
 
     assert len(bootstrap.split()) <= MAX_BOOTSTRAP_WORDS
     assert "universal-memory" in bootstrap
-    assert "umem status --format json" in bootstrap
-    assert "umem context --scope project --format json" in bootstrap
+    assert "umem bootstrap --format json" in bootstrap
+    assert "bootstrap()" in bootstrap
+    assert "data.context" in bootstrap
+    assert "data.skills.list" in bootstrap
+    assert "start of the conversation or session" in bootstrap
+    assert "umem status --format json" not in bootstrap
+    assert "umem context --scope project --format json" not in bootstrap
     assert "stable, reusable, and safe" in bootstrap
     assert "umem skills track" not in bootstrap
     assert "umem remember" not in bootstrap

@@ -227,9 +227,7 @@ through managed native sync.
 2. Load current UMEM state in the target repository:
 
    ```bash
-   umem status --format json
-   umem context --scope project --format json
-   umem skills list --format json
+   umem bootstrap --format json
    ```
 
 3. Validate the native source exists and contains `SKILL.md`.

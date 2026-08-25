@@ -18,7 +18,11 @@ from universal_memory.application.memory import (
     RememberFactCommand,
     RememberFactResult,
 )
-from universal_memory.application.onboarding import SetupProjectResult
+from universal_memory.application.onboarding import (
+    SessionBootstrapResult,
+    SessionBootstrapUseCase,
+    SetupProjectResult,
+)
 from universal_memory.application.security import (
     AuditLogEntry,
     ListAuditLogResult,
@@ -42,6 +46,7 @@ from universal_memory.application.skills import (
     DraftSkillResult,
     ImportSkillCommand,
     ImportSkillResult,
+    ListSkillsResult,
     PromoteSkillRecommendationCommand,
     PromoteSkillRecommendationResult,
     ProposeSkillCommand,
@@ -69,7 +74,7 @@ from universal_memory.application.skills import (
     ValidateSkillCommand,
     ValidateSkillResult,
 )
-from universal_memory.domain import SecretDetectedError
+from universal_memory.domain import SecretDetectedError, StorageError
 from universal_memory.domain.entities import (
     AgentSkill,
     AgentSkillStatus,
@@ -86,6 +91,9 @@ from universal_memory.interfaces.cli.init_command import create_typer_app
 from universal_memory.interfaces.cli.init_command import main as cli_main
 from universal_memory.interfaces.mcp.server import (
     JSON_RPC_SECRET_DETECTED,
+    JSON_RPC_STORAGE_ERROR,
+    JSON_RPC_UNEXPECTED_ERROR,
+    JSON_RPC_VALIDATION_FAILED,
     MCPUseCases,
     configure_server,
     create_mcp_server,
@@ -108,6 +116,7 @@ PARITY_MATRIX = {
     "layout.status": "inspect_project_layout",
     "layout.migrate": "migrate_project_layout",
     "status": "status",
+    "bootstrap": "bootstrap",
     "doctor": "doctor",
     "context": "context",
     "remember": "remember_fact",
@@ -217,12 +226,26 @@ def context_result() -> AssembleContextSummaryResult:
     )
 
 
+def bootstrap_result() -> SessionBootstrapResult:
+    return SessionBootstrapResult(
+        status=status_result(),
+        context=context_result(),
+        skills_list=skills_list_result(),
+    )
+
+
+def skills_list_result() -> ListSkillsResult:
+    return ListSkillsResult(skills=[], recommendations=[])
+
+
 def cli_app_command_names() -> set[str]:
     app = create_typer_app(
         setup_project_command=setup_result,
         status_command=lambda _command: status_result(),
+        bootstrap_command=lambda _command: bootstrap_result(),
         doctor_command=lambda _command: doctor_result(),
         context_command=lambda _command: context_result(),
+        list_skills_command=lambda _command: skills_list_result(),
         remember_command=lambda _command: RememberFactResult(
             fact=fact_fixture(),
             audit_reference="audit-1",
@@ -287,6 +310,7 @@ async def test_public_cli_capabilities_have_matching_mcp_tools() -> None:
             {"target_layout": "shared", "dry_run": True},
         ),
         (["status", "--format", "json"], "status", {}),
+        (["bootstrap", "--format", "json"], "bootstrap", {}),
         (["doctor", "--format", "json"], "doctor", {}),
         (["context", "--format", "json"], "context", {}),
         (
@@ -596,6 +620,164 @@ async def test_cli_and_mcp_json_data_keys_match_for_public_capabilities(  # noqa
     assert_contract_data_equivalent(cli_payload["data"], mcp_payload["data"], capability=mcp_tool)
 
 
+def test_bootstrap_data_is_a_faithful_projection_of_standalone_payloads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    use_cases = cli_use_cases(tmp_path)
+    standalone: dict[str, dict[str, Any]] = {}
+    for section, args in (
+        ("status", ["status", "--format", "json"]),
+        ("context", ["context", "--format", "json"]),
+        ("skills", ["skills", "list", "--format", "json"]),
+    ):
+        assert cli_main(args, **use_cases) == 0
+        standalone[section] = json.loads(capsys.readouterr().out)["data"]
+
+    assert cli_main(["bootstrap", "--format", "json"], **use_cases) == 0
+    aggregate = json.loads(capsys.readouterr().out)["data"]
+
+    assert aggregate["status"] == standalone["status"]
+    assert aggregate["context"] == standalone["context"]
+    assert aggregate["skills"]["list"] == standalone["skills"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("failing_step", "expected_calls"),
+    [
+        ("status", ["status"]),
+        ("context", ["status", "context"]),
+        ("skills.list", ["status", "context", "skills.list"]),
+    ],
+)
+@pytest.mark.parametrize(
+    ("error_type", "cli_code", "mcp_code"),
+    [
+        (OSError, "storage_error", JSON_RPC_STORAGE_ERROR),
+        (StorageError, "storage_error", JSON_RPC_STORAGE_ERROR),
+        (ValueError, "validation_failed", JSON_RPC_VALIDATION_FAILED),
+        (SecretDetectedError, "secret_detected", JSON_RPC_SECRET_DETECTED),
+        (RuntimeError, "unexpected_error", JSON_RPC_UNEXPECTED_ERROR),
+    ],
+)
+async def test_bootstrap_failures_keep_semantic_error_parity_by_step(  # noqa: PLR0913
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failing_step: str,
+    expected_calls: list[str],
+    error_type: type[Exception],
+    cli_code: str,
+    mcp_code: int,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def build_bootstrap(calls: list[str]):
+        def status(_command: object) -> GetMemoryStatusResult:
+            calls.append("status")
+            if failing_step == "status":
+                raise error_type(f"{failing_step} failed")
+            return status_result()
+
+        def context(_command: object) -> AssembleContextSummaryResult:
+            calls.append("context")
+            if failing_step == "context":
+                raise error_type(f"{failing_step} failed")
+            return context_result()
+
+        def list_skills(_command: object) -> ListSkillsResult:
+            calls.append("skills.list")
+            if failing_step == "skills.list":
+                raise error_type(f"{failing_step} failed")
+            return skills_list_result()
+
+        return SessionBootstrapUseCase(
+            status=status,
+            context=context,
+            list_skills=list_skills,
+        ).execute
+
+    cli_calls: list[str] = []
+    cli_commands = cli_use_cases(tmp_path)
+    cli_commands["bootstrap_command"] = build_bootstrap(cli_calls)
+    assert cli_main(["bootstrap", "--format", "json"], **cli_commands) == 1
+    cli_payload = json.loads(capsys.readouterr().out)
+
+    mcp_calls: list[str] = []
+    server = configure_server(
+        create_mcp_server(),
+        replace(mcp_use_cases(tmp_path), bootstrap=build_bootstrap(mcp_calls)),
+        project_root=tmp_path,
+    )
+    mcp_payload = (await server.call_tool("bootstrap", {})).structured_content
+
+    assert mcp_payload is not None
+    assert cli_calls == mcp_calls == expected_calls
+    assert cli_payload["error"]["code"] == cli_code
+    assert mcp_payload["error"]["code"] == mcp_code
+    assert cli_payload["error"]["detail"] == mcp_payload["error"]["data"]["detail"]
+    assert cli_payload["error"]["recovery_hint"] == (mcp_payload["error"]["data"]["recovery_hint"])
+    assert "data" not in cli_payload
+    assert mcp_payload["data"] == {}
+
+
+@pytest.mark.anyio
+async def test_bootstrap_uninitialized_state_has_semantic_parity_and_stops_early(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def build_bootstrap(calls: list[str]):
+        def status(_command: object) -> GetMemoryStatusResult:
+            calls.append("status")
+            return replace(
+                status_result(),
+                initialized=False,
+                recommended_action="Run umem init.",
+            )
+
+        def context(_command: object) -> AssembleContextSummaryResult:
+            calls.append("context")
+            return context_result()
+
+        def list_skills(_command: object) -> ListSkillsResult:
+            calls.append("skills.list")
+            return skills_list_result()
+
+        return SessionBootstrapUseCase(
+            status=status,
+            context=context,
+            list_skills=list_skills,
+        ).execute
+
+    cli_calls: list[str] = []
+    cli_commands = cli_use_cases(tmp_path)
+    cli_commands["bootstrap_command"] = build_bootstrap(cli_calls)
+    assert cli_main(["bootstrap", "--format", "json"], **cli_commands) == 1
+    cli_payload = json.loads(capsys.readouterr().out)
+
+    mcp_calls: list[str] = []
+    server = configure_server(
+        create_mcp_server(),
+        replace(mcp_use_cases(tmp_path), bootstrap=build_bootstrap(mcp_calls)),
+        project_root=tmp_path,
+    )
+    mcp_payload = (await server.call_tool("bootstrap", {})).structured_content
+
+    assert mcp_payload is not None
+    assert cli_calls == mcp_calls == ["status"]
+    assert cli_payload["error"]["code"] == "validation_failed"
+    assert mcp_payload["error"]["code"] == JSON_RPC_VALIDATION_FAILED
+    assert cli_payload["error"]["detail"] == mcp_payload["error"]["data"]["detail"]
+    assert "data" not in cli_payload
+    assert mcp_payload["data"] == {}
+
+
 def test_summary_output_does_not_change_sync_json_contract(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -732,8 +914,10 @@ def cli_use_cases(project_root: Path) -> dict[str, Any]:
     return {
         "setup_project_command": lambda _root: setup_result(project_root),
         "status_command": lambda _command: status_result(),
+        "bootstrap_command": lambda _command: bootstrap_result(),
         "doctor_command": lambda _command: doctor_result(),
         "context_command": lambda _command: context_result(),
+        "list_skills_command": lambda _command: skills_list_result(),
         "remember_command": lambda _command: RememberFactResult(
             fact=fact_fixture(),
             audit_reference="audit-1",
@@ -779,8 +963,10 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
     return MCPUseCases(
         initialize_project=lambda _project_root: setup_result(root),
         status=lambda _command: status_result(),
+        bootstrap=lambda _command: bootstrap_result(),
         doctor=lambda _command: doctor_result(),
         context=lambda _command: context_result(),
+        list_skills=lambda _command: skills_list_result(),
         remember=lambda _command: RememberFactResult(
             fact=fact_fixture(),
             audit_reference="audit-1",

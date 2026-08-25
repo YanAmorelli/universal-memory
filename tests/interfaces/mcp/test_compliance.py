@@ -19,6 +19,7 @@ from universal_memory.application.memory import (
 )
 from universal_memory.application.onboarding import (
     ExecuteAgentConnectionsUseCase,
+    SessionBootstrapResult,
     SetupProjectResult,
 )
 from universal_memory.application.security import (
@@ -95,6 +96,7 @@ PUBLIC_MCP_TOOLS = {
     "initialize_project": {},
     "inspect_project_layout": {},
     "status": {},
+    "bootstrap": {},
     "doctor": {},
     "context": {},
     "remember_fact": {"content": "Use respostas concisas."},
@@ -228,6 +230,7 @@ CONTRACT_KEYS_BY_TOOL = {
         "operational_root",
         "path_counts",
     },
+    "bootstrap": {"status", "context", "skills"},
     "doctor": {"checks", "summary"},
     "context": {
         "project_summary",
@@ -560,6 +563,7 @@ CONTRACT_TYPES_BY_TOOL = {
         "operational_root": str,
         "path_counts": dict,
     },
+    "bootstrap": {"status": dict, "context": dict, "skills": dict},
     "doctor": {
         "checks": list,
         "summary": dict,
@@ -1121,6 +1125,7 @@ def mcp_use_cases(project_root: Path | None = None) -> MCPUseCases:
     return MCPUseCases(
         initialize_project=lambda _project_root: setup_result(root),
         status=lambda _command: status_result(),
+        bootstrap=lambda _command: bootstrap_result(),
         doctor=lambda _command: doctor_result(),
         context=lambda _command: context_result(),
         remember=lambda _command: RememberFactResult(
@@ -1755,6 +1760,14 @@ def context_result() -> AssembleContextSummaryResult:
         context_summary=summary,
         context_markdown="# MEMORY CONTEXT SUMMARY\nProjeto",
         included_fact_ids=["fact-1"],
+    )
+
+
+def bootstrap_result() -> SessionBootstrapResult:
+    return SessionBootstrapResult(
+        status=status_result(),
+        context=context_result(),
+        skills_list=list_skills_result(ListSkillsCommand()),
     )
 
 

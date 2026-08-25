@@ -78,6 +78,10 @@ def test_agent_docs_show_cli_mcp_parity_and_canonical_skills() -> None:
     )
 
     assert "CLI is the canonical contract" in docs
+    assert "umem bootstrap --format json" in docs
+    assert "bootstrap()" in docs
+    assert "data.context" in docs
+    assert "data.skills.list" in docs
     assert 'context(scope="project")' in docs
     assert "remember_fact" in docs
     assert "import_skill" in docs
@@ -89,6 +93,9 @@ def test_user_docs_present_agent_handoff_and_mcp_launch() -> None:
     docs = read("docs/users/getting-started.md")
 
     assert "Hand It To Your Agent" in docs
+    assert "umem bootstrap --format json" in docs
+    assert "data.context" in docs
+    assert "data.skills.list" in docs
     assert '"command": "uvx"' in docs
     assert '"--from", "universal-memory", "umem-mcp"' in docs
     assert '"command": "umem-mcp"' in docs
@@ -144,7 +151,7 @@ def test_readme_covers_released_agent_support_and_existing_project_maintenance()
         "Tier 2 — Directed CLI",
         "Tier 3 — Unmanaged MCP",
         "skills@1.5.20",
-        "/tree/v0.5.1/skills/universal-memory",
+        "/tree/v0.6.0/skills/universal-memory",
         "--agent pi --copy -y",
         ".antigravity/rules/universal-memory.md",
         "Windsurf",

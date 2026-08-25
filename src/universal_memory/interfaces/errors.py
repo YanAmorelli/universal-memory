@@ -185,5 +185,18 @@ def json_rpc_error_payload(error: Exception) -> dict[str, Any]:
     }
 
 
+def normalize_bootstrap_error(error: Exception) -> Exception:
+    """Normalize composite read failures before adapter-specific presentation."""
+    if isinstance(error, (*DOMAIN_ERROR_TYPES, ValidationError)):
+        return error
+    if isinstance(error, KeyError):
+        return ValidationFailedError("Skill not found.")
+    if isinstance(error, OSError):
+        return StorageError(str(error))
+    if isinstance(error, ValueError):
+        return ValidationFailedError(str(error))
+    return error
+
+
 def _is_expected_error(error: Exception) -> bool:
     return isinstance(error, (*DOMAIN_ERROR_TYPES, ValidationError))

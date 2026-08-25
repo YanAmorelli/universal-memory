@@ -35,6 +35,7 @@ from universal_memory.application.layout import (
 )
 from universal_memory.application.layout.migrate_project_layout import MigrationInclude
 from universal_memory.application.memory import (
+    DEFAULT_CONTEXT_MAX_SIZE_CHARS,
     AssembleContextSummaryCommand,
     AssembleContextSummaryResult,
     ContextHygieneCommand,
@@ -52,6 +53,8 @@ from universal_memory.application.onboarding import (
     AgentConnectionExecution,
     AgentConnectionPlan,
     ExecuteAgentConnectionsUseCase,
+    SessionBootstrapCommand,
+    SessionBootstrapResult,
     default_agent_connection_planner,
 )
 from universal_memory.application.onboarding.setup_project import (
@@ -158,10 +161,19 @@ from universal_memory.interfaces.errors import (
     DOMAIN_ERROR_TYPES,
     error_descriptor,
     error_payload,
+    normalize_bootstrap_error,
     recovery_hint,
 )
+from universal_memory.interfaces.payloads import (
+    context_payload as _context_payload,
+)
+from universal_memory.interfaces.payloads import (
+    session_bootstrap_payload,
+)
+from universal_memory.interfaces.payloads import (
+    status_payload as _status_payload,
+)
 
-DEFAULT_CONTEXT_MAX_SIZE_CHARS = 4000
 AUDIT_REFERENCE_PLACEHOLDER = "not-implemented-yet"
 INIT_SPLASH_MARKER = "UMem"
 INIT_SPLASH_LINES = (
@@ -192,6 +204,7 @@ ListSnapshotsCommandHandler = Callable[[ListSnapshotsCommand], ListSnapshotsResu
 RollbackCommandHandler = Callable[[RollbackCommand], RollbackResult]
 RollbackPreviewHandler = Callable[[SnapshotScope], Snapshot]
 StatusCommandHandler = Callable[[GetMemoryStatusCommand], GetMemoryStatusResult]
+BootstrapCommandHandler = Callable[[SessionBootstrapCommand], SessionBootstrapResult]
 DoctorCommandHandler = Callable[[DoctorCommand], DoctorResult]
 ContextCommandHandler = Callable[[AssembleContextSummaryCommand], AssembleContextSummaryResult]
 RememberFactCommandHandler = Callable[[RememberFactCommand], RememberFactResult]
@@ -281,6 +294,7 @@ def main(  # noqa: PLR0913
     rollback_command: RollbackCommandHandler | None = None,
     rollback_preview_command: RollbackPreviewHandler | None = None,
     status_command: StatusCommandHandler | None = None,
+    bootstrap_command: BootstrapCommandHandler | None = None,
     doctor_command: DoctorCommandHandler | None = None,
     context_command: ContextCommandHandler | None = None,
     remember_command: RememberFactCommandHandler | None = None,
@@ -328,6 +342,7 @@ def main(  # noqa: PLR0913
         rollback_command=rollback_command,
         rollback_preview_command=rollback_preview_command,
         status_command=status_command,
+        bootstrap_command=bootstrap_command,
         doctor_command=doctor_command,
         context_command=context_command,
         remember_command=remember_command,
@@ -421,6 +436,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     rollback_command: RollbackCommandHandler | None = None,
     rollback_preview_command: RollbackPreviewHandler | None = None,
     status_command: StatusCommandHandler | None = None,
+    bootstrap_command: BootstrapCommandHandler | None = None,
     doctor_command: DoctorCommandHandler | None = None,
     context_command: ContextCommandHandler | None = None,
     remember_command: RememberFactCommandHandler | None = None,
@@ -591,6 +607,18 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
             raise RuntimeError(msg)
         raise typer.Exit(
             code=_run_status(status_command, output_format=_effective_format(ctx, output_format))
+        )
+
+    @app.command("bootstrap")
+    def bootstrap(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
+        if bootstrap_command is None:
+            msg = "CLI bootstrap_command dependency was not configured."
+            raise RuntimeError(msg)
+        raise typer.Exit(
+            code=_run_bootstrap(
+                bootstrap_command,
+                output_format=_effective_format(ctx, output_format),
+            )
         )
 
     @layout_app.command("status")
@@ -1991,6 +2019,7 @@ def build_main(  # noqa: PLR0913
     update_migrate_command: UpdateMigrateCommandHandler | None = None,
     update_benchmarks_command: UpdateBenchmarksCommandHandler | None = None,
     layout_migrate_command: LayoutMigrateCommandHandler | None = None,
+    bootstrap_command: BootstrapCommandHandler | None = None,
     locale_resolver: LocaleResolver | None = None,
 ) -> Callable[[Sequence[str] | None], int]:
     command = _build_setup_project_command(
@@ -2009,6 +2038,7 @@ def build_main(  # noqa: PLR0913
             rollback_command=rollback_command,
             rollback_preview_command=rollback_preview_command,
             status_command=status_command,
+            bootstrap_command=bootstrap_command,
             doctor_command=doctor_command,
             context_command=context_command,
             remember_command=remember_command,
@@ -2726,6 +2756,34 @@ def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
     else:
         _stdout_console().print(_format_human_status_output(result))
 
+    return 0
+
+
+def _run_bootstrap(command: BootstrapCommandHandler, *, output_format: str) -> int:
+    try:
+        result = command(SessionBootstrapCommand(project_root=Path.cwd()))
+    except Exception as error:
+        normalized_error = normalize_bootstrap_error(error)
+        if isinstance(normalized_error, (*DOMAIN_ERROR_TYPES, ValidationError)):
+            _print_expected_error(normalized_error, output_format=output_format)
+        else:
+            _print_unexpected_error(normalized_error, output_format=output_format)
+        return 1
+
+    if output_format == "json":
+        print(json.dumps(_bootstrap_success_envelope(result), sort_keys=True))
+    else:
+        skills = result.skills_list.to_payload().get("skills", [])
+        _stdout_console().print(
+            "\n".join(
+                [
+                    "UMEM bootstrap completed.",
+                    f"Project initialized: {result.status.initialized}",
+                    "Project context loaded.",
+                    f"Skills discovered: {len(skills)}",
+                ]
+            )
+        )
     return 0
 
 
@@ -4894,6 +4952,16 @@ def _status_success_envelope(result: GetMemoryStatusResult) -> dict[str, Any]:
     }
 
 
+def _bootstrap_success_envelope(result: SessionBootstrapResult) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "operation": "bootstrap",
+        "scope": "project",
+        "data": session_bootstrap_payload(result),
+        "warnings": [],
+    }
+
+
 def _doctor_success_envelope(result: DoctorResult) -> dict[str, Any]:
     return {
         "ok": result.ok,
@@ -5128,54 +5196,6 @@ def _fact_payload(fact: Fact) -> dict[str, Any]:
         "storage_path": fact.metadata.get("storage_path"),
         "created_at": format_utc_iso(fact.created_at),
         "updated_at": format_utc_iso(fact.updated_at),
-    }
-
-
-def _status_payload(result: GetMemoryStatusResult) -> dict[str, Any]:
-    if not result.initialized:
-        return {
-            "initialized": False,
-            "project_path": result.project_path,
-            "installed_version": result.installed_version,
-            "recommended_action": result.recommended_action,
-            "layout": result.layout,
-            "shared_root": result.shared_root,
-            "operational_root": result.operational_root,
-            "path_counts": result.path_counts or {},
-        }
-
-    return {
-        "initialized": True,
-        "project_path": result.project_path,
-        "installed_version": result.installed_version,
-        "fact_counts": result.fact_counts,
-        "active_rules_count": result.active_rules_count,
-        "registered_skills_count": result.registered_skills_count,
-        "approximate_size_bytes": result.approximate_size_bytes,
-        "last_health_check": result.last_health_check,
-        "host_validation": result.host_validation,
-        "layout": result.layout,
-        "shared_root": result.shared_root,
-        "operational_root": result.operational_root,
-        "path_counts": result.path_counts or {},
-    }
-
-
-def _context_payload(
-    result: AssembleContextSummaryResult,
-    *,
-    max_size_chars: int,
-) -> dict[str, Any]:
-    summary = result.context_summary
-    markdown_size = len(result.context_markdown)
-    return {
-        "project_summary": summary.project_summary,
-        "universal_preferences": summary.universal_preferences,
-        "active_rules": summary.active_rules,
-        "source_fact_ids": result.included_fact_ids,
-        "truncated": markdown_size >= max_size_chars,
-        "token_estimate": max(1, round(markdown_size / 4)),
-        "last_read_at": format_utc_iso(summary.created_at),
     }
 
 

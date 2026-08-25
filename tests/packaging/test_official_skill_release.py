@@ -19,7 +19,7 @@ from universal_memory.application.skills.official_skill_release import (
 def _release_tree(
     root: Path,
     *,
-    version: str = "0.5.1",
+    version: str = "0.6.0",
     public_content: bytes = b"official skill\n",
     packaged_content: bytes | None = None,
     wheel_content: bytes | None = None,
@@ -50,14 +50,14 @@ def test_release_bundle_requires_matching_version_tag_checkout_and_assets(tmp_pa
 
     result = validate_release_bundle(
         project_root=tmp_path,
-        release_tag="v0.5.1",
+        release_tag="v0.6.0",
         checkout_commit="a" * 40,
         tagged_commit="a" * 40,
         tag_on_protected_ref=True,
     )
 
-    assert result.version == "0.5.1"
-    assert result.release_tag == "v0.5.1"
+    assert result.version == "0.6.0"
+    assert result.release_tag == "v0.6.0"
     assert result.protected_ref == "origin/main"
     assert result.asset_count == 1
     assert result.wheel_name == wheel.name
@@ -83,7 +83,7 @@ def test_release_bundle_rejects_checkout_that_is_not_the_tag_commit(tmp_path: Pa
     with pytest.raises(ReleaseValidationError, match="checkout commit"):
         validate_release_bundle(
             project_root=tmp_path,
-            release_tag="v0.5.1",
+            release_tag="v0.6.0",
             checkout_commit="b" * 40,
             tagged_commit="a" * 40,
             tag_on_protected_ref=True,
@@ -96,7 +96,7 @@ def test_release_bundle_rejects_tag_commit_outside_protected_ref(tmp_path: Path)
     with pytest.raises(ReleaseValidationError, match="origin/main"):
         validate_release_bundle(
             project_root=tmp_path,
-            release_tag="v0.5.1",
+            release_tag="v0.6.0",
             checkout_commit="a" * 40,
             tagged_commit="a" * 40,
             tag_on_protected_ref=False,
@@ -115,7 +115,7 @@ def test_prerelease_bundle_uses_dev_as_its_protected_ref(tmp_path: Path) -> None
     )
 
     assert result.protected_ref == "origin/dev"
-    assert _protected_release_ref("0.5.1") == "origin/main"
+    assert _protected_release_ref("0.6.0") == "origin/main"
 
 
 def test_main_ancestry_check_uses_git_merge_base_is_ancestor(
@@ -148,7 +148,7 @@ def test_release_bundle_rejects_divergent_public_and_packaged_assets(tmp_path: P
     with pytest.raises(ReleaseValidationError, match="package resources differ"):
         validate_release_bundle(
             project_root=tmp_path,
-            release_tag="v0.5.1",
+            release_tag="v0.6.0",
             checkout_commit="a" * 40,
             tagged_commit="a" * 40,
             tag_on_protected_ref=True,
@@ -161,7 +161,7 @@ def test_release_bundle_rejects_wheel_assets_that_differ_from_tag_source(tmp_pat
     with pytest.raises(ReleaseValidationError, match="wheel resources differ"):
         validate_release_bundle(
             project_root=tmp_path,
-            release_tag="v0.5.1",
+            release_tag="v0.6.0",
             checkout_commit="a" * 40,
             tagged_commit="a" * 40,
             tag_on_protected_ref=True,
@@ -175,7 +175,7 @@ def test_release_bundle_rejects_more_than_one_wheel_in_dist(tmp_path: Path) -> N
     with pytest.raises(ReleaseValidationError, match="exactly one wheel"):
         validate_release_bundle(
             project_root=tmp_path,
-            release_tag="v0.5.1",
+            release_tag="v0.6.0",
             checkout_commit="a" * 40,
             tagged_commit="a" * 40,
             tag_on_protected_ref=True,
