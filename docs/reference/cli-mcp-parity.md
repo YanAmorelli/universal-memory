@@ -6,6 +6,7 @@ hosts by calling the same application use cases.
 | Capability | CLI | MCP |
 | --- | --- | --- |
 | Initialize project | `umem init` | `initialize_project` |
+| Bootstrap one session | `umem bootstrap --format json` | `bootstrap()` |
 | Status | `umem status` | `status` |
 | Inspect project layout | `umem layout status` | `inspect_project_layout` |
 | Migrate project layout | `umem layout migrate` | `migrate_project_layout` |
@@ -41,6 +42,7 @@ confirmation. MCP should return structured envelopes suitable for agent tool cal
 For automation, prefer JSON CLI output and non-interactive confirmation flags:
 
 ```bash
+umem bootstrap --format json
 umem host sync --apply --yes --format json
 umem layout status --format json
 umem layout migrate --to shared --dry-run --format json
@@ -50,6 +52,12 @@ umem skills import .agents/skills/review-protocol --scope project --sync --forma
 umem skills share universal-memory --category operational --yes --format json
 umem skills sync review-protocol --format json
 ```
+
+Bootstrap is the preferred one-time session entrypoint. Both adapters execute status,
+project context, and skills list in the same logical order, preserve their current payloads
+inside the aggregate, and stop with semantically equivalent errors. Neither adapter expands
+skill details automatically; use `skills detail` or `get_skill_detail` only after selecting
+a relevant skill from the returned catalog.
 
 Shared-layout payloads should keep path and visibility fields aligned across
 surfaces:

@@ -33,6 +33,7 @@ umem status --format json
 umem init --yes --runtime codex --runtime claude_code --format json
 umem init --yes --runtime codex --runtime claude_code --format json
 umem status --format json
+umem bootstrap --format json
 ```
 
 Expected results:
@@ -149,6 +150,7 @@ sync_instructions(apply=true)
 create_skill(name="Review Protocol", description="Reusable review workflow", scope="project")
 import_skill(path=".agents/skills/imported-review", scope="project", sync_after_import=true)
 sync_skills(skill_id_or_name="review-protocol")
+bootstrap()
 list_skills()
 get_skill_detail(name_or_id="review-protocol")
 list_audit_events(scope="project")
