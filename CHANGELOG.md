@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.6.2] - 2026-10-13
+
+### Security
+
+- Updated dependencies with security fixes: urllib3 2.8.0 (GHSA-8988-9cw3-xx77,
+  GHSA-vxq7-64xx-v4gw, GHSA-gh4c-6fx4-qh6g), PyJWT 2.15.0, and cryptography 50.0.0
+  (CVE-2026-69247).
+
+### Changed
+
+- Updated anyio to 4.14.2 and pymdown-extensions to 11.0.1.
+
 ## [0.6.1] - 2026-08-25
 
 ### Documentation
