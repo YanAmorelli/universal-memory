@@ -5,29 +5,27 @@ Agents should use Universal Memory as a controlled context and mutation surface.
 ## Session Start
 
 1. Read the host instruction file that applies to the workspace.
-2. Check whether Universal Memory is initialized.
-3. Retrieve active project context before planning or editing.
+2. Bootstrap Universal Memory once before planning or editing.
+3. Treat the returned project context as active and select only relevant skills.
 
-Preferred CLI form:
-
-```bash
-umem status --format json
-umem layout status --format json
-umem context --scope project --format json
-umem skills list --format json
-```
-
-Equivalent MCP tools:
+Prefer the MCP tool when it is available:
 
 ```text
-status
-inspect_project_layout
-context
-list_skills
+bootstrap()
 ```
 
-After `list_skills`, inspect any relevant skill with `umem skills detail
-<skill-id-or-name> --format json` or MCP `get_skill_detail`.
+Otherwise, use the equivalent CLI command:
+
+```bash
+umem bootstrap --format json
+```
+
+The aggregate preserves the existing status, project-context, and skills-list contracts.
+Treat `data.context` as active context and inspect `data.skills.list`. Then request metadata
+only for relevant skills with `umem skills detail <skill-id-or-name> --format json` or MCP
+`get_skill_detail`. Do not repeat bootstrap on later interactions in the same conversation
+or session. Use `status`, `context`, `list_skills`, and `layout status` separately only when
+the task needs an explicit follow-up diagnostic.
 
 ## During Work
 

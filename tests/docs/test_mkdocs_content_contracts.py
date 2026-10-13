@@ -103,6 +103,17 @@ def test_user_docs_present_agent_handoff_and_mcp_launch() -> None:
     assert "global memory" in docs.lower()
 
 
+def test_readme_presents_one_call_session_bootstrap() -> None:
+    readme = read("README.md")
+
+    assert "Bootstrap one agent session" in readme
+    assert "umem bootstrap --format json" in readme
+    assert "bootstrap()" in readme
+    assert "data.context" in readme
+    assert "data.skills.list" in readme
+    assert "only once per conversation or session" in readme
+
+
 def test_contributor_docs_explain_testing_and_parity() -> None:
     docs = read("docs/contributors/development.md")
 
@@ -151,7 +162,7 @@ def test_readme_covers_released_agent_support_and_existing_project_maintenance()
         "Tier 2 — Directed CLI",
         "Tier 3 — Unmanaged MCP",
         "skills@1.5.20",
-        "/tree/v0.5.1/skills/universal-memory",
+        "/tree/v0.6.2/skills/universal-memory",
         "--agent pi --copy -y",
         ".antigravity/rules/universal-memory.md",
         "Windsurf",
