@@ -61,7 +61,8 @@ async def test_mcp_maintenance_tools_payloads_and_descriptions(tmp_path: Path) -
     assert "update_canonical_skill" in tools
     assert "canonical" in tools["update_canonical_skill"].lower()
     assert "cleanup_skill" in tools
-    assert "managed-only" in tools["cleanup_skill"]
+    assert "managed native copies" in tools["cleanup_skill"]
+    assert "No cleanup snapshot" in tools["cleanup_skill"]
     assert seen_rename[0].origin == "mcp"
     assert seen_cleanup[0].origin == "mcp"
     assert rename_payload is not None
