@@ -33,6 +33,8 @@ READ_ONLY = {
     "get_skill_detail",
 }
 DESTRUCTIVE = {
+    "migrate_project_layout",
+    "share_skill",
     "initialize_project",
     "deactivate_skill",
     "purge_fact",
@@ -212,3 +214,133 @@ async def test_cleanup_compatibility_flag_does_not_prevent_deletion(tmp_path: Pa
     tool = await server.get_tool("cleanup_skill")
     assert tool is not None
     assert tool.annotations is not None and tool.annotations.destructiveHint is True
+
+
+@pytest.mark.anyio
+async def test_migration_preview_preserves_source_but_apply_prunes_migrated_facts(
+    tmp_path: Path,
+) -> None:
+    from tests.application.layout.test_migrate_project_layout import (  # noqa: PLC0415
+        FACT_ID,
+        PRIVATE_FACT_ID,
+        _fact,
+        _read_jsonl,
+        _safe_write,
+        _write_legacy_project,
+    )
+    from universal_memory.application.layout import MigrateProjectLayoutUseCase  # noqa: PLC0415
+
+    _write_legacy_project(
+        tmp_path,
+        facts=[_fact(FACT_ID, "Share this fact"), _fact(PRIVATE_FACT_ID, "Keep this fact private")],
+        rules=[],
+        skills=[],
+    )
+    legacy = tmp_path / ".umem/memory/facts.jsonl"
+    original = legacy.read_bytes()
+    use_case = MigrateProjectLayoutUseCase(
+        project_root=tmp_path, safe_write_use_case=_safe_write(tmp_path)
+    )
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(migrate_project_layout=use_case.execute),
+        project_root=tmp_path,
+    )
+    arguments = {"include": ["facts"], "private_fact_ids": [PRIVATE_FACT_ID]}
+    preview = (await server.call_tool("migrate_project_layout", arguments)).structured_content
+    assert preview is not None and preview["ok"] is True
+    assert legacy.read_bytes() == original
+    assert not (tmp_path / "umem/memory/facts.jsonl").exists()
+    applied = (
+        await server.call_tool("migrate_project_layout", {**arguments, "dry_run": False})
+    ).structured_content
+    assert applied is not None and applied["ok"] is True
+    assert {fact["id"] for fact in _read_jsonl(legacy)} == {PRIVATE_FACT_ID}
+    assert {fact["id"] for fact in _read_jsonl(tmp_path / "umem/memory/facts.jsonl")} == {FACT_ID}
+    tool = await server.get_tool("migrate_project_layout")
+    assert tool is not None and tool.annotations is not None
+    assert tool.annotations.destructiveHint is True
+    assert "rewrites the legacy facts file" in " ".join((tool.description or "").split())
+
+
+@pytest.mark.anyio
+async def test_share_overwrites_existing_shared_destination_without_overwrite_confirmation(
+    tmp_path: Path,
+) -> None:
+    from tests.application.skills.test_share_skill import build_shared_use_cases  # noqa: PLC0415
+    from universal_memory.application.skills import CreateSkillCommand  # noqa: PLC0415
+    from universal_memory.domain.entities import LatentSkillScope  # noqa: PLC0415
+
+    root, _, create, share = build_shared_use_cases(tmp_path)
+    skill = create.execute(
+        CreateSkillCommand(
+            name="Private Review Helper",
+            description="Review implementation changes safely.",
+            scope=LatentSkillScope.project,
+            origin="test",
+            visibility="private",
+        )
+    )
+    source = root / skill.skill_file
+    destination = root / "umem/skills/private-review-helper/SKILL.md"
+    destination.parent.mkdir(parents=True)
+    destination.write_text(source.read_text() + "\nExisting destination content to preserve.\n")
+    assert destination.read_text() != source.read_text()
+    server = configure_server(
+        create_mcp_server(), base_use_cases(share_skill=share.execute), project_root=root
+    )
+    # No overwrite or operational confirmation is supplied for this user-facing skill.
+    applied = (
+        await server.call_tool("share_skill", {"skill_id_or_name": skill.slug})
+    ).structured_content
+    assert applied is not None and applied["ok"] is True
+    assert destination.read_text() == source.read_text()
+    assert applied["data"]["snapshot_reference"]
+    tool = await server.get_tool("share_skill")
+    assert tool is not None and tool.annotations is not None
+    assert tool.annotations.destructiveHint is True
+    assert "without a destination-conflict check" in " ".join((tool.description or "").split())
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("supply_markdown", [False, True])
+async def test_latent_update_omitted_markdown_regenerates_file_and_loses_custom_body(
+    tmp_path: Path, supply_markdown: bool
+) -> None:
+    from tests.application.skills.test_update_skill import (  # noqa: PLC0415
+        build_safe_write,
+        make_skill,
+        write_skill_markdown,
+    )
+    from universal_memory.application.skills import UpdateSkillUseCase  # noqa: PLC0415
+    from universal_memory.domain.entities import LatentSkillStatus  # noqa: PLC0415
+
+    safe_write, repository, snapshots, _, _ = build_safe_write(tmp_path)
+    skill = make_skill(status=LatentSkillStatus.active)
+    repository.write(skill)
+    write_skill_markdown(tmp_path)
+    skill_file = tmp_path / ".umem/skills/tdd-recorrente/SKILL.md"
+    sentinel = "Keep this custom workflow body SENTINEL."
+    original = skill_file.read_text() + f"\n{sentinel}\n"
+    skill_file.write_text(original)
+    snapshots.written.clear()
+    use_case = UpdateSkillUseCase(
+        project_root=tmp_path, repository=repository, safe_write_use_case=safe_write
+    )
+    server = configure_server(
+        create_mcp_server(), base_use_cases(update_skill=use_case.execute), project_root=tmp_path
+    )
+    arguments: dict[str, Any] = {"latent_skill_id": skill.id}
+    if supply_markdown:
+        arguments["raw_markdown"] = original
+    result = (await server.call_tool("update_skill", arguments)).structured_content
+    assert result is not None and result["ok"] is True
+    assert (sentinel in skill_file.read_text()) is supply_markdown
+    assert any(
+        snapshot.relative_path == ".umem/skills/tdd-recorrente/SKILL.md"
+        for snapshot in snapshots.written
+    )
+    tool = await server.get_tool("update_skill")
+    assert tool is not None and tool.annotations is not None
+    assert tool.annotations.destructiveHint is True
+    assert "can discard custom body" in tool.parameters["properties"]["raw_markdown"]["description"]

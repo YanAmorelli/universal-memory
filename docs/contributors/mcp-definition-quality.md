@@ -29,6 +29,9 @@ grade. Publication and external reindexing are needed for another measurement.
 
 | Tool or mode | Actual behavior reflected in the definition |
 | --- | --- |
+| `migrate_project_layout` | Preview leaves source content unchanged. Applying writes shared content and removes migrated/already-shared facts from the legacy facts file; private, global, and conflicting facts stay local. |
+| `update_skill` | Omitting `raw_markdown` regenerates the entire SKILL.md from metadata and can discard custom body content, including on an otherwise empty edit. Supply complete edited Markdown to retain it. |
+| `share_skill` | Can overwrite existing shared destination files without conflict checking or overwrite confirmation. No preview mode; writes use the snapshot/audit pipeline. |
 | `context`, `bootstrap` | Persist generated context summaries and audit events; repeating calls creates records. |
 | `host_check` | Leaves the host manifest intact but records validation in the audit log. |
 | `track_latent_skill` | Counts another observation on every matched invocation; retries are not idempotent. |
@@ -59,7 +62,9 @@ response through a FastMCP client. It checks:
   `tests/interfaces/mcp/fixtures/definitions_dev_85a9982.json`, allowing only added
   description metadata. A property named `description` remains an input property.
 - Real context-summary/audit persistence, tracking recurrence, and cleanup preview
-  versus deletion through the MCP adapters and actual application use cases.
+  versus deletion, legacy fact pruning, and existing shared-file overwrite through
+  the MCP adapters and actual application use cases. A sentinel test also verifies
+  whole-file regeneration when latent update Markdown is omitted.
 
 Run the complete CI checks from [Development](development.md), including the existing
 MCP compliance, parity, skill lifecycle, safety, and native-target regression tests.
@@ -74,3 +79,8 @@ specific rollback snapshot. This metadata change clarifies existing boundaries; 
 does not remove tools or implement those capabilities. Consolidation or focused server
 profiles need a separate compatibility design. Do not claim an A grade until the
 reviewed published commit has been evaluated by Glama.
+
+The lossy metadata-only `update_skill` behavior and unchecked `share_skill` destination
+overwrite remain existing application behaviors. The definitions now disclose them;
+changing their defaults or adding conflict protection needs a separate functional change
+with explicit compatibility tests.

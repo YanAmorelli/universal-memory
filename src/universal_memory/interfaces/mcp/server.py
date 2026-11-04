@@ -421,7 +421,7 @@ def configure_server(  # noqa: PLR0915
     @server.tool(
         name="migrate_project_layout",
         annotations=ToolAnnotations(
-            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+            readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False
         ),
     )
     def migrate_project_layout(  # noqa: PLR0913
@@ -429,8 +429,9 @@ def configure_server(  # noqa: PLR0915
             Literal["shared"],
             Field(
                 description=(
-                    "Destination layout. Only shared is supported; legacy source "
-                    "content is retained."
+                    "Destination layout. Only shared is supported. Applying migration "
+                    "removes migrated/already-shared facts from the legacy facts file; "
+                    "private/global/conflicting facts remain."
                 )
             ),
         ] = "shared",
@@ -438,8 +439,9 @@ def configure_server(  # noqa: PLR0915
             bool,
             Field(
                 description=(
-                    "Preview planned changes without removing/copying content when "
-                    "true (default). false applies the selected operation."
+                    "true (default) previews without modifying content. false applies "
+                    "shared writes and rewrites the legacy facts file to remove "
+                    "migrated/already-shared facts."
                 )
             ),
         ] = True,
@@ -478,12 +480,14 @@ def configure_server(  # noqa: PLR0915
             ),
         ] = None,
     ) -> ToolResponse:
-        """Preview or copy selected legacy project facts, rules, and skills into shared repository
-        storage. Use to expose curated existing content; initialize_project is for new storage
-        and share_skill shares one existing skill. Requires legacy content and filesystem
-        access. dry_run=true previews; false writes shared content and migration state while
-        retaining private selections. Returns the migration plan/results and warnings. Review
-        private exclusions before applying; copying into shared storage can expose content to
+        """Preview or migrate selected legacy project facts, rules, and skills into shared
+        repository storage. Use to expose curated existing content; initialize_project creates
+        new storage and share_skill shares one skill. Requires legacy content and filesystem
+        access. dry_run=true previews without modifying content. false writes shared content and
+        migration state, then rewrites the legacy facts file to remove migrated or already-
+        shared facts; private, global, and conflicting facts remain local. Writes use the safe
+        snapshot/audit pipeline. Returns the migration plan/results and warnings. Review private
+        exclusions and source changes before applying: shared content can become visible to
         repository collaborators.
         """
         try:
@@ -1680,7 +1684,7 @@ def configure_server(  # noqa: PLR0915
     @server.tool(
         name="share_skill",
         annotations=ToolAnnotations(
-            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+            readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False
         ),
     )
     def share_skill(
@@ -1715,11 +1719,14 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Copy an existing project skill into shared repository content for collaboration. Use for
         deliberate sharing; use sync_skills to distribute native copies without changing
-        visibility. Requires initialized project memory and a registered project skill selector.
-        Writes shared content and registration; sharing operational content additionally
-        requires confirm_operational=true. Returns the shared skill, paths, warnings, and write
-        references. Review the content for private information before sharing; repeated calls
-        may encounter destination conflicts.
+        visibility. Requires initialized project memory and a resolvable project skill. Writes
+        shared content and updates registration. Existing shared files at matching destination
+        paths can be overwritten without a destination-conflict check or an overwrite
+        confirmation; there is no preview mode. Sharing operational content additionally
+        requires confirm_operational=true. Writes use the safe snapshot/audit pipeline. Returns
+        the shared skill, paths, warnings, and write references. Inspect existing destination
+        files and remove private information before calling. Re-sharing an already-shared skill
+        can update registration and policy again.
         """
         try:
             require_project_initialized()
@@ -2583,19 +2590,23 @@ def configure_server(  # noqa: PLR0915
             str | None,
             Field(
                 description=(
-                    "Optional replacement generated SKILL.md content. Omitted "
-                    "preserves existing Markdown; supplied content is validated."
+                    "Complete replacement generated SKILL.md content, validated before "
+                    "writing. Omitted regenerates the whole file from metadata and can "
+                    "discard custom body content; supply edited full Markdown to retain it."
                 )
             ),
         ] = None,
     ) -> ToolResponse:
-        """Update metadata or generated Markdown associated with an existing latent skill. Use for
-        latent candidate edits; use update_canonical_skill for direct canonical content changes.
-        Requires initialized project memory and a latent candidate ID. Omitted optional values
-        retain existing fields; supplied Markdown can update generated skill content. Writes
-        through the safe pipeline, preserves divergent native content, and returns candidate,
-        warnings, and audit/snapshot references. Repeated calls can create additional audit
-        records.
+        """Update metadata and rewrite generated Markdown for an existing latent skill. Use for
+        latent candidate edits; use update_canonical_skill for direct canonical content
+        replacement. Requires initialized project memory and a latent candidate ID. Omitted
+        metadata values retain their stored fields, but omitting raw_markdown regenerates the
+        entire SKILL.md from metadata and can discard a customized body even when no other edit
+        is supplied. To retain custom content, read the existing file and supply complete edited
+        raw_markdown with compatible frontmatter. Writes use the safe pipeline and may
+        synchronize recorded native copies while preserving divergent native content. Returns
+        candidate, warnings, and audit/snapshot references. Repeated calls can create additional
+        audit records.
         """
         try:
             require_project_initialized()
