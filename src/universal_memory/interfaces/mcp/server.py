@@ -1361,8 +1361,9 @@ def configure_server(  # noqa: PLR0915
             list[str] | None,
             Field(
                 description=(
-                    "Phrases or situations that should select this skill. Omitted "
-                    "or empty creates no triggers."
+                    "Phrases or situations that should select the skill. Without "
+                    "raw_markdown, omitted/empty triggers render the skill name as the file"
+                    " trigger; supplied Markdown provides its frontmatter triggers."
                 )
             ),
         ] = None,
@@ -1446,7 +1447,7 @@ def configure_server(  # noqa: PLR0915
     @server.tool(
         name="create_skill_draft",
         annotations=ToolAnnotations(
-            readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+            readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False
         ),
     )
     def create_skill_draft(  # noqa: PLR0913
@@ -1490,8 +1491,9 @@ def configure_server(  # noqa: PLR0915
             list[str] | None,
             Field(
                 description=(
-                    "Phrases or situations that should select this skill. Omitted "
-                    "or empty creates no triggers."
+                    "Trigger phrases for generated draft content. Without raw_markdown, "
+                    "omitted/empty triggers render the skill name as the default trigger; "
+                    "supplied raw Markdown takes precedence."
                 )
             ),
         ] = None,
@@ -1506,12 +1508,14 @@ def configure_server(  # noqa: PLR0915
             ),
         ] = None,
     ) -> ToolResponse:
-        """Create an editable skill draft without publishing canonical content or writing native
-        runtime targets. Use when content needs review; use create_skill for direct canonical
-        creation. Project scope requires initialization. Writes the draft locally and returns
-        draft metadata, paths, validation information, and warnings. Validate with
-        validate_skill before publish_skill; repeated creation may conflict with an existing
-        draft slug.
+        """Create an editable skill draft without canonical publication or native runtime writes.
+        Use when content needs review; use create_skill for direct canonical creation. Project
+        scope requires initialization. Writes the draft file and registration with
+        snapshot/audit references. An existing unregistered file at the same draft path can be
+        overwritten without confirmation; only registered slug collisions are rejected. Inspect
+        the draft destination first. When generating Markdown, omitted/empty triggers default to
+        the skill name. Returns draft metadata, paths, validation information, and warnings.
+        Validate with validate_skill before publish_skill.
         """
         try:
             latent_scope = _latent_skill_scope(scope)
@@ -2381,9 +2385,9 @@ def configure_server(  # noqa: PLR0915
             int | None,
             Field(
                 description=(
-                    "Minimum tracked observation count, at least 1. Omitted uses 2;"
-                    " recommendations also require up to two distinct evidence "
-                    "summaries."
+                    "Minimum tracked observation count, at least 1. Omitted uses 2; also "
+                    "requires min(min_recurrence, 2) nonempty evidence entries. Duplicate "
+                    "summary text counts separately; no distinctness check."
                 )
             ),
         ] = None,
@@ -2401,9 +2405,10 @@ def configure_server(  # noqa: PLR0915
         choose candidates for proposal or promotion; use list_skills for the full catalog.
         Project/all scope requires initialized project memory. Read-only: does not promote,
         import, synchronize, create, or mutate skill records, even when dry_run=false. Uses
-        recurrence plus distinct curated evidence thresholds rather than scanning facts, logs,
-        or transcripts. Returns recommendations, thresholds, evidence sources, and limitations;
-        inspect these before propose_skill or promote_skill_recommendation.
+        recurrence plus nonempty curated evidence-entry thresholds (duplicate summaries count
+        separately) rather than scanning facts, logs, or transcripts. Returns recommendations,
+        thresholds, evidence sources, and limitations; inspect these before propose_skill or
+        promote_skill_recommendation.
         """
         try:
             _ = dry_run

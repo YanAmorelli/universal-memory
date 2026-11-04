@@ -33,6 +33,7 @@ READ_ONLY = {
     "get_skill_detail",
 }
 DESTRUCTIVE = {
+    "create_skill_draft",
     "migrate_project_layout",
     "share_skill",
     "initialize_project",
@@ -344,3 +345,78 @@ async def test_latent_update_omitted_markdown_regenerates_file_and_loses_custom_
     assert tool is not None and tool.annotations is not None
     assert tool.annotations.destructiveHint is True
     assert "can discard custom body" in tool.parameters["properties"]["raw_markdown"]["description"]
+
+
+@pytest.mark.anyio
+async def test_recommendations_count_duplicate_nonempty_evidence_entries(tmp_path: Path) -> None:
+    from tests.application.skills.test_recommend_skills import (  # noqa: PLC0415
+        ReadOnlyLatentSkillRepository,
+        make_skill,
+    )
+    from universal_memory.application.skills import RecommendSkillsUseCase  # noqa: PLC0415
+
+    repository = ReadOnlyLatentSkillRepository(
+        [
+            make_skill(evidence=["Same curated observation", "Same curated observation"]),
+        ]
+    )
+    use_case = RecommendSkillsUseCase(repository=repository)
+    server = configure_server(
+        create_mcp_server(),
+        base_use_cases(recommend_skills=use_case.execute),
+        project_root=tmp_path,
+    )
+    result = (await server.call_tool("recommend_skills", {})).structured_content
+    assert result is not None and result["ok"] is True
+    assert result["data"]["recommendations"][0]["evidence_summaries"] == [
+        "Same curated observation",
+        "Same curated observation",
+    ]
+    assert not repository.write_called
+    tool = await server.get_tool("recommend_skills")
+    assert tool is not None
+    assert "no distinctness check" in tool.parameters["properties"]["min_recurrence"]["description"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("tool_name", ["create_skill", "create_skill_draft"])
+@pytest.mark.parametrize("supply_empty_triggers", [False, True])
+async def test_generated_skill_triggers_fall_back_to_name_and_draft_can_overwrite_unregistered_file(
+    tmp_path: Path, tool_name: str, supply_empty_triggers: bool
+) -> None:
+    from tests.application.skills.test_share_skill import build_shared_use_cases  # noqa: PLC0415
+    from universal_memory.application.skills import CreateSkillDraftUseCase  # noqa: PLC0415
+    from universal_memory.application.skills.update_skill import (  # noqa: PLC0415
+        _parse_skill_markdown,
+    )
+
+    root, repository, create, share = build_shared_use_cases(tmp_path)
+    draft = CreateSkillDraftUseCase(
+        project_root=root, repository=repository, safe_write_use_case=share.safe_write_use_case
+    )
+    draft_path = root / ".umem/drafts/skills/review-helper/SKILL.md"
+    if tool_name == "create_skill_draft":
+        draft_path.parent.mkdir(parents=True)
+        draft_path.write_text("Existing unregistered draft SENTINEL.\n")
+    handler = draft.execute if tool_name == "create_skill_draft" else create.execute
+    server = configure_server(
+        create_mcp_server(), base_use_cases(**{tool_name: handler}), project_root=root
+    )
+    arguments: dict[str, Any] = {
+        "name": "Review Helper",
+        "description": "Review implementation changes safely.",
+    }
+    if supply_empty_triggers:
+        arguments["triggers"] = []
+    result = (await server.call_tool(tool_name, arguments)).structured_content
+    assert result is not None and result["ok"] is True
+    path_key = "draft_path" if tool_name == "create_skill_draft" else "skill_file"
+    generated = (root / result["data"][path_key]).read_text()
+    assert _parse_skill_markdown(generated).triggers == ["Review Helper"]
+    tool = await server.get_tool(tool_name)
+    assert tool is not None
+    if tool_name == "create_skill_draft":
+        assert "SENTINEL" not in draft_path.read_text()
+        assert result["data"]["snapshot_reference"]
+        assert tool.annotations is not None and tool.annotations.destructiveHint is True
+        assert "unregistered file" in " ".join((tool.description or "").split())

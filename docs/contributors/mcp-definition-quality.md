@@ -39,7 +39,8 @@ grade. Publication and external reindexing are needed for another measurement.
 | `repair_skills` | Removal requires both `remove_orphan_targets=true` and `dry_run=false`. |
 | `deactivate_skill` | Changes latent status and may remove native directories or write disabled stubs according to runtime policy. Canonical content remains. Reactivation does not reinstall removed native copies. |
 | `activate_skill` | Requires an ignored candidate and an existing valid generated skill file. |
-| `recommend_skills` | Both values of the compatibility flag `dry_run` remain read-only. |
+| `create_skill_draft` | Can overwrite an existing unregistered file at the draft path. Omitted/empty triggers default to the skill name in generated Markdown, as in `create_skill`. |
+| `recommend_skills` | Evidence thresholds count nonempty entries, including duplicates; distinct summary text is not required. Both values of the compatibility flag `dry_run` remain read-only. |
 | `propose_skill` / `generate_skill` | Proposal review/decision and approved latent generation form one flow. |
 | `promote_skill_recommendation` | Directly promotes a still-proposed candidate, then marks it active. Do not first approve it through `propose_skill`. `targets` alone does not enable native synchronization. |
 | `purge_fact`, `rollback_scope` | Require explicit confirmation. Rollback chooses the latest created snapshot; retrying can select a different recovery point. |
@@ -64,7 +65,9 @@ response through a FastMCP client. It checks:
 - Real context-summary/audit persistence, tracking recurrence, and cleanup preview
   versus deletion, legacy fact pruning, and existing shared-file overwrite through
   the MCP adapters and actual application use cases. A sentinel test also verifies
-  whole-file regeneration when latent update Markdown is omitted.
+  whole-file regeneration when latent update Markdown is omitted. Tests also verify
+  duplicate evidence eligibility, generated trigger defaults, and unregistered draft
+  file overwrite.
 
 Run the complete CI checks from [Development](development.md), including the existing
 MCP compliance, parity, skill lifecycle, safety, and native-target regression tests.
