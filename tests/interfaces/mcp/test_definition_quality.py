@@ -420,3 +420,56 @@ async def test_generated_skill_triggers_fall_back_to_name_and_draft_can_overwrit
         assert result["data"]["snapshot_reference"]
         assert tool.annotations is not None and tool.annotations.destructiveHint is True
         assert "unregistered file" in " ".join((tool.description or "").split())
+
+
+@pytest.mark.anyio
+async def test_global_draft_uses_workspace_file_with_user_memory_registration(
+    tmp_path: Path,
+) -> None:
+    from universal_memory.bootstrap.mcp import build_server  # noqa: PLC0415
+
+    # Use production wiring: draft creation receives the project SafeWriteUseCase.
+    # Storage repositories isolate global memory under this workspace during pytest.
+    server = build_server(project_root=tmp_path)
+    result = (
+        await server.call_tool(
+            "create_skill_draft",
+            {
+                "name": "Global Draft",
+                "description": "Review implementation changes safely.",
+                "scope": "global",
+            },
+        )
+    ).structured_content
+    assert result is not None and result["ok"] is True
+    assert result["scope"] == "global"
+    assert result["data"]["draft_path"] == "drafts/skills/global-draft/SKILL.md"
+    assert (tmp_path / "drafts/skills/global-draft/SKILL.md").is_file()
+    assert not (tmp_path / ".umem/drafts/skills/global-draft/SKILL.md").exists()
+    global_home = tmp_path / ".umem_global_test_home"
+    registry_files = list(global_home.rglob("skills.jsonl"))
+    assert registry_files
+    records = [
+        json.loads(line) for file in registry_files for line in file.read_text().splitlines()
+    ]
+    record = next(item for item in records if item["id"] == result["data"]["skill_id"])
+    assert record["scope"] == "global"
+    assert record["canonical_path"] == "drafts/skills/global-draft/SKILL.md"
+    assert not list(global_home.rglob("SKILL.md"))
+    project_events = [
+        json.loads(line)
+        for line in (tmp_path / ".umem/audit/events.jsonl").read_text().splitlines()
+    ]
+    draft_events = [event for event in project_events if event["action"] == "create_skill_draft"]
+    assert draft_events and all(event["scope"] == "project" for event in draft_events)
+    global_events = [
+        json.loads(line)
+        for file in global_home.rglob("events.jsonl")
+        for line in file.read_text().splitlines()
+    ]
+    assert all(event["action"] != "create_skill_draft" for event in global_events)
+    tool = await server.get_tool("create_skill_draft")
+    assert tool is not None
+    description = tool.parameters["properties"]["scope"]["description"]
+    assert "global writes drafts/skills/<slug>/SKILL.md" in description
+    assert "Global does not place the draft file in the user memory directory" in description

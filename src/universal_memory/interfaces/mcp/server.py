@@ -1473,8 +1473,11 @@ def configure_server(  # noqa: PLR0915
             Literal["project", "global"],
             Field(
                 description=(
-                    "Storage scope: project uses this workspace; global uses user "
-                    "memory. Defaults to project."
+                    "Registration scope, project by default. Draft files stay relative to "
+                    "the server workspace: project writes "
+                    ".umem/drafts/skills/<slug>/SKILL.md; global writes "
+                    "drafts/skills/<slug>/SKILL.md while registering in user memory. Global"
+                    " does not place the draft file in the user memory directory."
                 )
             ),
         ] = "project",
@@ -1482,8 +1485,9 @@ def configure_server(  # noqa: PLR0915
             str | None,
             Field(
                 description=(
-                    "Canonical directory slug. Omitted derives from the name where "
-                    "supported; use a portable skill slug rather than a path."
+                    "Draft directory slug. Omitted derives from the name. Registered slug "
+                    "collisions are rejected; an existing unregistered draft file can be "
+                    "overwritten."
                 )
             ),
         ] = None,
@@ -1510,12 +1514,16 @@ def configure_server(  # noqa: PLR0915
     ) -> ToolResponse:
         """Create an editable skill draft without canonical publication or native runtime writes.
         Use when content needs review; use create_skill for direct canonical creation. Project
-        scope requires initialization. Writes the draft file and registration with
-        snapshot/audit references. An existing unregistered file at the same draft path can be
-        overwritten without confirmation; only registered slug collisions are rejected. Inspect
-        the draft destination first. When generating Markdown, omitted/empty triggers default to
-        the skill name. Returns draft metadata, paths, validation information, and warnings.
-        Validate with validate_skill before publish_skill.
+        scope requires initialization. Both draft paths are relative to the server workspace:
+        project uses .umem/drafts/skills/<slug>/SKILL.md; global uses
+        drafts/skills/<slug>/SKILL.md and registers the draft in user memory. Global scope does
+        not move the physical draft into user memory; draft-file audit/snapshot writes also use
+        the project writer. Writes the draft file and registration with snapshot/audit
+        references. An existing unregistered file at the same draft path can be overwritten
+        without confirmation; only registered slug collisions are rejected. Inspect the draft
+        destination first. When generating Markdown, omitted/empty triggers default to the skill
+        name. Returns draft metadata, paths, validation information, and warnings. Validate with
+        validate_skill before publish_skill.
         """
         try:
             latent_scope = _latent_skill_scope(scope)

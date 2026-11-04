@@ -39,7 +39,7 @@ grade. Publication and external reindexing are needed for another measurement.
 | `repair_skills` | Removal requires both `remove_orphan_targets=true` and `dry_run=false`. |
 | `deactivate_skill` | Changes latent status and may remove native directories or write disabled stubs according to runtime policy. Canonical content remains. Reactivation does not reinstall removed native copies. |
 | `activate_skill` | Requires an ignored candidate and an existing valid generated skill file. |
-| `create_skill_draft` | Can overwrite an existing unregistered file at the draft path. Omitted/empty triggers default to the skill name in generated Markdown, as in `create_skill`. |
+| `create_skill_draft` | Both draft paths are workspace-relative: project uses `.umem/drafts/skills/<slug>/SKILL.md`, global uses `drafts/skills/<slug>/SKILL.md`. Global registration is in user memory, but the draft file and its writer remain project-local. Can overwrite an existing unregistered file at the draft path. Omitted/empty triggers default to the skill name in generated Markdown, as in `create_skill`. |
 | `recommend_skills` | Evidence thresholds count nonempty entries, including duplicates; distinct summary text is not required. Both values of the compatibility flag `dry_run` remain read-only. |
 | `propose_skill` / `generate_skill` | Proposal review/decision and approved latent generation form one flow. |
 | `promote_skill_recommendation` | Directly promotes a still-proposed candidate, then marks it active. Do not first approve it through `propose_skill`. `targets` alone does not enable native synchronization. |
