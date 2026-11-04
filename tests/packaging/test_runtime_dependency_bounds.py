@@ -15,7 +15,7 @@ def test_runtime_dependency_bounds_match_architecture() -> None:
         package_name = package_name.split("=", 1)[0]
         dependencies[package_name] = dependency
 
-    assert dependencies["fastmcp"] == "fastmcp>=3.3.1,<4"
+    assert dependencies["fastmcp"] == "fastmcp>=3.4.10,<4"
     assert dependencies["pydantic"] == "pydantic>=2.13.4,<3"
     assert dependencies["typer"] == "typer>=0.25.1,<0.27"
     assert dependencies["tomli-w"] == "tomli-w>=1.2.0"

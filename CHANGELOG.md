@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.6.3] - 2026-11-04
+
+### Security
+
+- Updated FastMCP and fastmcp-slim to 3.4.10, MCP to 1.30.0, Authlib to
+  1.9.3, dnspython to 2.9.0, and certifi to 2026.10.19.
+- Raised package dependency minimums so fresh installations also receive the
+  authentication, authorization, DNS parsing, and certificate trust fixes.
+- Included Authlib fixes published after the original 1.9.1 update
+  (GHSA-f3fg-34g9-v7jx and GHSA-gp2m-377p-m4j3), and the certifi follow-up
+  that preserves unaffected emSign certificates (GHSA-6q48-6c7w-9gw2).
+
+- Updated joserfc to 1.7.6 (GHSA-jpxq-7h8p-2q76, GHSA-9pg5-8c7x-5hfx)
+  and opentelemetry-api to 1.45.1 (GHSA-xcq7-p3pf-p88h), discovered during
+  the consolidated runtime dependency audit.
+
+### Compatibility
+
+- Requires Python 3.12 or newer, unchanged. MCP 1.30 restricts client redirects
+  to the endpoint origin and expires idle HTTP sessions by default.
+
 ## [0.6.2] - 2026-10-13
 
 ### Security
