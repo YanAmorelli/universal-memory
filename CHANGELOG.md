@@ -10,7 +10,7 @@ corresponding Git tags when available.
 ### Security
 
 - Updated FastMCP and fastmcp-slim to 3.4.10, MCP to 1.30.0, Authlib to
-  1.9.3, dnspython to 2.9.0, and certifi to 2026.10.19.
+  1.9.4, dnspython to 2.9.0, and certifi to 2026.10.19.
 - Raised package dependency minimums so fresh installations also receive the
   authentication, authorization, DNS parsing, and certificate trust fixes.
 - Included Authlib fixes published after the original 1.9.1 update
@@ -20,6 +20,9 @@ corresponding Git tags when available.
 - Updated joserfc to 1.7.6 (GHSA-jpxq-7h8p-2q76, GHSA-9pg5-8c7x-5hfx)
   and opentelemetry-api to 1.45.1 (GHSA-xcq7-p3pf-p88h), discovered during
   the consolidated runtime dependency audit.
+
+- Updated Authlib to 1.9.4 for GHSA-9qr6-8289-9j56, published before
+  this release was tagged.
 
 ### Compatibility
 
