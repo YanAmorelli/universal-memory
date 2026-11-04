@@ -83,3 +83,8 @@ Build the documentation with:
 ```bash
 uv run --group docs mkdocs build --strict
 ```
+
+## MCP definition contracts
+
+See [MCP definition quality](mcp-definition-quality.md) for the schema compatibility
+baseline, behavior annotations, and remaining Glama quality opportunities.

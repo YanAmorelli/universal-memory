@@ -1,0 +1,1374 @@
+{
+  "activate_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "latent_skill_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "latent_skill_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "adopt_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "default": "user-facing",
+          "enum": [
+            "user-facing",
+            "operational"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "replace_native": {
+          "default": false,
+          "type": "boolean"
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        },
+        "slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sync_after_adopt": {
+          "default": false,
+          "type": "boolean"
+        },
+        "visibility": {
+          "anyOf": [
+            {
+              "enum": [
+                "shared",
+                "private"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "bootstrap": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "cleanup_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "default": true,
+          "type": "boolean"
+        },
+        "skill_id_or_name": {
+          "type": "string"
+        },
+        "targets": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "skill_id_or_name"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "context": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_session_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "max_size_chars": {
+          "default": 4000,
+          "type": "integer"
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "create_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "default": "user-facing",
+          "enum": [
+            "user-facing",
+            "operational"
+          ],
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "raw_markdown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        },
+        "slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sync": {
+          "default": false,
+          "type": "boolean"
+        },
+        "targets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "triggers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "visibility": {
+          "anyOf": [
+            {
+              "enum": [
+                "shared",
+                "private"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "create_skill_draft": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "raw_markdown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        },
+        "slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "triggers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "deactivate_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "latent_skill_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "latent_skill_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "doctor": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "generate_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "latent_skill_id": {
+          "type": "string"
+        },
+        "update_existing": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "latent_skill_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "get_skill_detail": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "name_or_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name_or_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "host_check": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "host_id": {
+          "type": "string"
+        },
+        "max_chars": {
+          "default": 4000,
+          "type": "integer"
+        },
+        "max_lines": {
+          "default": 100,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "host_setup": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "force": {
+          "default": false,
+          "type": "boolean"
+        },
+        "host_id": {
+          "type": "string"
+        },
+        "max_chars": {
+          "default": 4000,
+          "type": "integer"
+        },
+        "max_lines": {
+          "default": 100,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "import_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "default": "user-facing",
+          "enum": [
+            "user-facing",
+            "operational"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "replace_native": {
+          "default": false,
+          "type": "boolean"
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        },
+        "sync_after_import": {
+          "default": false,
+          "type": "boolean"
+        },
+        "visibility": {
+          "anyOf": [
+            {
+              "enum": [
+                "shared",
+                "private"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "initialize_project": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "default": "legacy",
+          "enum": [
+            "legacy",
+            "shared"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "inspect_project_layout": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "list_audit_events": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "list_facts": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "anyOf": [
+            {
+              "enum": [
+                "project",
+                "global"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "default": "active",
+          "enum": [
+            "active",
+            "stale",
+            "archived",
+            "purged"
+          ],
+          "type": "string"
+        },
+        "visibility": {
+          "default": "all",
+          "enum": [
+            "shared",
+            "private",
+            "all"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "list_skills": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "list_snapshots": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "migrate_project_layout": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "default": true,
+          "type": "boolean"
+        },
+        "include": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "facts",
+                  "rules",
+                  "skills"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "private_fact_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "private_skill_slugs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "shared_operational_skill_slugs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "target_layout": {
+          "const": "shared",
+          "default": "shared",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "promote_skill_recommendation": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "edits": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "recommendation_id": {
+          "type": "string"
+        },
+        "targets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "recommendation_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "propose_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "enum": [
+                "yes",
+                "y",
+                "always",
+                "no",
+                "n"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "latent_skill_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "latent_skill_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "publish_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "default": "user-facing",
+          "enum": [
+            "user-facing",
+            "operational"
+          ],
+          "type": "string"
+        },
+        "draft_or_path": {
+          "type": "string"
+        },
+        "slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sync": {
+          "default": false,
+          "type": "boolean"
+        },
+        "targets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "visibility": {
+          "anyOf": [
+            {
+              "enum": [
+                "shared",
+                "private"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "draft_or_path"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "purge_fact": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm": {
+          "default": false,
+          "type": "boolean"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "enum": [
+                "project",
+                "global"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "recommend_skills": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "default": true,
+          "type": "boolean"
+        },
+        "min_recurrence": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global",
+            "all"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "remember_fact": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "visibility": {
+          "anyOf": [
+            {
+              "enum": [
+                "shared",
+                "private"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "rename_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "skill_id_or_name": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "skill_id_or_name",
+        "slug"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "repair_skills": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "default": true,
+          "type": "boolean"
+        },
+        "remove_orphan_targets": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "rollback_scope": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm": {
+          "default": false,
+          "type": "boolean"
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "share_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "default": "user-facing",
+          "enum": [
+            "user-facing",
+            "operational"
+          ],
+          "type": "string"
+        },
+        "confirm_operational": {
+          "default": false,
+          "type": "boolean"
+        },
+        "skill_id_or_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "skill_id_or_name"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "status": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "sync_instructions": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "apply": {
+          "default": false,
+          "type": "boolean"
+        },
+        "host_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "sync_skills": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "check_gitignore": {
+          "default": false,
+          "type": "boolean"
+        },
+        "drift_decision": {
+          "default": "keep",
+          "enum": [
+            "keep",
+            "overwrite"
+          ],
+          "type": "string"
+        },
+        "skill_id_or_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "targets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "track_latent_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "evidence_summary": {
+          "default": "Manual user invocation via MCP.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "scope": {
+          "default": "project",
+          "enum": [
+            "project",
+            "global"
+          ],
+          "type": "string"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "update_canonical_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "drift_decision": {
+          "default": "keep",
+          "enum": [
+            "keep",
+            "overwrite"
+          ],
+          "type": "string"
+        },
+        "raw_markdown": {
+          "type": "string"
+        },
+        "skill_id_or_name": {
+          "type": "string"
+        },
+        "sync": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "skill_id_or_name",
+        "raw_markdown"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "update_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "latent_skill_id": {
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "raw_markdown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "triggers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "latent_skill_id"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  },
+  "validate_skill": {
+    "input": {
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "anyOf": [
+            {
+              "enum": [
+                "project",
+                "global"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "skill_or_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "skill_or_path"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": true,
+      "type": "object"
+    }
+  }
+}
