@@ -1,6 +1,6 @@
 [project]
 name = "universal-memory"
-version = "0.6.2"
+version = "0.6.3"
 description = "Vendor-agnostic cognitive persistence layer for AI agents."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -33,7 +33,12 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "fastmcp>=3.3.1,<4",
+    "fastmcp>=3.4.10,<4",
+    # Security floors for the MCP authentication and transport dependency chain.
+    "authlib>=1.9.3",
+    "certifi>=2026.10.19",
+    "dnspython>=2.9.0",
+    "mcp>=1.30.0,<2",
     "pydantic>=2.13.4,<3",
     "rich>=15.0.0",
     "tomli-w>=1.2.0",
