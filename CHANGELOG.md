@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 This project follows semantic versioning while it is in alpha. Dates are based on the
 corresponding Git tags when available.
 
+## [0.6.4] - 2026-11-04
+
+### Changed
+
+- Improve MCP tool definitions, parameter descriptions, and behavior annotations.
+
 ## [0.6.3] - 2026-11-04
 
 ### Security
