@@ -35,7 +35,7 @@ classifiers = [
 dependencies = [
     "fastmcp>=3.4.10,<4",
     # Security floors for the MCP authentication and transport dependency chain.
-    "authlib>=1.9.3",
+    "authlib>=1.9.4",
     "certifi>=2026.10.19",
     "dnspython>=2.9.0",
     "mcp>=1.30.0,<2",
