@@ -17,6 +17,10 @@ corresponding Git tags when available.
   (GHSA-f3fg-34g9-v7jx and GHSA-gp2m-377p-m4j3), and the certifi follow-up
   that preserves unaffected emSign certificates (GHSA-6q48-6c7w-9gw2).
 
+- Updated joserfc to 1.7.6 (GHSA-jpxq-7h8p-2q76, GHSA-9pg5-8c7x-5hfx)
+  and opentelemetry-api to 1.45.1 (GHSA-xcq7-p3pf-p88h), discovered during
+  the consolidated runtime dependency audit.
+
 ### Compatibility
 
 - Requires Python 3.12 or newer, unchanged. MCP 1.30 restricts client redirects
