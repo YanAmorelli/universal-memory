@@ -435,6 +435,16 @@ umem skills generate <latent-skill-id> --yes
 
 ---
 
+## Recommended Companion Tools
+
+*   **[Aparta](https://github.com/lucascarvalhal/aparta):** We recommend Aparta if you
+    work across personal, work, or client accounts. It configures per-project identities
+    for Git, GitHub CLI, cloud tools, and supported AI coding agents. While UMem carries
+    your context and preferences across sessions and tools, Aparta helps those tools use
+    the right account for each project folder.
+
+---
+
 ## License
 
 Distributed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for more information.
