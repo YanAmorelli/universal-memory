@@ -46,7 +46,7 @@ def _git(cwd: Path, *args: str, optional: bool = False) -> str | None:
             "Git discovery failed. Hint: check repository access and ownership, then retry; "
             "no project files were written."
         )
-    return result.stdout.strip()
+    return result.stdout.removesuffix("\n")
 
 
 def _marker(start: Path) -> Path | None:
@@ -64,7 +64,7 @@ def _marker(start: Path) -> Path | None:
 def _checkout_git_dir(checkout: Path) -> Path:
     entry = checkout / ".git"
     if entry.is_file():
-        content = entry.read_text().strip()
+        content = entry.read_text().removesuffix("\n")
         if content.startswith("gitdir: "):
             return (checkout / content.removeprefix("gitdir: ")).resolve()
     return entry.resolve()

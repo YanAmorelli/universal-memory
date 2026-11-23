@@ -923,3 +923,12 @@ def test_cli_git_failure_returns_structured_error_without_writing(repository, mo
     after = {p.relative_to(outside): p.read_bytes() for p in outside.rglob("*") if p.is_file()}
     assert before == after
     assert not (root / ".umem").exists()
+
+
+def test_git_paths_keep_quotes_and_trailing_whitespace(repository, tmp_path):
+    root, _, _ = repository
+    linked = tmp_path / 'quoted "worktree" '
+    git(root, "worktree", "add", "-b", "quoted", str(linked))
+    roots = resolve_project_roots(linked)
+    assert roots.project_root == linked
+    assert roots.memory_root == root
