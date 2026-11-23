@@ -152,11 +152,21 @@ memory; JSON output, noninteractive commands, and MCP return an initialization e
 with `memory_root` and instructions to ask the person and run `umem init`. Global
 commands remain available without project initialization.
 
-Concurrent writers use kernel leases alongside legacy lock files. An abandoned
-legacy lock may be recovered after 10 seconds; a live updated writer retains its
-lease until exit, with a 2-second acquisition timeout (audit keeps its configured
-timeout). Use the same UMEM version in concurrent sessions; older versions do not
-participate in these leases.
+Concurrent writers use kernel leases alongside legacy UUID lock files, with a
+2-second acquisition timeout (audit keeps its configured timeout). Updated writers
+pin the legacy lock timestamp in the future so released 0.6.1/0.6.4 cannot expire
+it after 10 seconds, even if the writer is suspended. A previous updated owner's
+lock is recovered only after its kernel lease ends and its token and inode match.
+An unknown old lock is never evicted by age or a guessed PID; after an old crash,
+recovery may require stopping every writer and reviewing that lock manually.
+
+**To eliminate mixed-session risk, stop all old CLI commands and MCP servers,
+update every executable and integration pin, then restart those sessions.** An
+executable upgrade alone does not replace code already loaded by an MCP server.
+Old rollback, initialization, config and direct SafeWrite paths do not acquire the
+repository locks; new code cannot force them to cooperate. The compatibility
+fence protects the tested repository write paths, not every possible old write.
+See [the compatibility analysis](docs/mixed-version-locks.md) for evidence and limits.
 
 ### 1. Initialize your project
 

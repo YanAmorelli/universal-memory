@@ -182,6 +182,23 @@ def test_separate_git_directory_does_not_become_memory_owner(tmp_path: Path) -> 
     assert roots.memory_root == root
 
 
+def test_hook_git_environment_cannot_redirect_project_resolution(
+    repository: tuple[Path, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, _, outside = repository
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
+    git(unrelated, "init")
+    monkeypatch.setenv("GIT_DIR", str(unrelated / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(unrelated))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(unrelated / ".git/index"))
+    roots = resolve_project_roots(outside)
+    assert roots.project_root == outside
+    assert roots.memory_root == root
+
+
 def test_complete_worktree_memory_does_not_implicitly_initialize_main(
     repository: tuple[Path, Path, Path],
 ) -> None:
@@ -401,7 +418,7 @@ def test_host_instructions_follow_worktree(repository: tuple[Path, Path, Path]) 
 
 
 @pytest.mark.parametrize("kind", ["facts", "audit", "snapshots"])
-def test_abandoned_legacy_lock_is_recovered(tmp_path: Path, kind: str) -> None:
+def test_unknown_legacy_lock_is_not_recovered_by_age(tmp_path: Path, kind: str) -> None:
     paths = {
         "facts": "memory/facts.jsonl.lock",
         "audit": "audit/events.jsonl.lock",
@@ -417,10 +434,9 @@ def test_abandoned_legacy_lock_is_recovered(tmp_path: Path, kind: str) -> None:
         lock = LocalAuditLogRepository(project_root=tmp_path, data_root=tmp_path / ".umem")._lock()
     else:
         lock = LocalSnapshotRepository(project_root=tmp_path, data_root=tmp_path / ".umem")._lock()
-    with lock:
-        assert path.exists()
-        assert path.read_text() != "abandoned"
-    assert not path.exists()
+    with pytest.raises((StorageError, SnapshotFailedError)), lock:
+        pytest.fail("unknown legacy lock was evicted")
+    assert path.read_text() == "abandoned"
 
 
 def test_remember_survives_worktree_remove(repository: tuple[Path, Path, Path]) -> None:

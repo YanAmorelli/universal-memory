@@ -1,0 +1,90 @@
+# Mixed-version storage locks
+
+Project memory sharing makes mixed-version sessions a practical risk. The way to
+eliminate that risk is a quiescent upgrade: stop old CLI commands and all old MCP
+processes, update every installation and integration pin, and start new sessions.
+Do not run archived old versions against the shared store during that cutover.
+Upgrading a binary leaves an already-running MCP process on its loaded old code.
+
+## Evidence from released code
+
+The fact, audit and snapshot repositories in tags `v0.6.1` and `v0.6.4` are byte
+identical to the installed 0.6.1 distribution examined for this change. Unmodified
+copies and SHA-256 digests are in `tests/fixtures/legacy_0_6_x/`. Regression tests
+load those released modules in separate processes; they do not mock their lock
+algorithms. The same worker can use a complete old source tree through the
+test-only `UMEM_REAL_LEGACY_SRC` environment variable.
+
+- Facts read the legacy lock's mtime, unlink it if `time.time() - mtime > 10`,
+  then acquire with `O_CREAT | O_EXCL`. They write a UUID, not a PID, and check
+  that UUID on release. The acquisition timeout is approximately two seconds.
+- Audit and snapshot locks also expire after ten seconds. Their release unlinks
+  the path without checking ownership. Audit has a configurable acquisition
+  timeout; snapshots use approximately two seconds.
+- Rules and skill registries have the same age-based expiry. Context summaries
+  already use a stable `flock` and have no age-based eviction.
+- Repository locks do not encompass arbitrary SafeWrite targets, initialization,
+  configuration read/merge/write, rollback or native host/skill files. In particular,
+  old rollback can replace a fact file without acquiring its repository lock.
+
+An old writer could therefore evict the first implementation's live new UUID
+lock after ten seconds. The new writer could also evict a live old UUID lock,
+since the old process did not acquire the new kernel lease. Two old writers can
+still evict one another; no change confined to the new executable can repair that.
+
+## Chosen compatibility fence
+
+The persisted fact, config, audit and snapshot formats remain unchanged, and the
+legacy `.lock` still contains only its original UUID. No data migration is needed.
+The already-stable operational `.guard` sidecar now records the UUID and the lock
+file's device/inode while holding its kernel lease. It is not a memory record.
+
+Before entering a mutation, the new owner prepares a private inode with lock mtime
+`9000000000000000000` nanoseconds since epoch (2255). It verifies that the filesystem
+preserved that timestamp and that the named inode still belongs to it. The old
+expiry expression then sees a negative age under ordinary clock changes. This
+requires no heartbeat thread and continues to protect a `SIGSTOP`'ed owner. The
+already-pinned inode is published at the legacy path with an atomic hard link:
+old readers never see an initial normal mtime that they could cache before a
+suspension. Filesystems without hard links fail before entering the mutation.
+
+The new implementation never expires an unknown UUID-only lock. It recovers a
+previous updated lock only while owning the kernel lease and only when its UUID,
+device and inode match the operational ownership record. The kernel releases a
+dead process's lease, so crash recovery does not depend on a PID, PID reuse,
+process-start timestamps or wall-clock age. A partial ownership record fails
+closed; it may need manual recovery after all writers have stopped.
+
+The `.guard` inode must not be unlinked or replaced while writers may exist. Old
+versions ignore it, so older installations do not need to understand a new schema.
+Versions of this branch predating this fence may leave an empty sidecar; their
+unrecognized leftover locks are also treated conservatively.
+
+## Alternatives considered
+
+| Option | Limit |
+| --- | --- |
+| Renew mtime periodically | Stops during suspension, starvation or a long runtime pause; a forward clock jump can expire the lock before renewal. |
+| Shorten critical sections | Reduces probability; storage stalls and suspension still exceed ten seconds. |
+| Evict only when the PID is dead | Old UUID locks contain no PID; PID reuse and permission errors make guessed ownership unsafe. A PID in new locks would not change old readers. |
+| Add an incompatible-version marker | Old writers do not check it. A marker only the new executable obeys cannot fence a running old process. Enforced schema rejection would require a separately approved format/migration change. |
+| Kernel lease alone | Old versions never acquire it and still unlink the legacy lock. |
+| Future mtime plus proven kernel ownership | Protects cooperative repository paths through suspension; unknown old owners are never expelled. Does not fence old paths that ignore locks. |
+
+## Validation and remaining boundaries
+
+The mixed-process test holds actual read/modify/write operations across more than
+ten real seconds, suspends their processes with `SIGSTOP`, and runs contenders in
+both directions for facts, audit and snapshots. Contenders must return a typed
+timeout without writing; after the holder resumes and completes, retry succeeds
+and both records remain. Updated-process crashes are tested separately, as are
+unknown ancient locks and clocks beyond the fence horizon.
+
+There is no claim of universal zero risk: old unlocked write paths and old/old
+concurrency remain outside this protocol. External modification of lock files,
+filesystems without reliable POSIX locking or nanosecond timestamps, or an OS
+clock jumping beyond the 2255 fence can invalidate the assumptions of old readers.
+The new executable fails before mutation when its initial clock/filesystem checks
+detect those problems, but it cannot control a later clock jump observed by old
+code. The quiescent upgrade described above removes the mixed-version dependency;
+all updated writers must still share a filesystem that honors kernel leases.

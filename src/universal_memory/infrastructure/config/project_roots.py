@@ -20,6 +20,20 @@ class ProjectRoots:
 
 
 def _git(cwd: Path, *args: str) -> str | None:
+    environment = dict(os.environ)
+    # Git hooks export repository-local variables. They must not override the
+    # directory being resolved (or redirect a child process into another repo).
+    for key in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_COMMON_DIR",
+        "GIT_INDEX_FILE",
+        "GIT_PREFIX",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_NAMESPACE",
+    ):
+        environment.pop(key, None)
     try:
         result = subprocess.run(  # noqa: S603
             ["git", "-C", str(cwd), *args],  # noqa: S607
@@ -27,6 +41,7 @@ def _git(cwd: Path, *args: str) -> str | None:
             text=True,
             check=False,
             timeout=5,
+            env=environment,
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
