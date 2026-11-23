@@ -48,6 +48,17 @@ def main() -> int:
     )
     from universal_memory.infrastructure.storage import LocalFactRepository
 
+    if version == "old" and os.environ.get("UMEM_REAL_LEGACY_SRC"):
+        legacy_root = Path(os.environ["UMEM_REAL_LEGACY_SRC"]).resolve()
+        for repository_type in (
+            LocalFactRepository,
+            LocalAuditLogRepository,
+            LocalSnapshotRepository,
+        ):
+            module_file = sys.modules[repository_type.__module__].__file__
+            assert module_file is not None
+            assert Path(module_file).resolve().is_relative_to(legacy_root)
+
     if version == "old" and not os.environ.get("UMEM_REAL_LEGACY_SRC"):
         LocalAuditLogRepository = load_legacy("local_audit_log_repository").LocalAuditLogRepository
         LocalSnapshotRepository = load_legacy("local_snapshot_repository").LocalSnapshotRepository

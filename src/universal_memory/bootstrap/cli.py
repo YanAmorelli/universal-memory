@@ -51,6 +51,7 @@ from universal_memory.application.skills import (
     UpdateSkillUseCase,
     ValidateSkillUseCase,
 )
+from universal_memory.application.skills.native_skill_sync import NativeSkillSync
 from universal_memory.application.update import (
     UpdateBenchmarksUseCase,
     UpdateCheckUseCase,
@@ -141,7 +142,21 @@ class EmptyLatentSkillRepository(LatentSkillRepository):
 
 
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
-    roots = resolve_project_roots()
+    from universal_memory.infrastructure.config.project_roots import (  # noqa: PLC0415
+        ProjectRootResolutionError,
+    )
+    from universal_memory.interfaces.cli.init_command import (  # noqa: PLC0415
+        _determine_output_format,
+        _print_expected_error,
+    )
+
+    try:
+        roots = resolve_project_roots()
+    except ProjectRootResolutionError as error:
+        _print_expected_error(
+            error, output_format=_determine_output_format(list(argv or sys.argv[1:]))
+        )
+        return 1
     project_root = roots.memory_root
     for warning in roots.warnings:
         print(f"Warning: {warning}", file=sys.stderr)
@@ -271,6 +286,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         rule_repository=rule_repository,
         fact_repository=fact_repository,
     )
+    native_skill_sync = NativeSkillSync(
+        project_root=roots.project_root,
+        canonical_root=project_root,
+        safe_write_use_case=host_safe_write,
+    )
     propose_skill_use_case = ProposeSkillUseCase(
         project_root=project_root,
         repository=latent_skill_repository,
@@ -280,6 +300,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         repository=latent_skill_repository,
     )
     generate_skill_use_case = GenerateSkillUseCase(
+        native_skill_sync=native_skill_sync,
         project_root=project_root,
         repository=latent_skill_repository,
         safe_write_use_case=safe_write_use_case,
@@ -288,6 +309,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         ),
     )
     create_skill_use_case = CreateSkillUseCase(
+        native_skill_sync=native_skill_sync,
         project_root=project_root,
         repository=agent_skill_repository,
         safe_write_use_case=safe_write_use_case,
@@ -296,6 +318,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         ),
     )
     sync_skills_use_case = SyncSkillsUseCase(
+        native_skill_sync=native_skill_sync,
         project_root=project_root,
         repository=agent_skill_repository,
         safe_write_use_case=safe_write_use_case,
@@ -308,6 +331,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         create_skill_use_case=create_skill_use_case,
     )
     import_skill_use_case = ImportSkillUseCase(
+        native_skill_sync=native_skill_sync,
         project_root=project_root,
         repository=agent_skill_repository,
         safe_write_use_case=safe_write_use_case,
@@ -321,6 +345,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         safe_write_use_case=safe_write_use_case,
     )
     publish_skill_use_case = PublishSkillUseCase(
+        native_skill_sync=native_skill_sync,
         project_root=project_root,
         repository=agent_skill_repository,
         safe_write_use_case=safe_write_use_case,
@@ -346,6 +371,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         ),
     )
     update_canonical_skill_use_case = UpdateCanonicalSkillUseCase(
+        native_skill_sync=native_skill_sync,
         project_root=project_root,
         repository=agent_skill_repository,
         safe_write_use_case=safe_write_use_case,
@@ -370,11 +396,13 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         repository=latent_skill_repository,
     )
     _deactivate_skill_use_case = DeactivateSkillUseCase(
+        native_skill_sync=native_skill_sync,
         repository=latent_skill_repository,
         project_root=project_root,
         safe_write_use_case=safe_write_use_case,
     )
     _update_skill_use_case = UpdateSkillUseCase(
+        native_skill_sync=native_skill_sync,
         project_root=project_root,
         repository=latent_skill_repository,
         safe_write_use_case=safe_write_use_case,

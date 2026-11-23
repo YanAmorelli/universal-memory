@@ -8,6 +8,7 @@ from universal_memory.domain.project_layout import (
 )
 from universal_memory.infrastructure.config.project_layout import (
     ensure_project_layout,
+    has_project_identity,
     inspect_project_layout,
     is_project_initialized,
     resolve_project_layout,
@@ -17,6 +18,9 @@ from universal_memory.infrastructure.config.toml_loader import load_config
 
 
 class LocalProjectLayoutPort(ProjectLayoutPort):
+    def has_project_identity(self, project_root: Path) -> bool:
+        return has_project_identity(project_root)
+
     def ensure_project_layout(self, project_root: Path) -> ProjectLayoutResult:
         return ensure_project_layout(project_root)
 

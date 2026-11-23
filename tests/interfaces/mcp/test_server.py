@@ -419,7 +419,7 @@ async def test_doctor_tool_uses_injected_use_case_and_matches_cli_json_contract(
     result = await server.call_tool("doctor", {})
 
     assert "doctor" in tool_names
-    assert received == [DoctorCommand(project_root=tmp_path)]
+    assert received == [DoctorCommand(project_root=tmp_path, memory_root=tmp_path)]
     assert result.structured_content == {
         "ok": True,
         "operation": "doctor",

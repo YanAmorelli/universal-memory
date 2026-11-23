@@ -166,3 +166,57 @@ def test_first_legacy_visibility_already_has_nonexpiring_mtime(
         assert path.stat().st_mtime_ns == LEGACY_LOCK_MTIME_NS
     assert seen == [path]
     assert not list(tmp_path.glob("*.pending"))
+
+
+@pytest.mark.parametrize(
+    "stage",
+    ["guard_before", "guard_after", "link_before", "link_after", "pending_before", "pending_after"],
+)
+def test_crash_during_lock_publication_preserves_records(tmp_path: Path, stage: str) -> None:
+    code = """
+import os,sys
+from pathlib import Path
+from universal_memory.infrastructure.process_lock import legacy_file_lock
+root=Path(sys.argv[1]); stage=sys.argv[2]
+def pause(label):
+    if stage == label:
+        print('held', flush=True)
+        sys.stdin.readline()
+fsync=os.fsync; link=os.link; unlink=Path.unlink
+def guarded_fsync(fd):
+    pause('guard_before'); result=fsync(fd); pause('guard_after'); return result
+def guarded_link(*args, **kwargs):
+    pause('link_before'); result=link(*args, **kwargs); pause('link_after'); return result
+def guarded_unlink(path, *args, **kwargs):
+    if path.suffix == '.pending': pause('pending_before')
+    result=unlink(path, *args, **kwargs)
+    if path.suffix == '.pending': pause('pending_after')
+    return result
+os.fsync=guarded_fsync; os.link=guarded_link; Path.unlink=guarded_unlink
+with legacy_file_lock(root/'records.lock'):
+    with (root/'records').open('a') as stream: stream.write('interrupted\\n')
+"""
+    records_path = tmp_path / "records"
+    records_path.write_text("seed\n")
+    child = subprocess.Popen(  # noqa: S603
+        [sys.executable, "-c", code, str(tmp_path), stage],
+        env={**os.environ, "PYTHONPATH": str(SOURCE)},
+        cwd=tmp_path,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        await_held(child)
+        guard = tmp_path / "records.lock.guard"
+        inode = guard.stat().st_ino
+    finally:
+        child.kill()
+        child.communicate(timeout=5)
+    with legacy_file_lock(tmp_path / "records.lock"):
+        with records_path.open("a") as stream:
+            stream.write("retry\n")
+    assert records_path.read_text().splitlines() == ["seed", "retry"]
+    assert guard.stat().st_ino == inode
+    assert not (tmp_path / "records.lock").exists()

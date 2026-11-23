@@ -10,24 +10,14 @@ from universal_memory.application.memory import (
     AssembleContextSummaryResult,
     AssembleContextSummaryUseCase,
 )
-from universal_memory.domain.exceptions import ValidationFailedError
-from universal_memory.infrastructure.config.project_layout import is_project_initialized
+from universal_memory.application.memory.operation_scope import operation_scope
+from universal_memory.domain.exceptions import ProjectNotInitializedError  # noqa: F401
+from universal_memory.infrastructure.config.project_layout import (
+    has_project_identity,
+    require_initialized,
+)
 from universal_memory.infrastructure.security import LocalAuditLogRepository
 from universal_memory.infrastructure.storage import LocalContextSummaryRepository
-
-
-class ProjectNotInitializedError(ValidationFailedError):
-    def __init__(self, memory_root: Path) -> None:
-        self.memory_root = str(memory_root)
-        super().__init__(
-            "Project memory is not initialized. "
-            "Hint: Ask the person whether to initialize, then run `umem init`."
-        )
-
-
-def require_initialized(memory_root: Path) -> None:
-    if not is_project_initialized(memory_root):
-        raise ProjectNotInitializedError(memory_root)
 
 
 def scoped_context_handler(
@@ -63,49 +53,10 @@ def guard_project_operation[T](
 ) -> Callable[[Any], T]:
     @wraps(handler)
     def guarded(command: Any) -> T:
-        if (
-            not is_project_initialized(memory_root)
-            and operation_scope(handler, command) != "global"
-        ):
+        if not has_project_identity(memory_root) and operation_scope(handler, command) != "global":
             if initialize is not None:
                 initialize()
             require_initialized(memory_root)
         return handler(command)
 
     return guarded
-
-
-def operation_scope(handler: Callable[..., Any], command: Any) -> str | None:
-    scope = getattr(command, "scope", None)
-    if scope is not None:
-        return getattr(scope, "value", scope)
-    owner = getattr(handler, "__self__", None)
-    identifier = next(
-        (
-            getattr(command, key)
-            for key in (
-                "latent_skill_id",
-                "recommendation_id",
-                "skill_id_or_name",
-                "draft_or_path",
-                "id",
-            )
-            if getattr(command, key, None)
-        ),
-        None,
-    )
-    if not identifier:
-        return None
-    for key in ("repository", "recommendation_repository", "fact_repository"):
-        repository = getattr(owner, key, None)
-        if repository is None:
-            continue
-        for entity in repository.list():
-            if identifier in (
-                entity.id,
-                getattr(entity, "name", None),
-                getattr(entity, "slug", None),
-                getattr(entity, "canonical_path", None),
-            ):
-                return entity.scope.value
-    return None

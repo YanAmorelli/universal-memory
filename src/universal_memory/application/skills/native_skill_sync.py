@@ -50,8 +50,10 @@ class NativeSkillSync:
         project_root: Path,
         safe_write_use_case: SafeWriteUseCase,
         runtime_registry: RuntimeRegistry | None = None,
+        canonical_root: Path | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
+        self.canonical_root = (canonical_root or project_root).resolve()
         self.safe_write_use_case = safe_write_use_case
         self.runtime_registry = runtime_registry or default_runtime_registry()
 
@@ -67,7 +69,7 @@ class NativeSkillSync:
         targets: list[str] | None = None,
         allow_unmanaged_overwrite: bool = True,
     ) -> NativeSkillSyncResult:
-        canonical_path = (canonical_base_path or self.project_root) / canonical_skill_file
+        canonical_path = (canonical_base_path or self.canonical_root) / canonical_skill_file
         canonical_dir = canonical_path.parent
         canonical_files = _directory_files(canonical_dir)
         previous_by_path = _previous_installations_by_path(skill.metadata)
@@ -303,7 +305,7 @@ class NativeSkillSync:
 
     def _enabled_runtime_ids_from_config(self) -> list[str] | None:
         try:
-            loaded = load_config(self.project_root)
+            loaded = load_config(self.canonical_root)
         except (OSError, InvalidConfigError, StorageError) as exc:
             raise ValidationFailedError(f"Failed to read project configuration: {exc}") from exc
         raw_runtimes = loaded.merged.get("runtimes")

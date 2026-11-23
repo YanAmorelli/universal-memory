@@ -191,7 +191,11 @@ class LocalAgentSkillRepository(AgentSkillRepository):
         lock_path = storage_path.with_suffix(".jsonl.lock")
         if scope == LatentSkillScope.project and self.layout.is_shared:
             lock_path = self.layout.operational_locks_root / "skills.jsonl.lock"
-        with legacy_file_lock(lock_path, stale_after=STALE_LOCK_SECONDS):
+        with legacy_file_lock(
+            lock_path,
+            stale_after=STALE_LOCK_SECONDS,
+            message=f"Failed to acquire lock on skills storage for scope {scope.value}",
+        ):
             yield
 
     def _load_skills(self, scope: LatentSkillScope) -> list[AgentSkill]:

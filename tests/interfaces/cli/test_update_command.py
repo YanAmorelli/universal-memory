@@ -87,8 +87,6 @@ def test_update_migrate_cli_adds_schema_and_reports_audit(
         encoding="utf-8",
     )
 
-    LocalProjectLayoutPort().ensure_project_layout(tmp_path)
-
     exit_code = main(["update", "--migrate", "--format", "json", "--yes"])
 
     payload = json.loads(capsys.readouterr().out)
@@ -137,8 +135,6 @@ def test_update_default_applies_required_migration(tmp_path: Path, monkeypatch, 
         '[hosts]\nenabled = ["codex"]\n',
         encoding="utf-8",
     )
-
-    LocalProjectLayoutPort().ensure_project_layout(tmp_path)
 
     exit_code = main(["update", "--format", "json", "--yes"])
 

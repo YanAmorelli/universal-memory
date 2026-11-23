@@ -96,7 +96,7 @@ class _SyncSkillsCommandSchema(BaseModel):
 
 
 class SyncSkillsUseCase:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         project_root: Path,
@@ -104,12 +104,13 @@ class SyncSkillsUseCase:
         safe_write_use_case: SafeWriteUseCase,
         global_safe_write_use_case: SafeWriteUseCase | None = None,
         runtime_registry: RuntimeRegistry | None = None,
+        native_skill_sync: NativeSkillSync | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.repository = repository
         self.safe_write_use_case = safe_write_use_case
         self.global_safe_write_use_case = global_safe_write_use_case or safe_write_use_case
-        self.native_skill_sync = NativeSkillSync(
+        self.native_skill_sync = native_skill_sync or NativeSkillSync(
             project_root=self.project_root,
             safe_write_use_case=safe_write_use_case,
             runtime_registry=runtime_registry,
@@ -142,7 +143,7 @@ class SyncSkillsUseCase:
             )
             gitignore_warnings = (
                 collect_gitignore_warnings(
-                    self.project_root,
+                    self.native_skill_sync.project_root,
                     [
                         str(installation.get("path", ""))
                         for installation in native_result.installations

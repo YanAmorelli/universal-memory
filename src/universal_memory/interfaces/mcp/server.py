@@ -41,6 +41,7 @@ from universal_memory.application.memory import (
     RememberFactCommand,
     RememberFactResult,
 )
+from universal_memory.application.memory.operation_scope import operation_scope
 from universal_memory.application.onboarding import (
     AgentConnectionExecution,
     AgentConnectionPlan,
@@ -105,7 +106,6 @@ from universal_memory.application.skills import (
     ValidateSkillCommand,
     ValidateSkillResult,
 )
-from universal_memory.bootstrap.project_memory import ProjectNotInitializedError, operation_scope
 from universal_memory.domain import StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEventScope,
@@ -118,6 +118,7 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.entities.runtime import default_runtime_registry
+from universal_memory.domain.exceptions import ProjectNotInitializedError
 from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.infrastructure.config.project_roots import resolve_project_roots
 from universal_memory.interfaces import errors as interface_errors
@@ -545,7 +546,9 @@ def configure_server(  # noqa: PLR0915
         success/failure details and recovery guidance.
         """
         try:
-            result = use_cases.doctor(DoctorCommand(project_root=root))
+            result = use_cases.doctor(
+                DoctorCommand(project_root=roots.project_root, memory_root=root)
+            )
             return _doctor_success_envelope(result)
         except Exception as error:
             return _mcp_tool_error(error, operation="doctor", scope="environment")

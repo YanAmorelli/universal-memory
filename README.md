@@ -138,7 +138,8 @@ deleting either tree.
 
 Git worktrees share project memory with the main checkout, including commands run
 from subdirectories. Host instructions such as `CLAUDE.md` remain in the current
-worktree. For a bare repository, the shared memory lives in the bare repository's
+worktree, as do generated native skill files; canonical skills remain shared.
+For a bare repository, the shared memory lives in the bare repository's
 `.umem/` directory. Outside Git, UMEM uses the nearest ancestor containing `.umem/`,
 or the current directory for a new project.
 
@@ -147,10 +148,22 @@ owner (for example, the current worktree). Existing local memory is never moved 
 deleted: UMEM warns when local records are excluded by the shared-root selection.
 Review those records before removing a worktree.
 
+Git discovery failures stop project resolution before writing. Discovery uses
+portable Git options and supports submodule worktrees. A linked worktree created
+from `--separate-git-dir` may have no authoritative backlink to the main checkout;
+UMEM then requires an explicit `UMEM_MEMORY_ROOT` instead of choosing Git metadata.
+In a container with `.git` pointing to `.bare`, memory belongs to `.bare` while
+host files belong to the container or active linked worktree.
+
 Project mutations require initialization. Interactive commands ask before creating
 memory; JSON output, noninteractive commands, and MCP return an initialization error
 with `memory_root` and instructions to ask the person and run `umem init`. Global
 commands remain available without project initialization.
+An older initialized project is recognized by valid project/host configuration
+and its memory directory even when newer optional benchmark files are missing.
+`umem update --migrate` can repair that older layout; `doctor` still reports
+incomplete layout components. Audit or host remnants alone do not initialize a
+project.
 
 Concurrent writers use kernel leases alongside legacy UUID lock files, with a
 2-second acquisition timeout (audit keeps its configured timeout). Updated writers

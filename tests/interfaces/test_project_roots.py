@@ -219,6 +219,7 @@ def test_complete_worktree_memory_does_not_implicitly_initialize_main(
         ["remember", "no implicit storage", "--scope", "project"],
         ["context"],
         ["bootstrap"],
+        ["update", "--migrate", "--yes"],
         ["facts", "purge", "--scope", "project", "--yes"],
         ["host", "setup", "claude_code", "--yes"],
         ["skills", "create", "--name", "uninitialized", "--description", "A test skill"],
@@ -307,42 +308,31 @@ def test_all_cli_project_mutators_are_guarded(
     monkeypatch.setattr(cli_bootstrap, "build_main", capture)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     assert main([]) == 0
-    mutations = (
-        "bootstrap",
-        "context",
-        "remember",
-        "facts_purge",
-        "facts_hygiene",
-        "rollback",
-        "host_setup",
-        "host_check",
-        "host_sync",
-        "propose_skill",
-        "track_latent_skill",
-        "generate_skill",
-        "create_skill",
-        "create_skill_draft",
-        "publish_skill",
-        "share_skill",
-        "sync_skills",
-        "promote_skill_recommendation",
-        "import_skill",
-        "adopt_skill",
-        "update_canonical_skill",
-        "rename_skill",
-        "cleanup_skill",
-        "repair_skills",
-        "activate_skill",
-        "deactivate_skill",
-        "update_skill",
-        "update_managed_skills",
-        "update_migrate",
-        "update_benchmarks",
-        "layout_migrate",
-    )
-    for mutation in mutations:
+    # Discover every composed command. New commands default to mutation until
+    # explicitly reviewed as read-only; a new unguarded mutator fails this test.
+    readers = {
+        "audit_list",
+        "snapshots_list",
+        "rollback_preview",
+        "status",
+        "doctor",
+        "facts_list",
+        "validate_skill",
+        "recommend_skills",
+        "list_skills",
+        "get_skill_detail",
+        "update_check",
+        "agent_connection_plan",
+    }
+    mutations = {
+        name: handler
+        for name, handler in handlers.items()
+        if name.endswith("_command") and name.removesuffix("_command") not in readers
+    }
+    assert mutations
+    for _name, handler in mutations.items():
         with pytest.raises(ProjectNotInitializedError):
-            handlers[mutation + "_command"](SimpleNamespace(scope=FactScope.project))
+            handler(SimpleNamespace(scope=FactScope.project))
     assert not (tmp_path / ".umem").exists()
 
 
@@ -362,38 +352,30 @@ def test_all_mcp_project_mutators_are_guarded(
     # build_server imports the public re-export, so patch it as well.
     monkeypatch.setattr("universal_memory.interfaces.mcp.configure_server", capture)
     build_server(tmp_path)
-    mutations = (
-        "bootstrap",
-        "context",
-        "remember",
-        "purge_fact",
-        "rollback_scope",
-        "host_setup",
-        "host_check",
-        "sync_instructions",
-        "propose_skill",
-        "track_latent_skill",
-        "generate_skill",
-        "create_skill",
-        "create_skill_draft",
-        "publish_skill",
-        "share_skill",
-        "sync_skills",
-        "promote_skill_recommendation",
-        "import_skill",
-        "adopt_skill",
-        "update_canonical_skill",
-        "rename_skill",
-        "cleanup_skill",
-        "repair_skills",
-        "activate_skill",
-        "deactivate_skill",
-        "update_skill",
-        "migrate_project_layout",
-    )
-    for mutation in mutations:
+    from dataclasses import fields  # noqa: PLC0415
+
+    readers = {
+        "status",
+        "doctor",
+        "list_facts",
+        "list_audit_events",
+        "list_snapshots",
+        "validate_skill",
+        "recommend_skills",
+        "list_skills",
+        "get_skill_detail",
+    }
+    initialization = {"initialize_project", "execute_agent_connections"}
+    mutations = {
+        field.name: getattr(captured[0], field.name)
+        for field in fields(captured[0])
+        if field.name not in readers | initialization
+    }
+    assert mutations
+    for name, handler in mutations.items():
+        assert callable(handler), name
         with pytest.raises(ProjectNotInitializedError):
-            getattr(captured[0], mutation)(SimpleNamespace(scope=FactScope.project))
+            handler(SimpleNamespace(scope=FactScope.project))
     assert not (tmp_path / ".umem").exists()
 
 
@@ -579,3 +561,365 @@ async def test_mcp_cli_parity(repository: tuple[Path, Path, Path], location: str
     assert response.structured_content is not None
     assert response.structured_content["ok"], response.structured_content
     assert not (outside / ".umem").exists()
+
+
+@pytest.mark.parametrize("failure", ["missing", "timeout", "dubious"])
+def test_git_discovery_failure_is_closed(repository, monkeypatch, failure):
+    from universal_memory.infrastructure.config import project_roots  # noqa: PLC0415
+
+    _, _, outside = repository
+    original = project_roots.subprocess.run
+
+    def broken(*args, **kwargs):
+        if failure == "missing":
+            raise FileNotFoundError("git unavailable")
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired("git", 5)
+        return subprocess.CompletedProcess(args[0], 128, "", "dubious ownership")
+
+    monkeypatch.setattr(project_roots.subprocess, "run", broken)
+    with pytest.raises(StorageError, match="Git"):
+        resolve_project_roots(outside)
+    monkeypatch.setattr(project_roots.subprocess, "run", original)
+    assert not (outside / ".umem").exists()
+
+
+def test_portable_git_discovery(repository, monkeypatch):
+    from universal_memory.infrastructure.config import project_roots  # noqa: PLC0415
+
+    root, _, outside = repository
+    original = project_roots.subprocess.run
+
+    def old_git(args, **kwargs):
+        if "-z" in args or "--path-format=absolute" in args:
+            return subprocess.CompletedProcess(args, 129, "", "unsupported option")
+        return original(args, **kwargs)
+
+    monkeypatch.setattr(project_roots.subprocess, "run", old_git)
+    assert resolve_project_roots(outside).memory_root == root
+
+
+def test_separate_git_linked_checkout_requires_unambiguous_owner(tmp_path, monkeypatch):
+    main_root = tmp_path / "separate"
+    main_root.mkdir()
+    git(main_root, "init", "--separate-git-dir", str(tmp_path / "meta"))
+    git(
+        main_root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "base",
+    )
+    linked = tmp_path / "linked"
+    git(main_root, "worktree", "add", "-b", "linked", str(linked))
+    with pytest.raises(StorageError, match="UMEM_MEMORY_ROOT"):
+        resolve_project_roots(linked)
+    monkeypatch.setenv("UMEM_MEMORY_ROOT", str(main_root))
+    roots = resolve_project_roots(linked)
+    assert roots.memory_root == main_root
+    assert roots.project_root == linked
+
+
+def test_bare_container_preserves_host_root(tmp_path):
+    container = tmp_path / "container"
+    container.mkdir()
+    bare = container / ".bare"
+    bare.mkdir()
+    git(bare, "init", "--bare")
+    (container / ".git").write_text("gitdir: ./.bare\n")
+    roots = resolve_project_roots(container)
+    assert roots.memory_root == bare
+    assert roots.project_root == container
+
+
+def test_shared_memory_symlink_is_not_orphan(repository):
+    root, _, outside = repository
+    initialize(root)
+    cli(root, "remember", "real memory", "--scope", "project", "--format", "json")
+    (outside / ".umem").symlink_to(root / ".umem", target_is_directory=True)
+    assert not resolve_project_roots(outside).warnings
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("interface", ["cli", "mcp"])
+async def test_rollback_does_not_touch_orphan_memory(repository, monkeypatch, interface):
+    root, _, outside = repository
+    initialize(root)
+    for content in ("shared first", "shared second"):
+        result = cli(root, "remember", content, "--scope", "project", "--format", "json")
+        assert result.returncode == 0, result.stdout
+    initialize(outside)
+    monkeypatch.setenv("UMEM_MEMORY_ROOT", str(outside))
+    for content in ("local first", "local second", "local third"):
+        result = cli(outside, "remember", content, "--scope", "project", "--format", "json")
+        assert result.returncode == 0, result.stdout
+    monkeypatch.delenv("UMEM_MEMORY_ROOT")
+    local = outside / ".umem/memory/facts.jsonl"
+    before = local.read_bytes()
+    if interface == "cli":
+        result = cli(outside, "rollback", "--scope", "project", "--yes", "--format", "json")
+        assert result.returncode == 0, result.stdout
+    else:
+        result = await build_server(outside).call_tool(
+            "rollback_scope", {"scope": "project", "confirm": True}
+        )
+        assert result.structured_content is not None
+        assert result.structured_content["ok"], result.structured_content
+    assert local.read_bytes() == before
+    assert len((root / ".umem/memory/facts.jsonl").read_text().splitlines()) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("interface", ["cli", "mcp"])
+async def test_doctor_checks_shared_layout(repository, interface):
+    root, _, outside = repository
+    initialize(root)
+    if interface == "cli":
+        response = cli(outside, "doctor", "--format", "json")
+        payload = json.loads(response.stdout)
+    else:
+        response = await build_server(outside).call_tool("doctor", {})
+        payload = response.structured_content
+
+    def find(value):
+        if isinstance(value, dict):
+            if value.get("name") == "project_layout":
+                return value
+            for item in value.values():
+                found = find(item)
+                if found:
+                    return found
+        if isinstance(value, list):
+            for item in value:
+                found = find(item)
+                if found:
+                    return found
+        return None
+
+    check = find(payload)
+    assert check is not None, payload
+    assert check["status"] == "success", check
+
+
+def test_existing_project_without_new_optional_layout_can_write(repository):
+    root, _, outside = repository
+    initialize(root)
+    (root / ".umem/benchmarks/retrieval-results.json").unlink()
+    (root / ".umem/benchmarks").rmdir()
+    result = cli(
+        outside, "remember", "old initialized project", "--scope", "project", "--format", "json"
+    )
+    assert result.returncode == 0, result.stdout
+    assert not (outside / ".umem").exists()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("interface", ["cli", "mcp"])
+@pytest.mark.parametrize("bare", [False, True])
+async def test_native_skill_sync_uses_active_worktree(repository, tmp_path, interface, bare):
+    root, _, outside = repository
+    if bare:
+        root = tmp_path / "bare.git"
+        root.mkdir()
+        git(root, "init", "--bare")
+        outside = tmp_path / "bare-checkout"
+        git(root, "worktree", "add", "--orphan", "-b", "bare-branch", str(outside))
+    initialize(root)
+    created = cli(
+        root,
+        "skills",
+        "create",
+        "--name",
+        "worktree skill",
+        "--description",
+        "A useful worktree skill",
+        "--format",
+        "json",
+    )
+    assert created.returncode == 0, created.stdout
+    if interface == "cli":
+        synced = cli(outside, "skills", "sync", "--target", "claude_code", "--format", "json")
+        assert synced.returncode == 0, synced.stdout
+    else:
+        synced = await build_server(outside).call_tool("sync_skills", {"targets": ["claude_code"]})
+        assert synced.structured_content is not None
+        assert synced.structured_content["ok"], synced.structured_content
+    assert list((outside / ".claude/skills").rglob("SKILL.md"))
+    assert not (root / ".claude").exists()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("interface", ["cli", "mcp"])
+async def test_unknown_lock_error_is_actionable(repository, interface):
+    root, _, outside = repository
+    initialize(root)
+    lock = root / ".umem/memory/facts.jsonl.lock"
+    lock.write_text("unknown-owner")
+    os.utime(lock, (time.time() - 60, time.time() - 60))
+    if interface == "cli":
+        response = cli(outside, "remember", "blocked", "--scope", "project", "--format", "json")
+        error = json.loads(response.stdout)["error"]
+    else:
+        response = await build_server(outside).call_tool(
+            "remember_fact", {"content": "blocked", "scope": "project"}
+        )
+        assert response.structured_content is not None
+        error = response.structured_content["error"]["data"]
+    assert error["lock_path"] == str(lock)
+    assert error["lock_age_seconds"] >= 60
+    assert "Stop all" in error["recovery_hint"]
+    assert ".guard" in error["recovery_hint"]
+    assert lock.read_text() == "unknown-owner"
+
+
+def test_lock_filesystem_failure_is_typed(tmp_path, monkeypatch):
+    from universal_memory.infrastructure import process_lock as locks  # noqa: PLC0415
+
+    def denied(*args, **kwargs):
+        raise PermissionError("no hard links")
+
+    monkeypatch.setattr(locks.os, "link", denied)
+    with pytest.raises(StorageError, match="Failed to acquire lock"):
+        with locks.legacy_file_lock(tmp_path / "test.lock"):
+            pytest.fail("lock acquired")
+    assert not (tmp_path / "test.lock").exists()
+
+
+def test_environment_isolated_before_collection(tmp_path):
+    import shutil  # noqa: PLC0415
+
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    shutil.copyfile(Path(SOURCE).parent / "tests/conftest.py", collection / "conftest.py")
+    (collection / "test_probe.py").write_text(
+        "import os\n"
+        "assert not os.environ.get('GIT_DIR')\n"
+        "assert not os.environ.get('GIT_CONFIG_PARAMETERS')\n"
+        "assert 'collection-user-' in os.environ['HOME']\n"
+        "def test_probe(): pass\n"
+    )
+    environment = dict(os.environ, GIT_DIR="/missing/repository", GIT_CONFIG_PARAMETERS="bad")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", str(collection)],
+        cwd=collection,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_submodule_linked_checkout_uses_submodule_main(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    git(source, "init")
+    git(
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "base",
+    )
+    parent = tmp_path / "super"
+    parent.mkdir()
+    git(parent, "init")
+    git(parent, "-c", "protocol.file.allow=always", "submodule", "add", str(source), "sub")
+    main_root = parent / "sub"
+    linked = tmp_path / "sub-linked"
+    git(main_root, "worktree", "add", "-b", "sub-linked", str(linked))
+    roots = resolve_project_roots(linked)
+    assert roots.project_root == linked
+    assert roots.memory_root == main_root
+
+
+@pytest.mark.anyio
+async def test_mcp_old_initialized_layout_without_benchmarks(repository):
+    root, _, outside = repository
+    (root / ".umem/memory").mkdir(parents=True)
+    (root / ".umem/config.toml").write_text("[hosts]\nenabled = []\n")
+    result = await build_server(outside).call_tool(
+        "remember_fact", {"content": "old initialized project", "scope": "project"}
+    )
+    assert result.structured_content is not None
+    assert result.structured_content["ok"], result.structured_content
+    assert not (outside / ".umem").exists()
+
+
+@pytest.mark.parametrize("config", ["", "[unrelated]\nvalue = 1\n", "invalid toml!"])
+def test_partial_configuration_does_not_initialize_project(repository, config):
+    root, _, outside = repository
+    (root / ".umem/memory").mkdir(parents=True)
+    (root / ".umem/config.toml").write_text(config)
+    before = {
+        p.relative_to(root): p.read_bytes() for p in (root / ".umem").rglob("*") if p.is_file()
+    }
+    result = cli(outside, "remember", "must not write", "--scope", "project", "--format", "json")
+    assert result.returncode != 0
+    assert json.loads(result.stdout)["error"]["code"] == "project_not_initialized"
+    after = {
+        p.relative_to(root): p.read_bytes() for p in (root / ".umem").rglob("*") if p.is_file()
+    }
+    assert before == after
+
+
+def test_worktree_rollback_does_not_restore_main_host_files(repository):
+    root, _, outside = repository
+    initialize(root)
+    for content in ("shared first", "shared second"):
+        result = cli(root, "remember", content, "--scope", "project", "--format", "json")
+        assert result.returncode == 0, result.stdout
+    (root / "CLAUDE.md").write_text("# Original main instructions\n")
+    setup = cli(root, "host", "setup", "claude_code", "--yes", "--format", "json")
+    assert setup.returncode == 0, setup.stdout
+    main_host = (root / "CLAUDE.md").read_bytes()
+    result = cli(outside, "rollback", "--scope", "project", "--yes", "--format", "json")
+    assert result.returncode == 0, result.stdout
+    assert (root / "CLAUDE.md").read_bytes() == main_host
+    assert len((root / ".umem/memory/facts.jsonl").read_text().splitlines()) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("interface", ["cli", "mcp"])
+async def test_doctor_host_check_uses_local_host_configuration(repository, interface):
+    root, _, outside = repository
+    initialize(root)
+    (root / ".umem/config.toml").write_text(
+        '[project]\nname = "test"\n[hosts]\nenabled = []\n[runtimes]\nenabled = []\n'
+    )
+    (outside / ".umem").mkdir()
+    (outside / ".umem/config.toml").write_text('[hosts]\nenabled = ["claude_code"]\n')
+    if interface == "cli":
+        result = cli(outside, "doctor", "--format", "json")
+        payload = json.loads(result.stdout)
+    else:
+        result = await build_server(outside).call_tool("doctor", {})
+        payload = result.structured_content
+    assert payload is not None
+    check = next(item for item in payload["data"]["checks"] if item["name"] == "hosts_integration")
+    assert check["status"] == "failed", check
+    assert "claude_code" in check["error"]
+
+
+def test_cli_git_failure_returns_structured_error_without_writing(repository, monkeypatch):
+    root, _, outside = repository
+    initialize(outside)
+    before = {p.relative_to(outside): p.read_bytes() for p in outside.rglob("*") if p.is_file()}
+    monkeypatch.setenv("PATH", "")
+    result = cli(outside, "remember", "no fallback", "--scope", "project", "--format", "json")
+    assert result.returncode == 1
+    assert json.loads(result.stdout)["error"]["code"] == "storage_error"
+    assert "Git" in json.loads(result.stdout)["error"]["detail"]
+    with pytest.raises(StorageError, match="Git"):
+        build_server(outside)
+    after = {p.relative_to(outside): p.read_bytes() for p in outside.rglob("*") if p.is_file()}
+    assert before == after
+    assert not (root / ".umem").exists()

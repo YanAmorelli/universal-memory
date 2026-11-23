@@ -83,7 +83,7 @@ class GetMemoryStatusUseCase:
             operational_root=layout_report.operational_root,
         )
 
-        if not self.layout_port.is_project_initialized(project_root):
+        if not self.layout_port.has_project_identity(project_root):
             return GetMemoryStatusResult(
                 initialized=False,
                 project_path=project_path,

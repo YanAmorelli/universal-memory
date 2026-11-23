@@ -437,7 +437,11 @@ class LocalFactRepository(FactRepository):
     @contextmanager
     def _lock_for_path(self, scope: FactScope, facts_path: Path) -> Generator[None, None, None]:
         lock_path = self._lock_path_for(scope, facts_path)
-        with legacy_file_lock(lock_path, stale_after=STALE_LOCK_SECONDS):
+        with legacy_file_lock(
+            lock_path,
+            stale_after=STALE_LOCK_SECONDS,
+            message=f"Failed to acquire lock on facts storage for scope {scope.value}",
+        ):
             yield
 
     def _lock_path_for(self, scope: FactScope, facts_path: Path) -> Path:

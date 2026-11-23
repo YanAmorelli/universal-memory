@@ -60,6 +60,28 @@ versions ignore it, so older installations do not need to understand a new schem
 Versions of this branch predating this fence may leave an empty sidecar; their
 unrecognized leftover locks are also treated conservatively.
 
+### Recovering an unknown legacy lock
+
+CLI and MCP errors include `lock_path`, `lock_age_seconds` and recovery guidance.
+The age is diagnostic only: a negative age may be the compatibility timestamp,
+and an old timestamp does not prove that a process is dead. Do not run `umem init`
+to repair a lock.
+
+1. Stop all CLI and MCP writers using that storage, including old installations
+   and suspended sessions. Restarting only the client does not stop an MCP server.
+2. Back up the storage and confirm that no remaining process owns the indicated
+   lock. If ownership remains uncertain, leave it in place.
+3. Quarantine only the exact `.lock` file reported by the error, preserving a copy.
+   Never remove, replace or move its `.guard` sidecar.
+4. Retry with the updated executable and restart updated sessions. Preserve the
+   quarantined file until recovery and data integrity have been verified.
+
+Crashes before publication can leave private `*.pending` files. They are not
+active locks and are not automatically deleted by another process; inspect them
+only during the same quiescent maintenance procedure. Publication and recovery
+are tested at both sides of guard persistence, hard-link publication and pending
+unlink, without changing memory records or replacing the guard inode.
+
 ## Alternatives considered
 
 | Option | Limit |

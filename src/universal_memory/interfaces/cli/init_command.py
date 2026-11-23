@@ -131,10 +131,6 @@ from universal_memory.application.update import (
     UpdateMigrateCommand,
     UpdateMigrateResult,
 )
-from universal_memory.bootstrap.project_memory import (
-    ProjectNotInitializedError,
-    require_initialized,
-)
 from universal_memory.domain import (
     ConfigValidationPort,
     ProjectLayoutPort,
@@ -156,7 +152,9 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.entities.runtime import RuntimeAdapter, default_runtime_registry
+from universal_memory.domain.exceptions import ProjectNotInitializedError
 from universal_memory.infrastructure.config import LocalProjectLayoutPort
+from universal_memory.infrastructure.config.project_layout import require_initialized
 from universal_memory.infrastructure.config.project_roots import resolve_project_roots
 from universal_memory.interfaces.cli.message_catalog import (
     DEFAULT_LOCALE,
@@ -2798,7 +2796,10 @@ def _run_bootstrap(command: BootstrapCommandHandler, *, output_format: str) -> i
 
 def _run_doctor(command: DoctorCommandHandler, *, output_format: str) -> int:
     try:
-        result = command(DoctorCommand(project_root=resolve_project_roots().project_root))
+        roots = resolve_project_roots()
+        result = command(
+            DoctorCommand(project_root=roots.project_root, memory_root=roots.memory_root)
+        )
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
@@ -6177,6 +6178,14 @@ def _print_expected_error(
                         f" Root: {payload['error']['memory_root']}"
                         if "memory_root" in payload["error"]
                         else ""
+                    ),
+                    *(
+                        [
+                            f"Lock: {payload['error']['lock_path']} "
+                            f"(age: {payload['error']['lock_age_seconds']} seconds)"
+                        ]
+                        if "lock_path" in payload["error"]
+                        else []
                     ),
                     f"[bold]{human_message('Recovery:', locale=message_locale)}[/bold] "
                     f"{payload['error']['recovery_hint']}",

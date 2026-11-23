@@ -1,15 +1,18 @@
-"""Resolve code and memory ownership without creating any files.
-
-UMEM_MEMORY_ROOT is an explicit checkout-directory override, not a .umem path.
-Bare repositories own memory inside the bare repository directory itself.
-"""
+"""Resolve checkout and memory ownership without guessing or writing files."""
 
 from __future__ import annotations
 
+import ast
 import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+from universal_memory.domain import StorageError
+
+
+class ProjectRootResolutionError(StorageError):
+    """Git ownership could not be established safely."""
 
 
 @dataclass(frozen=True)
@@ -19,21 +22,10 @@ class ProjectRoots:
     warnings: tuple[str, ...] = ()
 
 
-def _git(cwd: Path, *args: str) -> str | None:
-    environment = dict(os.environ)
-    # Git hooks export repository-local variables. They must not override the
-    # directory being resolved (or redirect a child process into another repo).
-    for key in (
-        "GIT_DIR",
-        "GIT_WORK_TREE",
-        "GIT_COMMON_DIR",
-        "GIT_INDEX_FILE",
-        "GIT_PREFIX",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-        "GIT_NAMESPACE",
-    ):
-        environment.pop(key, None)
+def _git(cwd: Path, *args: str, optional: bool = False) -> str | None:
+    # Hooks and config injection must not redirect discovery to another repository.
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
     try:
         result = subprocess.run(  # noqa: S603
             ["git", "-C", str(cwd), *args],  # noqa: S607
@@ -43,9 +35,71 @@ def _git(cwd: Path, *args: str) -> str | None:
             timeout=5,
             env=environment,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ProjectRootResolutionError(
+            "Git discovery failed. Hint: restore Git access and retry; no files were written."
+        ) from error
+    if result.returncode:
+        if optional and result.returncode == 1:
+            return None
+        raise ProjectRootResolutionError(
+            "Git discovery failed. Hint: check repository access and ownership, then retry; "
+            "no project files were written."
+        )
+    return result.stdout.strip()
+
+
+def _marker(start: Path) -> Path | None:
+    return next(
+        (
+            path
+            for path in (start, *start.parents)
+            if os.path.lexists(path / ".git")
+            or all((path / name).exists() for name in ("HEAD", "objects", "config"))
+        ),
+        None,
+    )
+
+
+def _checkout_git_dir(checkout: Path) -> Path:
+    entry = checkout / ".git"
+    if entry.is_file():
+        content = entry.read_text().strip()
+        if content.startswith("gitdir: "):
+            return (checkout / content.removeprefix("gitdir: ")).resolve()
+    return entry.resolve()
+
+
+def _main_checkout(start: Path, common: Path) -> Path | None:
+    # Plain porcelain predates -z and --path-format. Decode Git's quoted paths.
+    listing = _git(start, "-c", "core.quotePath=false", "worktree", "list", "--porcelain")
+    block = (listing or "").split("\n\n", 1)[0].splitlines()
+    if not block or not block[0].startswith("worktree "):
         return None
-    return result.stdout.strip() if result.returncode == 0 else None
+    value = block[0].removeprefix("worktree ")
+    if value.startswith('"'):
+        value = ast.literal_eval(value)
+    candidate = Path(value).resolve()
+    if "bare" in block or _checkout_git_dir(candidate) == common:
+        return candidate
+    # Submodules normally record core.worktree relative to their common git dir.
+    configured = _git(
+        start,
+        "config",
+        "--file",
+        str(common / "config"),
+        "--path",
+        "--get",
+        "core.worktree",
+        optional=True,
+    )
+    if configured:
+        candidate = (common / configured).resolve()
+        if _checkout_git_dir(candidate) == common:
+            return candidate
+    # --separate-git-dir need not retain a backlink to its checkout. Guessing
+    # common.parent or scanning siblings would silently split memory again.
+    return None
 
 
 def resolve_project_roots(
@@ -54,42 +108,33 @@ def resolve_project_roots(
     memory_root: Path | None = None,
 ) -> ProjectRoots:
     start = (cwd or Path.cwd()).resolve()
-    top = _git(start, "rev-parse", "--show-toplevel")
-    common = _git(start, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    project = Path(top).resolve() if top else start
-    if common:
-        common_path = Path(common).resolve()
-        # Git reports the main checkout first for linked worktrees, including a
-        # bare root. A main checkout's .git may itself reference separate metadata.
-        worktrees = _git(start, "worktree", "list", "--porcelain", "-z")
-        first = worktrees.split("\0", 1)[0] if worktrees else ""
-        entry = project / ".git"
-        checkout_git_dir = entry.resolve()
-        if entry.is_file():
-            content = entry.read_text().strip()
-            if content.startswith("gitdir: "):
-                checkout_git_dir = (project / content.removeprefix("gitdir: ")).resolve()
+    override = memory_root or os.environ.get("UMEM_MEMORY_ROOT")
+    marker = _marker(start)
+    if marker is None:
+        owner = next((path for path in (start, *start.parents) if (path / ".umem").is_dir()), start)
+        project = owner
+    else:
+        common = _git(start, "rev-parse", "--git-common-dir")
+        common_path = (start / (common or "")).resolve()
+        if not common or not common_path.is_dir():
+            raise ProjectRootResolutionError("Git returned an invalid common directory.")
+        bare = _git(start, "rev-parse", "--is-bare-repository") == "true"
+        top = None if bare else _git(start, "rev-parse", "--show-toplevel")
+        project = Path(top).resolve() if top else marker
         owner = (
             project
-            if top and checkout_git_dir == common_path
-            else (
-                Path(first.removeprefix("worktree ")).resolve()
-                if first.startswith("worktree ")
-                else common_path.parent
+            if top and _checkout_git_dir(project) == common_path
+            else _main_checkout(start, common_path)
+        )
+        if owner is None and not override:
+            raise ProjectRootResolutionError(
+                "Git does not identify the main checkout. "
+                "Hint: explicitly set UMEM_MEMORY_ROOT to the main checkout directory."
             )
-        )
-        if not top:
-            project = owner
-    else:
-        # Outside git, an existing project can still be addressed from a subfolder.
-        owner = next(
-            (path for path in (start, *start.parents) if (path / ".umem").is_dir()),
-            start,
-        )
-        project = owner
-    override = memory_root or os.environ.get("UMEM_MEMORY_ROOT")
     if override:
         owner = Path(override).expanduser().resolve()
+    if owner is None:  # Defensive: discovery must never silently fall back.
+        raise ProjectRootResolutionError("Git memory ownership is unresolved.")
     warnings: list[str] = []
     ignored_roots = [start]
     if project != start:
@@ -99,6 +144,8 @@ def resolve_project_roots(
             continue
         for relative in (".umem/memory", "umem/memory"):
             local = ignored / relative
+            if local.resolve() == (owner / relative).resolve():
+                continue
             if local.is_dir() and any(
                 path.is_file() and path.stat().st_size for path in local.rglob("*")
             ):

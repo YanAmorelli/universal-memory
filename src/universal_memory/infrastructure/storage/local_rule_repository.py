@@ -96,7 +96,11 @@ class LocalRuleRepository(RuleRepository):
         lock_path = rules_path.with_suffix(".jsonl.lock")
         if scope == RuleScope.project and self.layout.is_shared:
             lock_path = self.layout.operational_locks_root / "rules.jsonl.lock"
-        with legacy_file_lock(lock_path, stale_after=STALE_LOCK_SECONDS):
+        with legacy_file_lock(
+            lock_path,
+            stale_after=STALE_LOCK_SECONDS,
+            message=f"Failed to acquire lock on rules storage for scope {scope.value}",
+        ):
             yield
 
     def read(self, id: str) -> Rule:

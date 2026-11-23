@@ -4,6 +4,7 @@ from typing import Any
 import tomli_w
 
 from universal_memory.domain import StorageError
+from universal_memory.domain.exceptions import ProjectNotInitializedError
 from universal_memory.domain.project_layout import (
     ProjectLayoutInspection,
     ProjectLayoutMode,
@@ -196,6 +197,31 @@ def ensure_shared_project_layout(project_root: Path) -> ProjectLayoutResult:
         created=policy.layout == ProjectLayoutMode.shared,
         created_paths=created_paths,
         existing_paths=existing_paths,
+    )
+
+
+def require_initialized(memory_root: Path) -> None:
+    if not has_project_identity(memory_root):
+        raise ProjectNotInitializedError(memory_root)
+
+
+def has_project_identity(project_root: Path) -> bool:
+    """Recognize an initialized older layout without requiring new optional files.
+
+    Audit/snapshot/host remnants alone are not initialization. Require valid
+    project configuration and its memory directory; never create either here.
+    """
+    config = project_root / ".umem/config.toml"
+    if not config.is_file() or not (project_root / ".umem/memory").is_dir():
+        return False
+    try:
+        with config.open("rb") as stream:
+            document = tomllib.load(stream)
+    except (OSError, ValueError):
+        return False
+    return any(
+        isinstance(document.get(section), dict)
+        for section in ("project", "hosts", "runtimes", "preferences")
     )
 
 
