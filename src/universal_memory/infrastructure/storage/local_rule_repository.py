@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -21,6 +20,7 @@ from universal_memory.domain.entities import AuditEventScope, Rule, RuleScope, R
 from universal_memory.domain.ports import RuleRepository
 from universal_memory.domain.project_layout import ResolvedProjectLayout
 from universal_memory.infrastructure.config.project_layout import resolve_project_layout
+from universal_memory.infrastructure.process_lock import legacy_file_lock
 from universal_memory.infrastructure.security import (
     LocalAuditLogRepository,
     LocalSnapshotRepository,
@@ -84,7 +84,7 @@ class LocalRuleRepository(RuleRepository):
             )
 
     @contextmanager
-    def _lock(  # noqa: PLR0912
+    def _lock(
         self,
         scope: RuleScope,
         *,
@@ -96,49 +96,8 @@ class LocalRuleRepository(RuleRepository):
         lock_path = rules_path.with_suffix(".jsonl.lock")
         if scope == RuleScope.project and self.layout.is_shared:
             lock_path = self.layout.operational_locks_root / "rules.jsonl.lock"
-        rules_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-
-        lock_id = str(uuid4())
-
-        if lock_path.exists():
-            try:
-                mtime = os.path.getmtime(lock_path)
-                if time.time() - mtime > STALE_LOCK_SECONDS:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-        max_attempts = 20
-        delay = 0.1
-        acquired = False
-        fd: int | None = None
-        try:
-            for _ in range(max_attempts):
-                try:
-                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    os.write(fd, lock_id.encode("utf-8"))
-                    acquired = True
-                    break
-                except FileExistsError:
-                    time.sleep(delay)
-            if not acquired:
-                err_msg = f"Failed to acquire lock on rules storage for scope {scope.value}"
-                raise StorageError(err_msg)
+        with legacy_file_lock(lock_path, stale_after=STALE_LOCK_SECONDS):
             yield
-        finally:
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-            if acquired:
-                try:
-                    lock_content = lock_path.read_text(encoding="utf-8").strip()
-                    if lock_path.exists() and lock_content == lock_id:
-                        lock_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
     def read(self, id: str) -> Rule:
         for rule in self.list():

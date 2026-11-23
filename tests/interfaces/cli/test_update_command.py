@@ -20,6 +20,7 @@ from universal_memory.application.skills import (
     UpdateSkillResult,
 )
 from universal_memory.domain.entities import LatentSkill, LatentSkillScope, LatentSkillStatus
+from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.interfaces.cli.init_command import main as cli_main
 
 MIN_BENCHMARK_FACT_COUNT = 1000
@@ -86,6 +87,8 @@ def test_update_migrate_cli_adds_schema_and_reports_audit(
         encoding="utf-8",
     )
 
+    LocalProjectLayoutPort().ensure_project_layout(tmp_path)
+
     exit_code = main(["update", "--migrate", "--format", "json", "--yes"])
 
     payload = json.loads(capsys.readouterr().out)
@@ -110,6 +113,8 @@ def test_update_benchmarks_cli_json_has_required_metrics(
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".umem" / "benchmarks").mkdir(parents=True)
 
+    LocalProjectLayoutPort().ensure_project_layout(tmp_path)
+
     exit_code = main(["update", "--benchmarks", "--format", "json", "--yes"])
 
     captured = capsys.readouterr()
@@ -132,6 +137,8 @@ def test_update_default_applies_required_migration(tmp_path: Path, monkeypatch, 
         '[hosts]\nenabled = ["codex"]\n',
         encoding="utf-8",
     )
+
+    LocalProjectLayoutPort().ensure_project_layout(tmp_path)
 
     exit_code = main(["update", "--format", "json", "--yes"])
 

@@ -4,7 +4,6 @@ import json
 import os
 import re
 import sys
-import time
 import unicodedata
 from collections import defaultdict
 from collections.abc import Generator
@@ -25,6 +24,7 @@ from universal_memory.domain.entities import AuditEventScope, Fact, FactScope, F
 from universal_memory.domain.ports import FactRepository
 from universal_memory.domain.project_layout import ResolvedProjectLayout
 from universal_memory.infrastructure.config.project_layout import resolve_project_layout
+from universal_memory.infrastructure.process_lock import legacy_file_lock
 from universal_memory.infrastructure.security import (
     LocalAuditLogRepository,
     LocalSnapshotRepository,
@@ -89,52 +89,8 @@ class LocalFactRepository(FactRepository):
     @contextmanager
     def _lock(self, scope: FactScope) -> Generator[None, None, None]:
         facts_path = self.global_facts_path if scope == FactScope.global_ else self.facts_path
-        lock_path = self._lock_path_for(scope, facts_path)
-        facts_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-
-        lock_id = str(uuid4())
-
-        # Safe stale lock verification
-        if lock_path.exists():
-            try:
-                mtime = os.path.getmtime(lock_path)
-                if time.time() - mtime > STALE_LOCK_SECONDS:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-        max_attempts = 20
-        delay = 0.1
-        acquired = False
-        fd: int | None = None
-        try:
-            for _ in range(max_attempts):
-                try:
-                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    os.write(fd, lock_id.encode("utf-8"))
-                    acquired = True
-                    break
-                except FileExistsError:
-                    time.sleep(delay)
-            if not acquired:
-                err_msg = f"Failed to acquire lock on facts storage for scope {scope.value}"
-                raise StorageError(err_msg)
+        with self._lock_for_path(scope, facts_path):
             yield
-        finally:
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-            if acquired:
-                try:
-                    # TOCTOU guard: only delete if the lock still belongs to us!
-                    lock_content = lock_path.read_text(encoding="utf-8").strip()
-                    if lock_path.exists() and lock_content == lock_id:
-                        lock_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
     def read(self, id: str) -> Fact:
         for fact in self.list():
@@ -481,49 +437,8 @@ class LocalFactRepository(FactRepository):
     @contextmanager
     def _lock_for_path(self, scope: FactScope, facts_path: Path) -> Generator[None, None, None]:
         lock_path = self._lock_path_for(scope, facts_path)
-        facts_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-
-        lock_id = str(uuid4())
-        if lock_path.exists():
-            try:
-                mtime = os.path.getmtime(lock_path)
-                if time.time() - mtime > STALE_LOCK_SECONDS:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-        max_attempts = 20
-        delay = 0.1
-        acquired = False
-        fd: int | None = None
-        try:
-            for _ in range(max_attempts):
-                try:
-                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    os.write(fd, lock_id.encode("utf-8"))
-                    acquired = True
-                    break
-                except FileExistsError:
-                    time.sleep(delay)
-            if not acquired:
-                raise StorageError(
-                    f"Failed to acquire lock on facts storage for scope {scope.value}"
-                )
+        with legacy_file_lock(lock_path, stale_after=STALE_LOCK_SECONDS):
             yield
-        finally:
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-            if acquired:
-                try:
-                    lock_content = lock_path.read_text(encoding="utf-8").strip()
-                    if lock_path.exists() and lock_content == lock_id:
-                        lock_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
     def _lock_path_for(self, scope: FactScope, facts_path: Path) -> Path:
         if scope == FactScope.project and self.layout.is_shared:

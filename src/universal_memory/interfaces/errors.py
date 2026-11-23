@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from universal_memory.bootstrap.project_memory import ProjectNotInitializedError
 from universal_memory.domain import (
     FactNotFoundError,
     InvalidConfigError,
@@ -52,6 +53,14 @@ class ErrorDescriptor:
 
 
 def error_descriptor(error: Exception) -> ErrorDescriptor:
+    if isinstance(error, ProjectNotInitializedError):
+        return ErrorDescriptor(
+            "project_not_initialized",
+            JSON_RPC_VALIDATION_FAILED,
+            "Project memory is not initialized.",
+            "Project memory is not initialized.",
+            "Ask the person whether to initialize, then run `umem init`.",
+        )
     mappings: tuple[tuple[type[Exception] | tuple[type[Exception], ...], ErrorDescriptor], ...] = (
         (
             SecretDetectedError,
@@ -169,6 +178,11 @@ def error_payload(error: Exception, *, message_locale: str) -> dict[str, Any]:
         "detail": sanitize_error_detail(error),
         "recovery_hint": _recovery_hint_for_locale(error, message_locale=message_locale),
         "audit_reference": getattr(error, "audit_reference", None),
+        **(
+            {"memory_root": error.memory_root}
+            if isinstance(error, ProjectNotInitializedError)
+            else {}
+        ),
     }
 
 
@@ -181,6 +195,11 @@ def json_rpc_error_payload(error: Exception) -> dict[str, Any]:
             "detail": sanitize_error_detail(error),
             "recovery_hint": _recovery_hint_for_locale(error, message_locale="en"),
             "audit_reference": getattr(error, "audit_reference", None),
+            **(
+                {"memory_root": error.memory_root}
+                if isinstance(error, ProjectNotInitializedError)
+                else {}
+            ),
         },
     }
 

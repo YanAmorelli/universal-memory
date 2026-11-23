@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -25,6 +24,7 @@ from universal_memory.domain.entities import (
     LatentSkillStatus,
 )
 from universal_memory.domain.ports import LatentSkillRepository
+from universal_memory.infrastructure.process_lock import legacy_file_lock
 from universal_memory.infrastructure.security import (
     LocalAuditLogRepository,
     LocalSnapshotRepository,
@@ -92,53 +92,15 @@ class LocalLatentSkillRepository(LatentSkillRepository):
         )
 
     @contextmanager
-    def _lock(self, scope: LatentSkillScope) -> Generator[None, None, None]:  # noqa: PLR0912
+    def _lock(self, scope: LatentSkillScope) -> Generator[None, None, None]:
         storage_path = self._path_for(scope)
         lock_path = storage_path.with_suffix(".jsonl.lock")
-        storage_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_id = str(uuid4())
-
-        if lock_path.exists():
-            try:
-                mtime = os.path.getmtime(lock_path)
-                if time.time() - mtime > STALE_LOCK_SECONDS:
-                    mtime_now = os.path.getmtime(lock_path)
-                    if time.time() - mtime_now > STALE_LOCK_SECONDS:
-                        lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-        max_attempts = 20
-        delay = 0.1
-        acquired = False
-        fd: int | None = None
-        try:
-            for _ in range(max_attempts):
-                try:
-                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    acquired = True
-                    os.write(fd, lock_id.encode("utf-8"))
-                    break
-                except FileExistsError:
-                    time.sleep(delay)
-            if not acquired:
-                raise StorageError(
-                    f"Failed to acquire lock on latent skills storage for scope {scope.value}"
-                )
+        with legacy_file_lock(
+            lock_path,
+            stale_after=STALE_LOCK_SECONDS,
+            message=f"Failed to acquire lock on latent skills storage for scope {scope.value}",
+        ):
             yield
-        finally:
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-            if acquired:
-                try:
-                    lock_content = lock_path.read_text(encoding="utf-8").strip()
-                    if lock_path.exists() and lock_content == lock_id:
-                        lock_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
 
     def read(self, id: str) -> LatentSkill:
         for skill in self.list():

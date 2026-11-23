@@ -136,6 +136,28 @@ deleting either tree.
 
 ## Quick Start Guide
 
+Git worktrees share project memory with the main checkout, including commands run
+from subdirectories. Host instructions such as `CLAUDE.md` remain in the current
+worktree. For a bare repository, the shared memory lives in the bare repository's
+`.umem/` directory. Outside Git, UMEM uses the nearest ancestor containing `.umem/`,
+or the current directory for a new project.
+
+Set `UMEM_MEMORY_ROOT` to a checkout directory to explicitly select another memory
+owner (for example, the current worktree). Existing local memory is never moved or
+deleted: UMEM warns when local records are excluded by the shared-root selection.
+Review those records before removing a worktree.
+
+Project mutations require initialization. Interactive commands ask before creating
+memory; JSON output, noninteractive commands, and MCP return an initialization error
+with `memory_root` and instructions to ask the person and run `umem init`. Global
+commands remain available without project initialization.
+
+Concurrent writers use kernel leases alongside legacy lock files. An abandoned
+legacy lock may be recovered after 10 seconds; a live updated writer retains its
+lease until exit, with a 2-second acquisition timeout (audit keeps its configured
+timeout). Use the same UMEM version in concurrent sessions; older versions do not
+participate in these leases.
+
 ### 1. Initialize your project
 
 Open your project directory and run:

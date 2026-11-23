@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from inspect import signature
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
@@ -104,6 +105,7 @@ from universal_memory.application.skills import (
     ValidateSkillCommand,
     ValidateSkillResult,
 )
+from universal_memory.bootstrap.project_memory import ProjectNotInitializedError, operation_scope
 from universal_memory.domain import StorageError, ValidationFailedError
 from universal_memory.domain.entities import (
     AuditEventScope,
@@ -117,6 +119,7 @@ from universal_memory.domain.entities import (
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.entities.runtime import default_runtime_registry
 from universal_memory.infrastructure.config import LocalProjectLayoutPort
+from universal_memory.infrastructure.config.project_roots import resolve_project_roots
 from universal_memory.interfaces import errors as interface_errors
 from universal_memory.interfaces.errors import (
     error_descriptor,
@@ -273,15 +276,29 @@ def configure_server(  # noqa: PLR0915
     use_cases: MCPUseCases,
     *,
     project_root: Path | None = None,
+    memory_root: Path | None = None,
 ) -> FastMCP:
-    root = project_root or Path.cwd()
+    roots = resolve_project_roots(project_root, memory_root=memory_root)
+    root = roots.memory_root
 
-    def require_project_initialized() -> None:
+    def success_envelope(**kwargs: Any) -> dict[str, Any]:
+        kwargs["warnings"] = list(roots.warnings) + list(kwargs.get("warnings") or [])
+        return _success_envelope(**kwargs)
+
+    def require_project_initialized(
+        handler: Callable[..., Any] | None = None,
+        identifier: str | None = None,
+    ) -> None:
         result = use_cases.status(GetMemoryStatusCommand(project_root=root))
         if not result.initialized:
-            raise ValidationFailedError(
-                "Project memory is not initialized. Call initialize_project first."
-            )
+            if handler is not None and identifier:
+                original = getattr(handler, "__wrapped__", handler)
+                if (
+                    operation_scope(original, SimpleNamespace(skill_id_or_name=identifier))
+                    == "global"
+                ):
+                    return
+            raise ProjectNotInitializedError(root)
 
     def project_initialized() -> bool:
         return use_cases.status(GetMemoryStatusCommand(project_root=root)).initialized
@@ -316,7 +333,9 @@ def configure_server(  # noqa: PLR0915
         try:
             result = _execute_initialize_project(use_cases.initialize_project, root, layout=layout)
             payload = _init_payload(result, root)
-            plan = default_agent_connection_planner(default_runtime_registry()).plan(root)
+            plan = default_agent_connection_planner(default_runtime_registry()).plan(
+                roots.project_root
+            )
             executor = use_cases.execute_agent_connections or ExecuteAgentConnectionsUseCase(
                 host_setup_command=use_cases.host_setup,
                 host_check_command=use_cases.host_check,
@@ -332,7 +351,7 @@ def configure_server(  # noqa: PLR0915
                 persist_connections=False,
             )
             payload.update(_mcp_connection_plan_payload(plan, execution=execution))
-            return _success_envelope(
+            return success_envelope(
                 operation="init",
                 scope="project",
                 data=payload,
@@ -355,7 +374,7 @@ def configure_server(  # noqa: PLR0915
         """
         try:
             result = use_cases.status(GetMemoryStatusCommand(project_root=root))
-            return _success_envelope(
+            return success_envelope(
                 operation="status",
                 scope="project",
                 data=_status_payload(result),
@@ -379,7 +398,7 @@ def configure_server(  # noqa: PLR0915
         """
         try:
             result = use_cases.bootstrap(SessionBootstrapCommand(project_root=root))
-            return _success_envelope(
+            return success_envelope(
                 operation="bootstrap",
                 scope="project",
                 data=session_bootstrap_payload(result),
@@ -409,7 +428,7 @@ def configure_server(  # noqa: PLR0915
                 layout_port=LocalProjectLayoutPort(),
             ).execute()
             report = result["data"]
-            return _success_envelope(
+            return success_envelope(
                 operation=result["operation"],
                 scope="project",
                 data=report,
@@ -504,7 +523,7 @@ def configure_server(  # noqa: PLR0915
                     shared_operational_skill_slugs=tuple(shared_operational_skill_slugs or []),
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation=result["operation"],
                 scope="project",
                 data=result["data"],
@@ -585,7 +604,7 @@ def configure_server(  # noqa: PLR0915
                     agent_session_key=agent_session_key,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="context",
                 scope=context_scope.value,
                 data=_context_payload(result, max_size_chars=max_size_chars),
@@ -655,7 +674,7 @@ def configure_server(  # noqa: PLR0915
                     visibility=visibility,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="remember",
                 scope=fact_scope.value,
                 data=_remember_payload(result),
@@ -711,7 +730,7 @@ def configure_server(  # noqa: PLR0915
             result = use_cases.list_facts(
                 ListFactsCommand(scope=fact_scope, status=FactStatus(status), visibility=visibility)
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="facts.list",
                 scope=fact_scope.value if fact_scope is not None else "all",
                 data={"facts": [_fact_payload(fact) for fact in result.facts]},
@@ -779,7 +798,7 @@ def configure_server(  # noqa: PLR0915
             if fact_scope is None or fact_scope is FactScope.project:
                 require_project_initialized()
             result = use_cases.purge_fact(PurgeFactCommand(id=id, scope=fact_scope, origin="mcp"))
-            return _success_envelope(
+            return success_envelope(
                 operation="facts.purge",
                 scope=fact_scope.value if fact_scope is not None else "fact",
                 data=_purge_payload(result),
@@ -818,7 +837,7 @@ def configure_server(  # noqa: PLR0915
             if audit_scope is AuditEventScope.project:
                 require_project_initialized()
             result = use_cases.list_audit_events(ListAuditLogCommand(scope=audit_scope))
-            return _success_envelope(
+            return success_envelope(
                 operation="audit.list",
                 scope=audit_scope.value,
                 data={"events": [_entry_dict(event) for event in result.events]},
@@ -855,7 +874,7 @@ def configure_server(  # noqa: PLR0915
             result = use_cases.list_snapshots(
                 ListSnapshotsCommand(scope=snapshot_scope, status=SnapshotStatus.created)
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="snapshots.list",
                 scope=snapshot_scope.value,
                 data={"snapshots": [_entry_dict(snapshot) for snapshot in result.snapshots]},
@@ -906,7 +925,7 @@ def configure_server(  # noqa: PLR0915
             if snapshot_scope is SnapshotScope.project:
                 require_project_initialized()
             result = use_cases.rollback_scope(RollbackCommand(scope=snapshot_scope, origin="mcp"))
-            return _success_envelope(
+            return success_envelope(
                 operation="rollback",
                 scope=snapshot_scope.value,
                 data=_rollback_payload(result),
@@ -976,7 +995,7 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="host_setup",
                 scope="project",
                 data=result.to_payload(),
@@ -1038,7 +1057,7 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="host_check",
                 scope="project",
                 data=result.to_payload(),
@@ -1088,7 +1107,7 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="host_sync",
                 scope="project",
                 data=result.to_payload(),
@@ -1133,7 +1152,7 @@ def configure_server(  # noqa: PLR0915
         inspect state before repeating a decision.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.propose_skill, latent_skill_id)
             result = use_cases.propose_skill(
                 ProposeSkillCommand(
                     latent_skill_id=latent_skill_id,
@@ -1141,7 +1160,7 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.propose",
                 scope=result.latent_skill.scope.value,
                 data=_skill_proposal_payload(result),
@@ -1228,7 +1247,7 @@ def configure_server(  # noqa: PLR0915
                 )
             )
             skill = result.latent_skill
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.track",
                 scope=skill.scope.value,
                 data={
@@ -1287,7 +1306,7 @@ def configure_server(  # noqa: PLR0915
         Review existing content before enabling updates or retrying.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.generate_skill, latent_skill_id)
             result = use_cases.generate_skill(
                 GenerateSkillCommand(
                     latent_skill_id=latent_skill_id,
@@ -1295,7 +1314,7 @@ def configure_server(  # noqa: PLR0915
                     update_existing=update_existing,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.generate",
                 scope=result.latent_skill.scope.value,
                 data=result.to_payload(),
@@ -1435,7 +1454,7 @@ def configure_server(  # noqa: PLR0915
                     category=category,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.create",
                 scope=result.latent_skill.scope.value,
                 data=result.to_payload(),
@@ -1540,7 +1559,7 @@ def configure_server(  # noqa: PLR0915
                     raw_markdown=raw_markdown,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.draft.create",
                 scope=latent_scope.value,
                 data=result.to_payload(),
@@ -1589,7 +1608,7 @@ def configure_server(  # noqa: PLR0915
                     scope=_latent_skill_scope_optional(scope),
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.validate",
                 scope=_raw_scope(scope) if scope else "project",
                 data=result.to_payload(),
@@ -1672,7 +1691,7 @@ def configure_server(  # noqa: PLR0915
         references. Publication can conflict with an existing slug; inspect before retrying.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.publish_skill, draft_or_path)
             result = use_cases.publish_skill(
                 PublishSkillCommand(
                     draft_or_path=draft_or_path,
@@ -1684,7 +1703,7 @@ def configure_server(  # noqa: PLR0915
                     category=category,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.publish",
                 scope=result.agent_skill.scope.value,
                 data=result.to_payload(),
@@ -1750,7 +1769,7 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.share",
                 scope=result.agent_skill.scope.value,
                 data=result.to_payload(),
@@ -1819,7 +1838,7 @@ def configure_server(  # noqa: PLR0915
                     project_initialized=initialized,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.promote",
                 scope=result.promoted_recommendation.scope.value,
                 data=result.to_payload(),
@@ -1898,7 +1917,7 @@ def configure_server(  # noqa: PLR0915
                     check_gitignore=check_gitignore,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.sync",
                 scope="all",
                 data=result.to_payload(),
@@ -1994,7 +2013,7 @@ def configure_server(  # noqa: PLR0915
                     category=category,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.import",
                 scope=result.latent_skill.scope.value,
                 data=result.to_payload(),
@@ -2099,7 +2118,7 @@ def configure_server(  # noqa: PLR0915
                     category=category,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.adopt",
                 scope=result.agent_skill.scope.value,
                 data=result.to_payload(),
@@ -2161,7 +2180,7 @@ def configure_server(  # noqa: PLR0915
         Repeated calls can create audit/snapshot records even when content matches.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.update_canonical_skill, skill_id_or_name)
             result = use_cases.update_canonical_skill(
                 UpdateCanonicalSkillCommand(
                     skill_id_or_name=skill_id_or_name,
@@ -2171,7 +2190,7 @@ def configure_server(  # noqa: PLR0915
                     drift_decision=drift_decision,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.canonical.update",
                 scope=result.agent_skill.scope.value,
                 data=result.to_payload(),
@@ -2214,7 +2233,7 @@ def configure_server(  # noqa: PLR0915
         after success; inspect before retrying.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.rename_skill, skill_id_or_name)
             result = use_cases.rename_skill(
                 RenameSkillCommand(
                     skill_id_or_name=skill_id_or_name,
@@ -2222,7 +2241,7 @@ def configure_server(  # noqa: PLR0915
                     origin="mcp",
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.rename",
                 scope=result.agent_skill.scope.value,
                 data=result.to_payload(),
@@ -2279,7 +2298,7 @@ def configure_server(  # noqa: PLR0915
         needed.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.cleanup_skill, skill_id_or_name)
             result = use_cases.cleanup_skill(
                 CleanupSkillCommand(
                     skill_id_or_name=skill_id_or_name,
@@ -2288,7 +2307,7 @@ def configure_server(  # noqa: PLR0915
                     dry_run=dry_run,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.cleanup",
                 scope="project",
                 data=result.to_payload(),
@@ -2340,7 +2359,7 @@ def configure_server(  # noqa: PLR0915
                     dry_run=dry_run,
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.repair",
                 scope="project",
                 data=result.to_payload(),
@@ -2365,7 +2384,7 @@ def configure_server(  # noqa: PLR0915
         try:
             require_project_initialized()
             result = use_cases.list_skills(ListSkillsCommand())
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.list",
                 scope="all",
                 data=result.to_payload(),
@@ -2426,7 +2445,7 @@ def configure_server(  # noqa: PLR0915
             result = use_cases.recommend_skills(
                 RecommendSkillsCommand(scope=latent_scope, min_recurrence=min_recurrence)
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.recommend",
                 scope=latent_scope.value if latent_scope is not None else "all",
                 data=result.to_payload(),
@@ -2460,7 +2479,7 @@ def configure_server(  # noqa: PLR0915
         try:
             require_project_initialized()
             result = use_cases.get_skill_detail(GetSkillDetailCommand(name_or_id=name_or_id))
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.detail",
                 scope=result.scope,
                 data=result.to_payload(),
@@ -2495,11 +2514,11 @@ def configure_server(  # noqa: PLR0915
         activation fails once the candidate is active.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.activate_skill, latent_skill_id)
             result = use_cases.activate_skill(
                 ActivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.activate",
                 scope=result.latent_skill.scope.value,
                 data=_skill_mutation_payload(result),
@@ -2539,11 +2558,11 @@ def configure_server(  # noqa: PLR0915
         activate_skill restores candidate state but does not reinstall native files.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.deactivate_skill, latent_skill_id)
             result = use_cases.deactivate_skill(
                 DeactivateSkillCommand(latent_skill_id=latent_skill_id, origin="mcp")
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.deactivate",
                 scope=result.latent_skill.scope.value,
                 data=_skill_mutation_payload(result),
@@ -2622,7 +2641,7 @@ def configure_server(  # noqa: PLR0915
         audit records.
         """
         try:
-            require_project_initialized()
+            require_project_initialized(use_cases.update_skill, latent_skill_id)
             result = use_cases.update_skill(
                 UpdateSkillCommand(
                     latent_skill_id=latent_skill_id,
@@ -2634,7 +2653,7 @@ def configure_server(  # noqa: PLR0915
                     native_drift_decision="keep",
                 )
             )
-            return _success_envelope(
+            return success_envelope(
                 operation="skills.update",
                 scope=result.latent_skill.scope.value,
                 data=_skill_mutation_payload(result),

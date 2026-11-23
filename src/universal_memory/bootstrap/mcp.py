@@ -40,8 +40,6 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
     from universal_memory.application.onboarding.setup_project import setup_project  # noqa: PLC0415
     from universal_memory.application.security import (  # noqa: PLC0415
         ListAuditLogUseCase,
-        ListSnapshotsUseCase,
-        RollbackUseCase,
         SafeWriteUseCase,
     )
     from universal_memory.application.skills import (  # noqa: PLC0415
@@ -94,6 +92,21 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
         root = project_root or Path.cwd()
     except Exception:
         root = Path(".")
+    from universal_memory.bootstrap.project_memory import (  # noqa: PLC0415
+        guard_project_operation,
+        scoped_context_handler,
+    )
+    from universal_memory.bootstrap.project_snapshots import (  # noqa: PLC0415
+        ProjectSnapshotCommands,
+    )
+    from universal_memory.infrastructure.config.project_roots import (  # noqa: PLC0415
+        resolve_project_roots,
+    )
+
+    roots = resolve_project_roots(root)
+    root = roots.memory_root
+    for warning in roots.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
     data_root = root / ".umem"
     layout_port = LocalProjectLayoutPort()
     audit_log_repository = LocalAuditLogRepository(project_root=root, data_root=data_root)
@@ -144,6 +157,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             data_root=data_root,
         ),
     )
+    context_handler = scoped_context_handler(context_use_case, fact_repository.global_data_root)
     remember_use_case = RememberFactUseCase(
         fact_repository=fact_repository,
         safe_write_use_case=safe_write_use_case,
@@ -151,34 +165,30 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
     facts_list_use_case = ListFactsUseCase(fact_repository=fact_repository)
     facts_purge_use_case = PurgeFactUseCase(fact_repository=fact_repository)
     audit_list_use_case = ListAuditLogUseCase(audit_log_repository=audit_log_repository)
-    manifest_file = data_root / "snapshots" / "manifest.json"
-    try:
-        manifest_rel_path = str(manifest_file.relative_to(root))
-    except ValueError:
-        manifest_rel_path = manifest_file.as_posix()
-    snapshots_list_use_case = ListSnapshotsUseCase(
-        snapshot_repository=snapshot_repository,
-        manifest_path=manifest_rel_path,
-    )
-    rollback_use_case = RollbackUseCase(
-        project_root=root,
-        snapshot_repository=snapshot_repository,
+    host_safe_write = SafeWriteUseCase(
+        project_root=roots.project_root,
+        secret_scanner=secret_scanner,
+        snapshot_repository=LocalSnapshotRepository(
+            project_root=roots.project_root,
+            data_root=roots.project_root / ".umem",
+        ),
         audit_log_repository=audit_log_repository,
     )
+    snapshot_commands = ProjectSnapshotCommands(safe_write_use_case, host_safe_write)
     host_use_case = ConfigureHostUseCase(
-        project_root=root,
-        safe_write_use_case=safe_write_use_case,
+        project_root=roots.project_root,
+        safe_write_use_case=host_safe_write,
         fact_repository=fact_repository,
     )
     connection_executor = ExecuteAgentConnectionsUseCase(
         host_setup_command=host_use_case.execute,
         host_check_command=host_use_case.execute,
-        context_read_command=context_use_case.execute,
+        context_read_command=context_handler,
     )
     doctor_use_case = DoctorUseCase(host_check_command=host_use_case.execute)
     host_sync_use_case = SyncInstructionsUseCase(
-        project_root=root,
-        safe_write_use_case=safe_write_use_case,
+        project_root=roots.project_root,
+        safe_write_use_case=host_safe_write,
         rule_repository=rule_repository,
         fact_repository=fact_repository,
     )
@@ -295,7 +305,7 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
     )
     session_bootstrap_use_case = SessionBootstrapUseCase(
         status=status_use_case.execute,
-        context=context_use_case.execute,
+        context=context_handler,
         list_skills=list_skills_use_case.execute,
     )
     recommend_skills_use_case = RecommendSkillsUseCase(repository=latent_skill_repository)
@@ -317,49 +327,53 @@ def build_server(project_root: Path | None = None) -> FastMCP:  # noqa: PLR0915
             layout=layout,
         )
 
+    def guarded(handler):
+        return guard_project_operation(handler, root)
+
     return configure_server(
         create_mcp_server(),
         MCPUseCases(
             initialize_project=initialize_project,
             execute_agent_connections=connection_executor,
             status=status_use_case.execute,
-            bootstrap=session_bootstrap_use_case.execute,
+            bootstrap=guarded(session_bootstrap_use_case.execute),
             doctor=doctor_use_case.execute,
-            context=context_use_case.execute,
-            remember=remember_use_case.execute,
+            context=guarded(context_handler),
+            remember=guarded(remember_use_case.execute),
             list_facts=facts_list_use_case.execute,
-            purge_fact=facts_purge_use_case.execute,
+            purge_fact=guarded(facts_purge_use_case.execute),
             list_audit_events=audit_list_use_case.execute,
-            list_snapshots=snapshots_list_use_case.execute,
-            rollback_scope=rollback_use_case.execute,
-            host_setup=host_use_case.execute,
-            host_check=host_use_case.execute,
-            sync_instructions=host_sync_use_case.execute,
-            propose_skill=propose_skill_use_case.execute,
-            track_latent_skill=track_latent_skill_use_case.execute,
-            generate_skill=generate_skill_use_case.execute,
-            create_skill=create_skill_use_case.execute,
-            create_skill_draft=create_skill_draft_use_case.execute,
-            publish_skill=publish_skill_use_case.execute,
-            share_skill=share_skill_use_case.execute,
+            list_snapshots=snapshot_commands.list,
+            rollback_scope=guarded(snapshot_commands.rollback),
+            host_setup=guarded(host_use_case.execute),
+            host_check=guarded(host_use_case.execute),
+            sync_instructions=guarded(host_sync_use_case.execute),
+            propose_skill=guarded(propose_skill_use_case.execute),
+            track_latent_skill=guarded(track_latent_skill_use_case.execute),
+            generate_skill=guarded(generate_skill_use_case.execute),
+            create_skill=guarded(create_skill_use_case.execute),
+            create_skill_draft=guarded(create_skill_draft_use_case.execute),
+            publish_skill=guarded(publish_skill_use_case.execute),
+            share_skill=guarded(share_skill_use_case.execute),
             validate_skill=validate_skill_use_case.execute,
-            adopt_skill=adopt_skill_use_case.execute,
-            update_canonical_skill=update_canonical_skill_use_case.execute,
-            rename_skill=rename_skill_use_case.execute,
-            cleanup_skill=cleanup_skill_use_case.execute,
-            repair_skills=repair_skills_use_case.execute,
-            sync_skills=sync_skills_use_case.execute,
-            promote_skill_recommendation=promote_skill_recommendation_use_case.execute,
-            import_skill=import_skill_use_case.execute,
+            adopt_skill=guarded(adopt_skill_use_case.execute),
+            update_canonical_skill=guarded(update_canonical_skill_use_case.execute),
+            rename_skill=guarded(rename_skill_use_case.execute),
+            cleanup_skill=guarded(cleanup_skill_use_case.execute),
+            repair_skills=guarded(repair_skills_use_case.execute),
+            sync_skills=guarded(sync_skills_use_case.execute),
+            promote_skill_recommendation=guarded(promote_skill_recommendation_use_case.execute),
+            import_skill=guarded(import_skill_use_case.execute),
             recommend_skills=recommend_skills_use_case.execute,
             list_skills=list_skills_use_case.execute,
             get_skill_detail=get_skill_detail_use_case.execute,
-            activate_skill=_activate_skill_use_case.execute,
-            deactivate_skill=_deactivate_skill_use_case.execute,
-            update_skill=_update_skill_use_case.execute,
-            migrate_project_layout=layout_migrate_use_case.execute,
+            activate_skill=guarded(_activate_skill_use_case.execute),
+            deactivate_skill=guarded(_deactivate_skill_use_case.execute),
+            update_skill=guarded(_update_skill_use_case.execute),
+            migrate_project_layout=guarded(layout_migrate_use_case.execute),
         ),
-        project_root=root,
+        project_root=roots.project_root,
+        memory_root=root,
     )
 
 

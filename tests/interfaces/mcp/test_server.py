@@ -290,7 +290,8 @@ async def test_real_mcp_blocks_project_mutation_before_initialization(tmp_path: 
     assert remember_content["operation"] == "remember"
     assert remember_content["scope"] == "project"
     assert remember_content["error"]["code"] == JSON_RPC_VALIDATION_FAILED
-    assert "initialize_project" in remember_content["error"]["data"]["detail"]
+    assert "umem init" in remember_content["error"]["data"]["detail"]
+    assert remember_content["error"]["data"]["memory_root"] == str(tmp_path)
     assert init_content["ok"] is True
     assert (tmp_path / ".umem" / "config.toml").is_file()
     assert (tmp_path / ".umem" / "skills").is_dir()

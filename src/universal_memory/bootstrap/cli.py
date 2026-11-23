@@ -1,6 +1,5 @@
+import sys
 from collections.abc import Sequence
-from datetime import UTC, datetime
-from pathlib import Path
 
 from universal_memory.application.diagnostics import DoctorUseCase
 from universal_memory.application.host import (
@@ -23,10 +22,9 @@ from universal_memory.application.onboarding import (
     SessionBootstrapUseCase,
     default_agent_connection_planner,
 )
+from universal_memory.application.onboarding.setup_project import setup_project
 from universal_memory.application.security import (
     ListAuditLogUseCase,
-    ListSnapshotsUseCase,
-    RollbackUseCase,
     SafeWriteUseCase,
 )
 from universal_memory.application.skills import (
@@ -59,7 +57,11 @@ from universal_memory.application.update import (
     UpdateManagedSkillsUseCase,
     UpdateMigrateUseCase,
 )
-from universal_memory.domain import SnapshotFailedError
+from universal_memory.bootstrap.project_memory import (
+    guard_project_operation,
+    scoped_context_handler,
+)
+from universal_memory.bootstrap.project_snapshots import ProjectSnapshotCommands
 from universal_memory.domain.entities import (
     LatentSkill,
     LatentSkillScope,
@@ -67,9 +69,6 @@ from universal_memory.domain.entities import (
     Rule,
     RuleScope,
     RuleStatus,
-    Snapshot,
-    SnapshotScope,
-    SnapshotStatus,
 )
 from universal_memory.domain.entities.runtime import default_runtime_registry
 from universal_memory.domain.ports import LatentSkillRepository, RuleRepository
@@ -78,6 +77,7 @@ from universal_memory.infrastructure.config import (
     LocalConnectionStatePort,
     LocalProjectLayoutPort,
 )
+from universal_memory.infrastructure.config.project_roots import resolve_project_roots
 from universal_memory.infrastructure.config.toml_loader import load_config
 from universal_memory.infrastructure.onboarding import (
     DEFAULT_OFFICIAL_SKILL_MAPPINGS,
@@ -141,7 +141,10 @@ class EmptyLatentSkillRepository(LatentSkillRepository):
 
 
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
-    project_root = Path.cwd()
+    roots = resolve_project_roots()
+    project_root = roots.memory_root
+    for warning in roots.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
     data_root = project_root / ".umem"
     layout_port = LocalProjectLayoutPort()
     audit_log_repository = LocalAuditLogRepository(
@@ -161,17 +164,6 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         safe_write_use_case=safe_write_use_case,
     )
     audit_list_use_case = ListAuditLogUseCase(audit_log_repository=audit_log_repository)
-    manifest_file = data_root / "snapshots" / "manifest.json"
-    manifest_rel_path = str(manifest_file.relative_to(project_root))
-    snapshots_list_use_case = ListSnapshotsUseCase(
-        snapshot_repository=snapshot_repository,
-        manifest_path=manifest_rel_path,
-    )
-    rollback_use_case = RollbackUseCase(
-        project_root=project_root,
-        snapshot_repository=snapshot_repository,
-        audit_log_repository=audit_log_repository,
-    )
     rule_repository = LocalRuleRepository(
         project_root=project_root,
         data_root=data_root,
@@ -209,23 +201,34 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
             data_root=data_root,
         ),
     )
+    context_handler = scoped_context_handler(context_use_case, fact_repository.global_data_root)
     remember_use_case = RememberFactUseCase(
         fact_repository=fact_repository,
         safe_write_use_case=safe_write_use_case,
     )
+    host_safe_write = SafeWriteUseCase(
+        project_root=roots.project_root,
+        secret_scanner=EntropySecretScanner(),
+        snapshot_repository=LocalSnapshotRepository(
+            project_root=roots.project_root,
+            data_root=roots.project_root / ".umem",
+        ),
+        audit_log_repository=audit_log_repository,
+    )
+    snapshot_commands = ProjectSnapshotCommands(safe_write_use_case, host_safe_write)
     host_use_case = ConfigureHostUseCase(
-        project_root=project_root,
-        safe_write_use_case=safe_write_use_case,
+        project_root=roots.project_root,
+        safe_write_use_case=host_safe_write,
         fact_repository=fact_repository,
     )
     runtime_registry = default_runtime_registry()
     official_connection_state = LocalOfficialSkillConnectionStatePort(
-        project_root=project_root,
-        safe_write_use_case=safe_write_use_case,
+        project_root=roots.project_root,
+        safe_write_use_case=host_safe_write,
     )
     official_mapping_port = StaticOfficialSkillMappingPort(
         DEFAULT_OFFICIAL_SKILL_MAPPINGS,
-        project_root=project_root,
+        project_root=roots.project_root,
         state_port=official_connection_state,
     )
     official_environment_probe = LocalOfficialSkillEnvironmentProbe(
@@ -246,13 +249,13 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     connection_executor = ExecuteAgentConnectionsUseCase(
         host_setup_command=host_use_case.execute,
         host_check_command=host_use_case.execute,
-        context_read_command=context_use_case.execute,
+        context_read_command=context_handler,
         connection_state_port=LocalConnectionStatePort(
-            project_root=project_root,
-            safe_write_use_case=safe_write_use_case,
+            project_root=roots.project_root,
+            safe_write_use_case=host_safe_write,
         ),
         external_action_executor=OfficialSkillExternalActionExecutor(
-            project_root=project_root,
+            project_root=roots.project_root,
             mapping_port=official_mapping_port,
             state_port=official_connection_state,
             audit_port=LocalExternalActionAuditPort(repository=audit_log_repository),
@@ -263,8 +266,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     )
     doctor_use_case = DoctorUseCase(host_check_command=host_use_case.execute)
     host_sync_use_case = SyncInstructionsUseCase(
-        project_root=project_root,
-        safe_write_use_case=safe_write_use_case,
+        project_root=roots.project_root,
+        safe_write_use_case=host_safe_write,
         rule_repository=rule_repository,
         fact_repository=fact_repository,
     )
@@ -386,7 +389,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     )
     session_bootstrap_use_case = SessionBootstrapUseCase(
         status=status_use_case.execute,
-        context=context_use_case.execute,
+        context=context_handler,
         list_skills=list_skills_use_case.execute,
     )
     recommend_skills_use_case = RecommendSkillsUseCase(repository=latent_skill_repository)
@@ -418,68 +421,75 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
             return DEFAULT_LOCALE
         return normalize_locale(preferences.get("locale"))
 
-    def rollback_preview(scope: SnapshotScope) -> Snapshot:
-        snapshots = snapshot_repository.list(scope=scope, status=SnapshotStatus.created)
-        if not snapshots:
-            raise SnapshotFailedError(
-                "No snapshot found for the requested scope. "
-                "Hint: run a safe mutation before trying rollback."
-            )
+    def initialize_if_confirmed() -> None:
+        from universal_memory.interfaces.cli.init_command import (  # noqa: PLC0415
+            _confirm,
+            _determine_output_format,
+        )
 
-        def _normalize_datetime(dt: datetime) -> datetime:
-            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
-                return dt.replace(tzinfo=UTC)
-            return dt
+        args = list(sys.argv[1:] if argv is None else argv)
+        if sys.stdin.isatty() and sys.stdout.isatty() and _determine_output_format(args) != "json":
+            if _confirm(f"umem is not initialized at {project_root}. Initialize?", default=False):
+                setup_project(
+                    project_root,
+                    layout_port=layout_port,
+                    config_validation_port=LocalConfigValidationPort(),
+                )
 
-        return max(snapshots, key=lambda snapshot: _normalize_datetime(snapshot.timestamp))
+    def guarded(handler):
+        return guard_project_operation(
+            handler,
+            project_root,
+            initialize=initialize_if_confirmed,
+        )
 
     configured_main = build_main(
         layout_port=layout_port,
         config_validation_port=LocalConfigValidationPort(),
         audit_list_command=audit_list_use_case.execute,
-        snapshots_list_command=snapshots_list_use_case.execute,
-        rollback_command=rollback_use_case.execute,
-        rollback_preview_command=rollback_preview,
+        snapshots_list_command=snapshot_commands.list,
+        rollback_command=guarded(snapshot_commands.rollback),
+        rollback_preview_command=snapshot_commands.preview,
         status_command=status_use_case.execute,
-        bootstrap_command=session_bootstrap_use_case.execute,
+        bootstrap_command=guarded(session_bootstrap_use_case.execute),
         doctor_command=doctor_use_case.execute,
-        context_command=context_use_case.execute,
-        remember_command=remember_use_case.execute,
+        context_command=guarded(context_handler),
+        remember_command=guarded(remember_use_case.execute),
         facts_list_command=facts_list_use_case.execute,
-        facts_purge_command=facts_purge_use_case.execute,
-        facts_hygiene_command=facts_hygiene_use_case.execute,
-        host_setup_command=host_use_case.execute,
-        host_check_command=host_use_case.execute,
-        host_sync_command=host_sync_use_case.execute,
+        facts_purge_command=guarded(facts_purge_use_case.execute),
+        facts_hygiene_command=guarded(facts_hygiene_use_case.execute),
+        host_setup_command=guarded(host_use_case.execute),
+        host_check_command=guarded(host_use_case.execute),
+        host_sync_command=guarded(host_sync_use_case.execute),
         agent_connection_plan_command=connection_planner.plan,
         agent_connection_executor=connection_executor,
-        propose_skill_command=propose_skill_use_case.execute,
-        track_latent_skill_command=track_latent_skill_use_case.execute,
-        generate_skill_command=generate_skill_use_case.execute,
-        create_skill_command=create_skill_use_case.execute,
-        create_skill_draft_command=create_skill_draft_use_case.execute,
-        publish_skill_command=publish_skill_use_case.execute,
-        share_skill_command=share_skill_use_case.execute,
+        propose_skill_command=guarded(propose_skill_use_case.execute),
+        track_latent_skill_command=guarded(track_latent_skill_use_case.execute),
+        generate_skill_command=guarded(generate_skill_use_case.execute),
+        create_skill_command=guarded(create_skill_use_case.execute),
+        create_skill_draft_command=guarded(create_skill_draft_use_case.execute),
+        publish_skill_command=guarded(publish_skill_use_case.execute),
+        share_skill_command=guarded(share_skill_use_case.execute),
         validate_skill_command=validate_skill_use_case.execute,
-        adopt_skill_command=adopt_skill_use_case.execute,
-        update_canonical_skill_command=update_canonical_skill_use_case.execute,
-        rename_skill_command=rename_skill_use_case.execute,
-        cleanup_skill_command=cleanup_skill_use_case.execute,
-        repair_skills_command=repair_skills_use_case.execute,
-        sync_skills_command=sync_skills_use_case.execute,
-        promote_skill_recommendation_command=promote_skill_recommendation_use_case.execute,
-        import_skill_command=import_skill_use_case.execute,
+        adopt_skill_command=guarded(adopt_skill_use_case.execute),
+        update_canonical_skill_command=guarded(update_canonical_skill_use_case.execute),
+        rename_skill_command=guarded(rename_skill_use_case.execute),
+        cleanup_skill_command=guarded(cleanup_skill_use_case.execute),
+        repair_skills_command=guarded(repair_skills_use_case.execute),
+        sync_skills_command=guarded(sync_skills_use_case.execute),
+        promote_skill_recommendation_command=guarded(promote_skill_recommendation_use_case.execute),
+        import_skill_command=guarded(import_skill_use_case.execute),
         recommend_skills_command=recommend_skills_use_case.execute,
         list_skills_command=list_skills_use_case.execute,
         get_skill_detail_command=get_skill_detail_use_case.execute,
-        activate_skill_command=_activate_skill_use_case.execute,
-        deactivate_skill_command=_deactivate_skill_use_case.execute,
-        update_skill_command=_update_skill_use_case.execute,
+        activate_skill_command=guarded(_activate_skill_use_case.execute),
+        deactivate_skill_command=guarded(_deactivate_skill_use_case.execute),
+        update_skill_command=guarded(_update_skill_use_case.execute),
         update_check_command=update_check_use_case.execute,
-        update_managed_skills_command=update_managed_skills_use_case.execute,
-        update_migrate_command=update_migrate_use_case.execute,
-        update_benchmarks_command=update_benchmarks_use_case.execute,
-        layout_migrate_command=layout_migrate_use_case.execute,
+        update_managed_skills_command=guarded(update_managed_skills_use_case.execute),
+        update_migrate_command=guarded(update_migrate_use_case.execute),
+        update_benchmarks_command=guarded(update_benchmarks_use_case.execute),
+        layout_migrate_command=guarded(layout_migrate_use_case.execute),
         locale_resolver=locale_resolver,
     )
     return configured_main(argv)

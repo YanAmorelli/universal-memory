@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -16,6 +15,7 @@ from pydantic import ValidationError
 from universal_memory.domain import SnapshotFailedError, StorageError
 from universal_memory.domain.entities import Snapshot, SnapshotScope, SnapshotStatus
 from universal_memory.domain.ports import SnapshotRepository
+from universal_memory.infrastructure.process_lock import LockAcquisitionError, legacy_file_lock
 
 STALE_LOCK_SECONDS = 10.0
 
@@ -40,43 +40,11 @@ class LocalSnapshotRepository(SnapshotRepository):
     @contextmanager
     def _lock(self) -> Generator[None, None, None]:
         lock_path = self.manifest_path.with_suffix(".json.lock")
-        self.snapshots_root.mkdir(parents=True, exist_ok=True)
-
-        # Break stale locks older than 10 seconds
-        if lock_path.exists():
-            try:
-                mtime = os.path.getmtime(lock_path)
-                if time.time() - mtime > STALE_LOCK_SECONDS:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-        max_attempts = 20
-        delay = 0.1
-        acquired = False
-        fd = None
         try:
-            for _ in range(max_attempts):
-                try:
-                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    acquired = True
-                    break
-                except FileExistsError:
-                    time.sleep(delay)
-            if not acquired:
-                raise SnapshotFailedError("Failed to acquire lock on snapshot manifest")
-            yield
-        finally:
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-            if acquired:
-                try:
-                    os.unlink(lock_path)
-                except OSError:
-                    pass
+            with legacy_file_lock(lock_path, stale_after=STALE_LOCK_SECONDS):
+                yield
+        except LockAcquisitionError as exc:
+            raise SnapshotFailedError("Failed to acquire lock on snapshot manifest") from exc
 
     def read(self, id: str) -> Snapshot:
         for snapshot in self._load_snapshots():

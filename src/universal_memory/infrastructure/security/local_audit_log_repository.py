@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -14,6 +13,7 @@ from pydantic import ValidationError
 from universal_memory.domain import StorageError
 from universal_memory.domain.entities import AuditEvent, AuditEventScope
 from universal_memory.domain.ports import AuditLogRepository
+from universal_memory.infrastructure.process_lock import legacy_file_lock
 
 STALE_LOCK_SECONDS = 10.0
 LOCK_ACQUIRE_TIMEOUT_SECONDS = 10.0
@@ -37,42 +37,12 @@ class LocalAuditLogRepository(AuditLogRepository):
     @contextmanager
     def _lock(self) -> Generator[None, None, None]:
         lock_path = self.events_path.with_suffix(".jsonl.lock")
-        self.audit_root.mkdir(parents=True, exist_ok=True)
-
-        # Break stale locks older than 10 seconds
-        if lock_path.exists():
-            try:
-                mtime = os.path.getmtime(lock_path)
-                if time.time() - mtime > STALE_LOCK_SECONDS:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-        deadline = time.monotonic() + self.lock_acquire_timeout_seconds
-        acquired = False
-        fd: int | None = None
-        try:
-            while time.monotonic() <= deadline:
-                try:
-                    fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    acquired = True
-                    break
-                except FileExistsError:
-                    time.sleep(LOCK_RETRY_DELAY_SECONDS)
-            if not acquired:
-                raise StorageError("Failed to acquire lock on audit log")
+        with legacy_file_lock(
+            lock_path,
+            timeout=self.lock_acquire_timeout_seconds,
+            stale_after=STALE_LOCK_SECONDS,
+        ):
             yield
-        finally:
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-            if acquired:
-                try:
-                    os.unlink(lock_path)
-                except OSError:
-                    pass
 
     def read(self, id: str) -> AuditEvent:
         for event in self._load_events():

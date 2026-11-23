@@ -588,7 +588,9 @@ def test_connect_requires_initialized_project(
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 1
     assert payload["ok"] is False
-    assert "Run umem init first" in payload["error"]["detail"]
+    assert payload["error"]["code"] == "project_not_initialized"
+    assert payload["error"]["memory_root"] == str(tmp_path)
+    assert "Ask the person" in payload["error"]["recovery_hint"]
     assert not (tmp_path / ".umem").exists()
 
 
