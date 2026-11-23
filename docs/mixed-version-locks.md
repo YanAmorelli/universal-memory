@@ -48,6 +48,22 @@ already-pinned inode is published at the legacy path with an atomic hard link:
 old readers never see an initial normal mtime that they could cache before a
 suspension. Filesystems without hard links fail before entering the mutation.
 
+This does **not** fence a cached timestamp from a previous legacy owner. A real
+released reader can read that owner's old mtime, pause, and resume after the
+previous owner exits and a new updated writer acquires its pinned lock. The old
+reader unlinks the path using its cached value without checking the inode. It can
+then write concurrently with the updated owner and lose a record. This was
+reproduced with complete 0.6.1 and 0.6.4 packages, three real processes, and an old
+owner held for more than ten real seconds: all writers returned success, but the
+cached reader's committed fact was overwritten by the updated writer. The pause
+was inserted after the real getmtime call; the released lock algorithm was unchanged.
+
+The future timestamp therefore mitigates ordinary expiry of a new owner's inode;
+it does not establish general mixed-version safety, even for repository writes.
+A heartbeat, shorter lock duration, PID checks or a marker ignored by old code
+cannot repair an old reader's unchecked unlink. A quiescent upgrade is required
+for data-integrity guarantees across this cutover.
+
 The new implementation never expires an unknown UUID-only lock. It recovers a
 previous updated lock only while owning the kernel lease and only when its UUID,
 device and inode match the operational ownership record. The kernel releases a
@@ -91,7 +107,7 @@ unlink, without changing memory records or replacing the guard inode.
 | Evict only when the PID is dead | Old UUID locks contain no PID; PID reuse and permission errors make guessed ownership unsafe. A PID in new locks would not change old readers. |
 | Add an incompatible-version marker | Old writers do not check it. A marker only the new executable obeys cannot fence a running old process. Enforced schema rejection would require a separately approved format/migration change. |
 | Kernel lease alone | Old versions never acquire it and still unlink the legacy lock. |
-| Future mtime plus proven kernel ownership | Protects cooperative repository paths through suspension; unknown old owners are never expelled. Does not fence old paths that ignore locks. |
+| Future mtime plus proven kernel ownership | Mitigates ordinary expiry through suspension; unknown old owners are never expelled. Does not fence cached stale checks from a previous old owner or paths that ignore locks. |
 
 ## Validation and remaining boundaries
 
@@ -102,8 +118,8 @@ timeout without writing; after the holder resumes and completes, retry succeeds
 and both records remain. Updated-process crashes are tested separately, as are
 unknown ancient locks and clocks beyond the fence horizon.
 
-There is no claim of universal zero risk: old unlocked write paths and old/old
-concurrency remain outside this protocol. External modification of lock files,
+There is no claim of universal zero risk: the cached-old-owner race, old unlocked
+write paths and old/old concurrency remain outside this protocol. External modification of lock files,
 filesystems without reliable POSIX locking or nanosecond timestamps, or an OS
 clock jumping beyond the 2255 fence can invalidate the assumptions of old readers.
 The new executable fails before mutation when its initial clock/filesystem checks

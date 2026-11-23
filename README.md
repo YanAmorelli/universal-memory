@@ -167,8 +167,10 @@ project.
 
 Concurrent writers use kernel leases alongside legacy UUID lock files, with a
 2-second acquisition timeout (audit keeps its configured timeout). Updated writers
-pin the legacy lock timestamp in the future so released 0.6.1/0.6.4 cannot expire
-it after 10 seconds, even if the writer is suspended. A previous updated owner's
+pin the legacy lock timestamp in the future to prevent ordinary age expiry of
+that inode, including while the writer is suspended. This is a partial fence:
+an old reader with a cached stale mtime from a previous owner can still unlink
+the new lock and cause lost records. A previous updated owner's
 lock is recovered only after its kernel lease ends and its token and inode match.
 An unknown old lock is never evicted by age or a guessed PID; after an old crash,
 recovery may require stopping every writer and reviewing that lock manually.
@@ -178,7 +180,7 @@ update every executable and integration pin, then restart those sessions.** An
 executable upgrade alone does not replace code already loaded by an MCP server.
 Old rollback, initialization, config and direct SafeWrite paths do not acquire the
 repository locks; new code cannot force them to cooperate. The compatibility
-fence protects the tested repository write paths, not every possible old write.
+fence covers the tested two-writer contention cases, not every legacy interleaving.
 See [the compatibility analysis](docs/mixed-version-locks.md) for evidence and limits.
 
 ### 1. Initialize your project
