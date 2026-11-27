@@ -10,6 +10,10 @@ from universal_memory.domain.project_layout import (
 
 
 class ProjectLayoutPort(ABC):
+    def has_project_identity(self, project_root: Path) -> bool:
+        """Recognize initialized older layouts independently of layout completeness."""
+        return self.is_project_initialized(project_root)
+
     @abstractmethod
     def ensure_project_layout(self, project_root: Path) -> ProjectLayoutResult:
         """Materialize or validate the canonical `.umem/` layout."""

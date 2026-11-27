@@ -78,7 +78,7 @@ def test_doctor_json_outputs_environment_envelope(
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert received == [DoctorCommand(project_root=tmp_path)]
+    assert received == [DoctorCommand(project_root=tmp_path, memory_root=tmp_path)]
     assert payload == {
         "ok": True,
         "operation": "doctor",

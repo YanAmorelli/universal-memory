@@ -136,6 +136,75 @@ deleting either tree.
 
 ## Quick Start Guide
 
+Git worktrees share **unversioned** project memory with the main checkout,
+including commands run from subdirectories. When the active layout's
+`facts.jsonl` is tracked in the current worktree's Git index, memory belongs to
+that worktree/branch instead; the main checkout need not be initialized.
+This applies to `.umem/memory/facts.jsonl` in the legacy layout and
+`umem/memory/facts.jsonl` in the shared layout (including configured shared roots).
+Tracking only config, or tracking facts only in the main checkout's branch,
+does not select local memory. Git discovery/index errors fail closed.
+Host instructions such as `CLAUDE.md` and generated native skill files remain in
+the current worktree; canonical skills follow its selected memory owner.
+`connect` persists runtime configuration and its config snapshots at the memory
+owner (normally the main checkout); host instructions still target the active checkout.
+An initialized nested subproject owns its memory and host files only when its
+complete `umem init` layout exists. Incomplete nested layouts fall back to the
+checkout's memory with a warning. To deliberately initialize a nested subproject,
+run `UMEM_MEMORY_ROOT="$PWD" umem init` from that subdirectory; later commands
+discover the completed layout without the override. Legacy incomplete layouts at
+the checkout root remain usable as described below.
+For a bare repository, the shared memory lives in the bare repository's
+`.umem/` directory. Outside Git, UMEM uses the nearest ancestor containing `.umem/`,
+or the current directory for a new project.
+
+Set `UMEM_MEMORY_ROOT` to a checkout directory to explicitly select another memory
+owner (for example, the current worktree). Existing local memory is never moved or
+deleted: UMEM warns when local records are excluded by the shared-root selection.
+Review those records before removing a worktree.
+
+Git discovery failures stop project resolution before writing. Discovery uses
+portable Git options and supports submodule worktrees. A linked worktree created
+from `--separate-git-dir` may have no authoritative backlink to the main checkout;
+UMEM then requires an explicit `UMEM_MEMORY_ROOT` instead of choosing Git metadata.
+In a container with `.git` pointing to `.bare`, memory belongs to `.bare` while
+host files belong to the container or active linked worktree.
+
+Project mutations require initialization. Interactive commands ask before creating
+memory; JSON output, noninteractive commands, and MCP return an initialization error
+with `memory_root` and instructions to ask the person and run `umem init`. Global
+commands remain available without project initialization.
+An older initialized project is recognized by valid project/host configuration
+and its memory directory even when newer optional benchmark files are missing.
+`umem update --migrate` can repair that older layout; `doctor` still reports
+incomplete layout components. Audit or host remnants alone do not initialize a
+project.
+
+Concurrent writers use kernel leases alongside legacy UUID lock files, with a
+2-second acquisition timeout (audit keeps its configured timeout). Updated writers
+pin the legacy lock timestamp in the future to prevent ordinary age expiry of
+that inode, including while the writer is suspended. This is a partial fence:
+an old reader with a cached stale mtime from a previous owner can still unlink
+the new lock and cause lost records. A previous updated owner's
+lock is recovered only after its kernel lease ends and its token and inode match.
+An unknown old lock is never evicted by age or a guessed PID; after an old crash,
+recovery may require stopping every writer and reviewing that lock manually.
+
+**Mandatory upgrade procedure: close all old CLI commands and MCP servers,
+update every executable and integration pin, then restart those sessions before
+writing memory with this change.** An
+executable upgrade alone does not replace code already loaded by an MCP server.
+Old rollback, initialization, config and direct SafeWrite paths do not acquire the
+repository locks; new code cannot force them to cooperate. The compatibility
+fence covers the tested two-writer contention cases, not every legacy interleaving.
+See [the compatibility analysis](docs/mixed-version-locks.md) for evidence and limits.
+Follow the [PR upgrade notes](docs/pr99-upgrade-notes.md) before upgrading.
+
+FAT32 and exFAT are unsupported. Storage requires reliable POSIX locks, hard
+links and preservation of nanosecond timestamps through the 2255 lock fence.
+Unsupported timestamp or hard-link capabilities fail before protected writes;
+use a supported filesystem instead of retrying initialization to repair it.
+
 ### 1. Initialize your project
 
 Open your project directory and run:

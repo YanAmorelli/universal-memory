@@ -143,7 +143,7 @@ class _SkillPlacement:
 
 
 class CreateSkillUseCase:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         project_root: Path,
@@ -151,12 +151,13 @@ class CreateSkillUseCase:
         safe_write_use_case: SafeWriteUseCase,
         global_safe_write_use_case: SafeWriteUseCase | None = None,
         runtime_registry: RuntimeRegistry | None = None,
+        native_skill_sync: NativeSkillSync | None = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.repository = repository
         self.safe_write_use_case = safe_write_use_case
         self.global_safe_write_use_case = global_safe_write_use_case or safe_write_use_case
-        self.native_skill_sync = NativeSkillSync(
+        self.native_skill_sync = native_skill_sync or NativeSkillSync(
             project_root=self.project_root,
             safe_write_use_case=safe_write_use_case,
             runtime_registry=runtime_registry,

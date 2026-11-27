@@ -20,6 +20,7 @@ from universal_memory.application.skills import (
     UpdateSkillResult,
 )
 from universal_memory.domain.entities import LatentSkill, LatentSkillScope, LatentSkillStatus
+from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.interfaces.cli.init_command import main as cli_main
 
 MIN_BENCHMARK_FACT_COUNT = 1000
@@ -109,6 +110,8 @@ def test_update_benchmarks_cli_json_has_required_metrics(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".umem" / "benchmarks").mkdir(parents=True)
+
+    LocalProjectLayoutPort().ensure_project_layout(tmp_path)
 
     exit_code = main(["update", "--benchmarks", "--format", "json", "--yes"])
 

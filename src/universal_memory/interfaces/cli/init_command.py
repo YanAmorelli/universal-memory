@@ -152,7 +152,10 @@ from universal_memory.domain.entities import (
 )
 from universal_memory.domain.entities.base import format_utc_iso
 from universal_memory.domain.entities.runtime import RuntimeAdapter, default_runtime_registry
+from universal_memory.domain.exceptions import ProjectNotInitializedError
 from universal_memory.infrastructure.config import LocalProjectLayoutPort
+from universal_memory.infrastructure.config.project_layout import require_initialized
+from universal_memory.infrastructure.config.project_roots import resolve_project_roots
 from universal_memory.interfaces.cli.message_catalog import (
     DEFAULT_LOCALE,
     human_message,
@@ -624,7 +627,7 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
     @layout_app.command("status")
     def layout_status(ctx: typer.Context, output_format: OutputFormatOption = None) -> None:
         result = InspectProjectLayoutUseCase(
-            project_root=Path.cwd(),
+            project_root=resolve_project_roots().memory_root,
             layout_port=LocalProjectLayoutPort(),
         ).execute()
         report = result["data"]
@@ -697,7 +700,8 @@ def create_typer_app(  # noqa: PLR0913, PLR0915
         output_format: OutputFormatOption = None,
     ) -> None:
         command_handler = (
-            layout_migrate_command or MigrateProjectLayoutUseCase(project_root=Path.cwd()).execute
+            layout_migrate_command
+            or MigrateProjectLayoutUseCase(project_root=resolve_project_roots().memory_root).execute
         )
         _ = target_layout
         if dry_run and apply_changes:
@@ -2189,7 +2193,7 @@ def _run_init(  # noqa: PLR0912, PLR0913
             selected_runtimes, selected_hosts=selected_hosts
         )
         plan = _plan_connections(
-            Path.cwd(),
+            resolve_project_roots().project_root,
             selected_agent_ids=explicit_runtime_ids,
             command=agent_connection_plan_command,
         )
@@ -2208,12 +2212,16 @@ def _run_init(  # noqa: PLR0912, PLR0913
         if not accepted:
             runtime_ids = []
         if output_format == "json":
-            result = _execute_setup_project(command, Path.cwd(), runtime_ids, layout=layout)
+            result = _execute_setup_project(
+                command, resolve_project_roots().memory_root, runtime_ids, layout=layout
+            )
         else:
             with _stderr_console().status(
                 human_message("Initializing project scaffold...", locale=locale), spinner="dots"
             ):
-                result = _execute_setup_project(command, Path.cwd(), runtime_ids, layout=layout)
+                result = _execute_setup_project(
+                    command, resolve_project_roots().memory_root, runtime_ids, layout=layout
+                )
             locale = resolve_locale()
         execution = _execute_agent_connection_plan(
             plan,
@@ -2285,9 +2293,8 @@ def _run_connect(  # noqa: PLR0913
     agent_connection_executor: ExecuteAgentConnectionsUseCase | None,
 ) -> int:
     try:
-        project_root = Path.cwd()
-        if not (project_root / ".umem" / "config.toml").is_file():
-            raise ValidationFailedError("Universal Memory is not initialized. Run umem init first.")
+        project_root = resolve_project_roots().project_root
+        require_initialized(resolve_project_roots().memory_root)
         normalized_agents = _normalize_agent_ids(selected_agents) if selected_agents else None
         plan = _plan_connections(
             project_root,
@@ -2737,7 +2744,7 @@ def _configure_init_hosts(
 
 def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
     try:
-        result = command(GetMemoryStatusCommand(project_root=Path.cwd()))
+        result = command(GetMemoryStatusCommand(project_root=resolve_project_roots().memory_root))
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
@@ -2761,7 +2768,7 @@ def _run_status(command: StatusCommandHandler, *, output_format: str) -> int:
 
 def _run_bootstrap(command: BootstrapCommandHandler, *, output_format: str) -> int:
     try:
-        result = command(SessionBootstrapCommand(project_root=Path.cwd()))
+        result = command(SessionBootstrapCommand(project_root=resolve_project_roots().memory_root))
     except Exception as error:
         normalized_error = normalize_bootstrap_error(error)
         if isinstance(normalized_error, (*DOMAIN_ERROR_TYPES, ValidationError)):
@@ -2789,7 +2796,10 @@ def _run_bootstrap(command: BootstrapCommandHandler, *, output_format: str) -> i
 
 def _run_doctor(command: DoctorCommandHandler, *, output_format: str) -> int:
     try:
-        result = command(DoctorCommand(project_root=Path.cwd()))
+        roots = resolve_project_roots()
+        result = command(
+            DoctorCommand(project_root=roots.project_root, memory_root=roots.memory_root)
+        )
     except OSError as error:
         _print_expected_error(StorageError(str(error)), output_format=output_format)
         return 1
@@ -3284,7 +3294,9 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
         if apply_default_update:
             if check_command is None:
                 raise RuntimeError("CLI update_check_command dependency was not configured.")
-            check_result = check_command(UpdateCheckCommand(project_root=Path.cwd()))
+            check_result = check_command(
+                UpdateCheckCommand(project_root=resolve_project_roots().memory_root)
+            )
             migrate_result: UpdateMigrateResult | None = None
             if check_result.migration_required:
                 if migrate_command is None:
@@ -3303,7 +3315,9 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
                             _stdout_console().print("Update cancelled.")
                             return 1
                 migrate_result = migrate_command(
-                    UpdateMigrateCommand(project_root=Path.cwd(), origin="cli")
+                    UpdateMigrateCommand(
+                        project_root=resolve_project_roots().memory_root, origin="cli"
+                    )
                 )
             if output_format == "json":
                 print(
@@ -3319,7 +3333,9 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
         if check:
             if check_command is None:
                 raise RuntimeError("CLI update_check_command dependency was not configured.")
-            result = check_command(UpdateCheckCommand(project_root=Path.cwd()))
+            result = check_command(
+                UpdateCheckCommand(project_root=resolve_project_roots().memory_root)
+            )
             if output_format == "json":
                 print(json.dumps(_update_check_success_envelope(result), sort_keys=True))
             else:
@@ -3339,7 +3355,9 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
                     if not _confirm("Apply schema migration? [y/N]: ", default=False):
                         _stdout_console().print("Migration cancelled.")
                         return 1
-            result = migrate_command(UpdateMigrateCommand(project_root=Path.cwd(), origin="cli"))
+            result = migrate_command(
+                UpdateMigrateCommand(project_root=resolve_project_roots().memory_root, origin="cli")
+            )
             if output_format == "json":
                 print(json.dumps(_update_migrate_success_envelope(result), sort_keys=True))
             else:
@@ -3360,7 +3378,9 @@ def _run_update(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915
                         _stdout_console().print("Benchmark update cancelled.")
                         return 1
             result = benchmarks_command(
-                UpdateBenchmarksCommand(project_root=Path.cwd(), origin="cli")
+                UpdateBenchmarksCommand(
+                    project_root=resolve_project_roots().memory_root, origin="cli"
+                )
             )
             if output_format == "json":
                 print(json.dumps(_update_benchmarks_success_envelope(result), sort_keys=True))
@@ -4600,12 +4620,16 @@ def _sync_active_skills_for_update(  # noqa: PLR0913
 ) -> UpdateSkillsRunResult:
     list_result = list_command(ListSkillsCommand(status=LatentSkillStatus.active))
     managed_results = (
-        update_managed_command(UpdateManagedSkillsCommand(project_root=Path.cwd()))
+        update_managed_command(
+            UpdateManagedSkillsCommand(project_root=resolve_project_roots().memory_root)
+        )
         if update_managed_command is not None
         else []
     )
     canonical_skill_ids = _active_canonical_project_skill_ids(list_result)
-    legacy_skill_ids = _active_project_skill_ids(Path.cwd(), exclude_ids=set(canonical_skill_ids))
+    legacy_skill_ids = _active_project_skill_ids(
+        resolve_project_roots().memory_root, exclude_ids=set(canonical_skill_ids)
+    )
     results: list[UpdateSkillsItem] = [*managed_results]
     drift_decision = _default_native_drift_decision(output_format)
     for skill_id in canonical_skill_ids:
@@ -6130,6 +6154,8 @@ def _recovery_hint(error: Exception) -> str:
 def _print_expected_error(
     error: Exception, output_format: str, *, locale: str | None = None
 ) -> None:
+    if isinstance(error, ProjectNotInitializedError) and not sys.stdin.isatty():
+        output_format = "json"
     message_locale = DEFAULT_LOCALE if output_format == "json" else (locale or DEFAULT_LOCALE)
     payload = {
         "ok": False,
@@ -6147,7 +6173,20 @@ def _print_expected_error(
                     f"[bold]{human_message('Failure:', locale=message_locale)}[/bold] "
                     f"{payload['error']['message']}",
                     f"[bold]{human_message('Detail:', locale=message_locale)}[/bold] "
-                    f"{payload['error']['detail']}",
+                    f"{payload['error']['detail']}"
+                    + (
+                        f" Root: {payload['error']['memory_root']}"
+                        if "memory_root" in payload["error"]
+                        else ""
+                    ),
+                    *(
+                        [
+                            f"Lock: {payload['error']['lock_path']} "
+                            f"(age: {payload['error']['lock_age_seconds']} seconds)"
+                        ]
+                        if "lock_path" in payload["error"]
+                        else []
+                    ),
                     f"[bold]{human_message('Recovery:', locale=message_locale)}[/bold] "
                     f"{payload['error']['recovery_hint']}",
                 ]

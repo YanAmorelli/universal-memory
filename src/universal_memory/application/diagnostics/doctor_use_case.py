@@ -28,6 +28,7 @@ CONFIG_LOAD_ERROR_PREFIX = "__config_load_error__:"
 @dataclass(frozen=True, slots=True)
 class DoctorCommand:
     project_root: Path
+    memory_root: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,11 +117,12 @@ class DoctorUseCase:
 
     def execute(self, command: DoctorCommand) -> DoctorResult:
         project_root = command.project_root.resolve()
+        memory_root = (command.memory_root or project_root).resolve()
         checks = [
             self._python_version_check(),
-            self._path_permissions_check(project_root),
-            self._project_layout_check(project_root),
-            *self._shared_layout_checks(project_root),
+            self._path_permissions_check(memory_root),
+            self._project_layout_check(memory_root),
+            *self._shared_layout_checks(memory_root),
             self._path_executables_check(),
             self._hosts_integration_check(project_root),
         ]

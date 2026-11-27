@@ -47,11 +47,15 @@ class RollbackUseCase:
         self.snapshot_repository = snapshot_repository
         self.audit_log_repository = audit_log_repository
 
-    def execute(self, command: RollbackCommand) -> RollbackResult:
+    def execute(  # noqa: PLR0912
+        self, command: RollbackCommand, *, snapshot_id: str | None = None
+    ) -> RollbackResult:
         snapshots = self.snapshot_repository.list(
             scope=command.scope,
             status=SnapshotStatus.created,
         )
+        if snapshot_id is not None:
+            snapshots = [snapshot for snapshot in snapshots if snapshot.id == snapshot_id]
         if not snapshots:
             raise SnapshotFailedError(
                 "No snapshot found for the requested scope. "

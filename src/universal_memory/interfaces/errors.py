@@ -15,6 +15,7 @@ from universal_memory.domain import (
     UniversalMemoryError,
     ValidationFailedError,
 )
+from universal_memory.domain.exceptions import LockAcquisitionError, ProjectNotInitializedError
 
 JSON_RPC_SECRET_DETECTED = -32010
 JSON_RPC_SNAPSHOT_FAILED = -32020
@@ -52,6 +53,14 @@ class ErrorDescriptor:
 
 
 def error_descriptor(error: Exception) -> ErrorDescriptor:
+    if isinstance(error, ProjectNotInitializedError):
+        return ErrorDescriptor(
+            "project_not_initialized",
+            JSON_RPC_VALIDATION_FAILED,
+            "Project memory is not initialized.",
+            "Project memory is not initialized.",
+            "Ask the person whether to initialize, then run `umem init`.",
+        )
     mappings: tuple[tuple[type[Exception] | tuple[type[Exception], ...], ErrorDescriptor], ...] = (
         (
             SecretDetectedError,
@@ -126,7 +135,30 @@ def error_descriptor(error: Exception) -> ErrorDescriptor:
     )
 
 
+def _lock_error(error: BaseException) -> LockAcquisitionError | None:
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        if isinstance(current, LockAcquisitionError):
+            return current
+        seen.add(id(current))
+        current = current.__cause__
+    return None
+
+
+def _lock_details(error: Exception) -> dict[str, Any]:
+    lock_error = _lock_error(error)
+    return (
+        {"lock_path": lock_error.lock_path, "lock_age_seconds": lock_error.lock_age_seconds}
+        if lock_error is not None
+        else {}
+    )
+
+
 def recovery_hint(error: Exception) -> str:
+    lock_error = _lock_error(error)
+    if lock_error is not None:
+        return lock_error.recovery_hint
     if isinstance(error, SecretDetectedError):
         return error_descriptor(error).recovery_hint
     message = str(error)
@@ -169,6 +201,12 @@ def error_payload(error: Exception, *, message_locale: str) -> dict[str, Any]:
         "detail": sanitize_error_detail(error),
         "recovery_hint": _recovery_hint_for_locale(error, message_locale=message_locale),
         "audit_reference": getattr(error, "audit_reference", None),
+        **_lock_details(error),
+        **(
+            {"memory_root": error.memory_root}
+            if isinstance(error, ProjectNotInitializedError)
+            else {}
+        ),
     }
 
 
@@ -181,6 +219,12 @@ def json_rpc_error_payload(error: Exception) -> dict[str, Any]:
             "detail": sanitize_error_detail(error),
             "recovery_hint": _recovery_hint_for_locale(error, message_locale="en"),
             "audit_reference": getattr(error, "audit_reference", None),
+            **_lock_details(error),
+            **(
+                {"memory_root": error.memory_root}
+                if isinstance(error, ProjectNotInitializedError)
+                else {}
+            ),
         },
     }
 

@@ -10,6 +10,7 @@ import pytest
 
 from universal_memory.__main__ import main
 from universal_memory.domain.entities import Snapshot, SnapshotScope, SnapshotStatus
+from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.infrastructure.security import LocalSnapshotRepository
 
 
@@ -21,6 +22,7 @@ def seed_snapshot(
     relative_path: str = ".umem/memory/facts.jsonl",
     action: str = "safe_write",
 ) -> Snapshot:
+    LocalProjectLayoutPort().ensure_project_layout(project_root)
     target = project_root / relative_path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)

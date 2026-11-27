@@ -290,7 +290,8 @@ async def test_real_mcp_blocks_project_mutation_before_initialization(tmp_path: 
     assert remember_content["operation"] == "remember"
     assert remember_content["scope"] == "project"
     assert remember_content["error"]["code"] == JSON_RPC_VALIDATION_FAILED
-    assert "initialize_project" in remember_content["error"]["data"]["detail"]
+    assert "umem init" in remember_content["error"]["data"]["detail"]
+    assert remember_content["error"]["data"]["memory_root"] == str(tmp_path)
     assert init_content["ok"] is True
     assert (tmp_path / ".umem" / "config.toml").is_file()
     assert (tmp_path / ".umem" / "skills").is_dir()
@@ -418,7 +419,7 @@ async def test_doctor_tool_uses_injected_use_case_and_matches_cli_json_contract(
     result = await server.call_tool("doctor", {})
 
     assert "doctor" in tool_names
-    assert received == [DoctorCommand(project_root=tmp_path)]
+    assert received == [DoctorCommand(project_root=tmp_path, memory_root=tmp_path)]
     assert result.structured_content == {
         "ok": True,
         "operation": "doctor",

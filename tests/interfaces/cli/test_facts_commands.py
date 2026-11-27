@@ -9,6 +9,7 @@ import pytest
 
 from universal_memory.__main__ import main
 from universal_memory.domain.entities import Fact, FactScope, FactStatus
+from universal_memory.infrastructure.config import LocalProjectLayoutPort
 from universal_memory.infrastructure.storage import LocalFactRepository
 from universal_memory.interfaces.cli import main as cli_main
 
@@ -34,6 +35,7 @@ def make_fact(
 
 
 def seed_facts(project_root: Path) -> list[Fact]:
+    LocalProjectLayoutPort().ensure_project_layout(project_root)
     repository = LocalFactRepository(project_root=project_root, data_root=project_root / ".umem")
     base = datetime(2026, 5, 26, tzinfo=UTC)
     facts = [
