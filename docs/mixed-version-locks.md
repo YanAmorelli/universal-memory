@@ -126,3 +126,11 @@ The new executable fails before mutation when its initial clock/filesystem check
 detect those problems, but it cannot control a later clock jump observed by old
 code. The quiescent upgrade described above removes the mixed-version dependency;
 all updated writers must still share a filesystem that honors kernel leases.
+
+FAT32 and exFAT are explicitly unsupported. The lock implementation rejects a
+filesystem that cannot retain the exact timestamp or publish a hard link, before
+entering the protected mutation, with an actionable unsupported-filesystem error.
+APFS and HFS+ passed the earlier filesystem reproduction; no general support is
+claimed for network filesystems or configurations that lack these capabilities.
+The regression tests emulate missing timestamp and hard-link capabilities; they
+do not mount or provision filesystems.

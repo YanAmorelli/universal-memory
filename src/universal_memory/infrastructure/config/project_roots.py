@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from universal_memory.domain import StorageError
+from universal_memory.infrastructure.config.project_layout import (
+    has_project_identity,
+    is_project_initialized,
+)
 
 
 class ProjectRootResolutionError(StorageError):
@@ -102,12 +106,25 @@ def _main_checkout(start: Path, common: Path) -> Path | None:
     return None
 
 
-def resolve_project_roots(
+def _nested_project(start: Path, checkout: Path) -> tuple[Path | None, list[Path]]:
+    incomplete: list[Path] = []
+    for candidate in (start, *start.parents):
+        if candidate == checkout or not candidate.is_relative_to(checkout):
+            break
+        if is_project_initialized(candidate) and has_project_identity(candidate):
+            return candidate, incomplete
+        if (candidate / ".umem").exists():
+            incomplete.append(candidate)
+    return None, incomplete
+
+
+def resolve_project_roots(  # noqa: PLR0912
     cwd: Path | None = None,
     *,
     memory_root: Path | None = None,
 ) -> ProjectRoots:
     start = (cwd or Path.cwd()).resolve()
+    warnings: list[str] = []
     override = memory_root or os.environ.get("UMEM_MEMORY_ROOT")
     marker = _marker(start)
     if marker is None:
@@ -131,11 +148,22 @@ def resolve_project_roots(
                 "Git does not identify the main checkout. "
                 "Hint: explicitly set UMEM_MEMORY_ROOT to the main checkout directory."
             )
+        # A nested project must have completed init; mere host/audit remnants
+        # must not steal ownership from the checkout. Linked checkout roots
+        # themselves still share the main checkout's memory.
+        nested, incomplete = _nested_project(start, project)
+        if nested is not None:
+            project = owner = nested
+        warnings.extend(
+            f"Incomplete nested project at {candidate}; using checkout memory root "
+            f"{owner}. Complete umem init with UMEM_MEMORY_ROOT set to that "
+            "subdirectory to give it its own memory. Files were preserved."
+            for candidate in incomplete
+        )
     if override:
         owner = Path(override).expanduser().resolve()
     if owner is None:  # Defensive: discovery must never silently fall back.
         raise ProjectRootResolutionError("Git memory ownership is unresolved.")
-    warnings: list[str] = []
     ignored_roots = [start]
     if project != start:
         ignored_roots.extend(path for path in start.parents if path.is_relative_to(project))

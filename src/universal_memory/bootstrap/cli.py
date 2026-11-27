@@ -266,8 +266,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         host_check_command=host_use_case.execute,
         context_read_command=context_handler,
         connection_state_port=LocalConnectionStatePort(
-            project_root=roots.project_root,
-            safe_write_use_case=host_safe_write,
+            project_root=project_root,
+            safe_write_use_case=safe_write_use_case,
         ),
         external_action_executor=OfficialSkillExternalActionExecutor(
             project_root=roots.project_root,

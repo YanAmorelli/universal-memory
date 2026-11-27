@@ -92,7 +92,10 @@ def legacy_file_lock(  # noqa: PLR0912, PLR0915
             prepared = os.fstat(fd)
             if prepared.st_mtime_ns != LEGACY_LOCK_MTIME_NS:
                 raise LockAcquisitionError(
-                    "Filesystem cannot preserve the legacy lock timestamp", path=path
+                    "Unsupported filesystem: cannot preserve the legacy lock timestamp. "
+                    "FAT/exFAT are not supported; use a filesystem with POSIX locks, "
+                    "hard links and nanosecond timestamps.",
+                    path=path,
                 )
             if prepared.st_mtime - time.time() <= stale_after:
                 raise LockAcquisitionError(
@@ -114,6 +117,14 @@ def legacy_file_lock(  # noqa: PLR0912, PLR0915
                     if time.monotonic() >= deadline:
                         raise LockAcquisitionError(message, path=path, unknown_owner=True) from None
                     time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+                except OSError as error:
+                    raise LockAcquisitionError(
+                        f"{message}. Unsupported filesystem or access restriction: "
+                        "cannot publish a hard-link lock. FAT/exFAT are not supported; "
+                        "use a filesystem "
+                        "with POSIX locks, hard links and nanosecond timestamps.",
+                        path=path,
+                    ) from error
             pending.unlink()
             current = path.stat()
             if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):

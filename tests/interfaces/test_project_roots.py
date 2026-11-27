@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -146,6 +147,64 @@ def test_explicit_override_uses_local_checkout(
     assert result.returncode == 0, result.stdout
     assert "override memory" in (outside / ".umem/memory/facts.jsonl").read_text()
     assert not (root / ".umem").exists()
+
+
+@pytest.mark.parametrize("linked", [False, True])
+def test_complete_nested_init_owns_memory_and_host(
+    repository: tuple[Path, Path, Path], linked: bool
+) -> None:
+    root, _, outside = repository
+    initialize(root)
+    nested = (outside if linked else root) / "package"
+    nested.mkdir()
+    initialize(nested)
+    child = nested / "src"
+    child.mkdir()
+    for location in (nested, child):
+        roots = resolve_project_roots(location)
+        assert roots.memory_root == nested
+        assert roots.project_root == nested
+        assert not roots.warnings
+    result = cli(child, "remember", "nested fact", "--scope", "project", "--format", "json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "nested fact" in (nested / ".umem/memory/facts.jsonl").read_text()
+    assert not (root / ".umem/memory/facts.jsonl").exists()
+
+
+def test_incomplete_nested_init_falls_back_with_warning(
+    repository: tuple[Path, Path, Path],
+) -> None:
+    root, _, outside = repository
+    initialize(root)
+    nested = outside / "package"
+    nested.mkdir()
+    initialize(nested)
+    (nested / ".umem/benchmarks/retrieval-results.json").unlink()
+    roots = resolve_project_roots(nested)
+    assert roots.memory_root == root
+    assert roots.project_root == outside
+    assert "Incomplete nested project" in " ".join(roots.warnings)
+    result = cli(nested, "remember", "root fact", "--scope", "project", "--format", "json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Incomplete nested project" in result.stderr
+    assert "root fact" in (root / ".umem/memory/facts.jsonl").read_text()
+
+
+def test_connect_config_and_snapshot_belong_to_memory_owner(
+    repository: tuple[Path, Path, Path],
+) -> None:
+    root, _, outside = repository
+    initialize(root)
+    (outside / ".codex").mkdir()
+    result = cli(outside, "connect", "--agent", "codex", "--format", "json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    config = tomllib.loads((root / ".umem/config.toml").read_text())
+    assert "codex" in config["runtimes"]["enabled"]
+    assert not (outside / ".umem/config.toml").exists()
+    assert (outside / "AGENTS.md").exists()
+    local_manifest = outside / ".umem/snapshots/manifest.json"
+    assert ".umem/config.toml" not in local_manifest.read_text()
+    assert ".umem/config.toml" in (root / ".umem/snapshots/manifest.json").read_text()
 
 
 def test_bare_root_and_linked_checkout(tmp_path: Path) -> None:

@@ -147,6 +147,27 @@ def test_clock_horizon_fails_before_mutation(
         pytest.fail("unsafe clock entered protected mutation")
 
 
+@pytest.mark.parametrize("missing_capability", ["timestamp", "hardlink"])
+def test_unsupported_filesystem_fails_clearly_before_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing_capability: str
+) -> None:
+    if missing_capability == "timestamp":
+        monkeypatch.setattr(os, "utime", lambda *args, **kwargs: None)
+    else:
+
+        def unsupported_link(*args, **kwargs):
+            raise OSError("operation not supported")
+
+        monkeypatch.setattr(os, "link", unsupported_link)
+    with (
+        pytest.raises(LockAcquisitionError, match="FAT/exFAT"),
+        legacy_file_lock(tmp_path / "lock"),
+    ):
+        pytest.fail("unsupported filesystem entered mutation")
+    assert not (tmp_path / "lock").exists()
+    assert not list(tmp_path.glob("*.pending"))
+
+
 def test_first_legacy_visibility_already_has_nonexpiring_mtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

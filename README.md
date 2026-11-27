@@ -139,6 +139,14 @@ deleting either tree.
 Git worktrees share project memory with the main checkout, including commands run
 from subdirectories. Host instructions such as `CLAUDE.md` remain in the current
 worktree, as do generated native skill files; canonical skills remain shared.
+`connect` persists runtime configuration and its config snapshots at the memory
+owner (normally the main checkout); host instructions still target the active checkout.
+An initialized nested subproject owns its memory and host files only when its
+complete `umem init` layout exists. Incomplete nested layouts fall back to the
+checkout's memory with a warning. To deliberately initialize a nested subproject,
+run `UMEM_MEMORY_ROOT="$PWD" umem init` from that subdirectory; later commands
+discover the completed layout without the override. Legacy incomplete layouts at
+the checkout root remain usable as described below.
 For a bare repository, the shared memory lives in the bare repository's
 `.umem/` directory. Outside Git, UMEM uses the nearest ancestor containing `.umem/`,
 or the current directory for a new project.
@@ -182,6 +190,11 @@ Old rollback, initialization, config and direct SafeWrite paths do not acquire t
 repository locks; new code cannot force them to cooperate. The compatibility
 fence covers the tested two-writer contention cases, not every legacy interleaving.
 See [the compatibility analysis](docs/mixed-version-locks.md) for evidence and limits.
+
+FAT32 and exFAT are unsupported. Storage requires reliable POSIX locks, hard
+links and preservation of nanosecond timestamps through the 2255 lock fence.
+Unsupported timestamp or hard-link capabilities fail before protected writes;
+use a supported filesystem instead of retrying initialization to repair it.
 
 ### 1. Initialize your project
 
