@@ -1,7 +1,7 @@
 # Mixed-version storage locks
 
-Project memory sharing makes mixed-version sessions a practical risk. The way to
-eliminate that risk is a quiescent upgrade: stop old CLI commands and all old MCP
+Project memory sharing makes mixed-version sessions a practical risk. A quiescent
+upgrade is mandatory for this change: stop old CLI commands and all old MCP
 processes, update every installation and integration pin, and start new sessions.
 Do not run archived old versions against the shared store during that cutover.
 Upgrading a binary leaves an already-running MCP process on its loaded old code.

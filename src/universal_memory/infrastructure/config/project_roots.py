@@ -12,6 +12,7 @@ from universal_memory.domain import StorageError
 from universal_memory.infrastructure.config.project_layout import (
     has_project_identity,
     is_project_initialized,
+    resolve_project_layout,
 )
 
 
@@ -118,6 +119,23 @@ def _nested_project(start: Path, checkout: Path) -> tuple[Path | None, list[Path
     return None, incomplete
 
 
+def _has_tracked_facts(project: Path) -> bool:
+    layout = resolve_project_layout(project)
+    facts = layout.shared_facts_path if layout.is_shared else layout.legacy_facts_path
+    return (
+        _git(
+            project,
+            "--literal-pathspecs",
+            "ls-files",
+            "--error-unmatch",
+            "--",
+            str(facts.relative_to(project)),
+            optional=True,
+        )
+        is not None
+    )
+
+
 def resolve_project_roots(  # noqa: PLR0912
     cwd: Path | None = None,
     *,
@@ -138,22 +156,27 @@ def resolve_project_roots(  # noqa: PLR0912
         bare = _git(start, "rev-parse", "--is-bare-repository") == "true"
         top = None if bare else _git(start, "rev-parse", "--show-toplevel")
         project = Path(top).resolve() if top else marker
-        owner = (
-            project
-            if top and _checkout_git_dir(project) == common_path
-            else _main_checkout(start, common_path)
-        )
-        if owner is None and not override:
-            raise ProjectRootResolutionError(
-                "Git does not identify the main checkout. "
-                "Hint: explicitly set UMEM_MEMORY_ROOT to the main checkout directory."
-            )
         # A nested project must have completed init; mere host/audit remnants
         # must not steal ownership from the checkout. Linked checkout roots
         # themselves still share the main checkout's memory.
         nested, incomplete = _nested_project(start, project)
         if nested is not None:
             project = owner = nested
+        elif top and not override and _has_tracked_facts(project):
+            # Use this worktree's index, never the main checkout's index/HEAD.
+            # Versioned memory follows the branch even if the main is uninitialized.
+            owner = project
+        else:
+            owner = (
+                project
+                if top and _checkout_git_dir(project) == common_path
+                else _main_checkout(start, common_path)
+            )
+        if owner is None and not override:
+            raise ProjectRootResolutionError(
+                "Git does not identify the main checkout. "
+                "Hint: explicitly set UMEM_MEMORY_ROOT to the main checkout directory."
+            )
         warnings.extend(
             f"Incomplete nested project at {candidate}; using checkout memory root "
             f"{owner}. Complete umem init with UMEM_MEMORY_ROOT set to that "

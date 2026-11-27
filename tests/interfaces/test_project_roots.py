@@ -20,6 +20,7 @@ from universal_memory.bootstrap.project_memory import ProjectNotInitializedError
 from universal_memory.domain import SnapshotFailedError, StorageError
 from universal_memory.domain.entities import FactScope
 from universal_memory.infrastructure.config import LocalConfigValidationPort, LocalProjectLayoutPort
+from universal_memory.infrastructure.config.project_layout import ensure_shared_project_layout
 from universal_memory.infrastructure.config.project_roots import resolve_project_roots
 from universal_memory.infrastructure.security import (
     LocalAuditLogRepository,
@@ -205,6 +206,137 @@ def test_connect_config_and_snapshot_belong_to_memory_owner(
     local_manifest = outside / ".umem/snapshots/manifest.json"
     assert ".umem/config.toml" not in local_manifest.read_text()
     assert ".umem/config.toml" in (root / ".umem/snapshots/manifest.json").read_text()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("layout", ["legacy", "shared"])
+@pytest.mark.parametrize("interface", ["cli", "mcp"])
+async def test_tracked_facts_use_current_worktree_without_initialized_main(
+    repository: tuple[Path, Path, Path], layout: str, interface: str
+) -> None:
+    root, _, outside = repository
+    initialize(outside)
+    if layout == "shared":
+        ensure_shared_project_layout(outside)
+    relative = "umem/memory/facts.jsonl" if layout == "shared" else ".umem/memory/facts.jsonl"
+    facts = outside / relative
+    facts.write_text("")
+    git(outside, "add", "-f", relative)
+    child = outside / "src"
+    child.mkdir()
+    roots = resolve_project_roots(child)
+    assert roots.memory_root == outside
+    assert roots.project_root == outside
+    assert roots.warnings == ()
+    if interface == "cli":
+        result = cli(child, "remember", "branch fact", "--scope", "project", "--format", "json")
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "orphan" not in result.stderr
+    else:
+        response = await build_server(child).call_tool(
+            "remember_fact", {"content": "branch fact", "scope": "project"}
+        )
+        assert response.structured_content is not None
+        assert response.structured_content["ok"], response.structured_content
+    assert "branch fact" in facts.read_text()
+    assert not (root / ".umem").exists()
+    assert not resolve_project_roots(child).warnings
+
+
+def test_facts_tracked_only_in_main_do_not_select_old_worktree(
+    repository: tuple[Path, Path, Path],
+) -> None:
+    root, _, outside = repository
+    initialize(root)
+    main_facts = root / ".umem/memory/facts.jsonl"
+    main_facts.write_text("")
+    git(root, "add", "-f", ".umem/config.toml", ".umem/memory/facts.jsonl")
+    git(root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "memory")
+    initialize(outside)
+    assert resolve_project_roots(outside).memory_root == root
+    result = cli(outside, "remember", "shared fact", "--scope", "project", "--format", "json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "shared fact" in main_facts.read_text()
+    assert not (outside / ".umem/memory/facts.jsonl").exists()
+
+
+@pytest.mark.parametrize("main_initialized", [False, True])
+def test_tracked_config_alone_keeps_main_memory_policy(
+    repository: tuple[Path, Path, Path], main_initialized: bool
+) -> None:
+    root, _, outside = repository
+    if main_initialized:
+        initialize(root)
+    initialize(outside)
+    git(outside, "add", "-f", ".umem/config.toml")
+    assert resolve_project_roots(outside).memory_root == root
+    result = cli(outside, "remember", "shared fact", "--scope", "project", "--format", "json")
+    if main_initialized:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "shared fact" in (root / ".umem/memory/facts.jsonl").read_text()
+    else:
+        assert result.returncode == 1
+        assert not (root / ".umem").exists()
+    assert not (outside / ".umem/memory/facts.jsonl").exists()
+
+
+def test_explicit_override_wins_over_tracked_worktree_facts(
+    repository: tuple[Path, Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, _, outside = repository
+    initialize(root)
+    initialize(outside)
+    local = outside / ".umem/memory/facts.jsonl"
+    local.write_text("")
+    git(outside, "add", "-f", ".umem/memory/facts.jsonl")
+    monkeypatch.setenv("UMEM_MEMORY_ROOT", str(root))
+    assert resolve_project_roots(outside).memory_root == root
+    result = cli(outside, "remember", "override fact", "--scope", "project", "--format", "json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "override fact" in (root / ".umem/memory/facts.jsonl").read_text()
+    assert local.read_text() == ""
+
+
+def test_tracked_inactive_layout_does_not_select_local_memory(repository):
+    root, _, outside = repository
+    initialize(root)
+    initialize(outside)
+    ensure_shared_project_layout(outside)
+    legacy = outside / ".umem/memory/facts.jsonl"
+    legacy.write_text("")
+    git(outside, "add", "-f", ".umem/memory/facts.jsonl", "umem/project.toml")
+    assert resolve_project_roots(outside).memory_root == root
+
+
+def test_missing_tracked_file_stays_local_until_index_removal(repository):
+    root, _, outside = repository
+    initialize(outside)
+    facts = outside / ".umem/memory/facts.jsonl"
+    facts.write_text("")
+    git(outside, "add", "-f", ".umem/memory/facts.jsonl")
+    facts.unlink()
+    assert resolve_project_roots(outside).memory_root == outside
+    git(outside, "rm", "--cached", "-f", ".umem/memory/facts.jsonl")
+    assert resolve_project_roots(outside).memory_root == root
+
+
+def test_tracked_configured_shared_path_is_literal(repository):
+    root, _, outside = repository
+    initialize(outside)
+    ensure_shared_project_layout(outside)
+    policy = outside / "umem/project.toml"
+    policy.write_text(
+        policy.read_text().replace('shared_root = "umem"', 'shared_root = "kb[team]"')
+    )
+    facts = outside / "kb[team]/memory/facts.jsonl"
+    facts.parent.mkdir(parents=True)
+    facts.write_text("")
+    git(outside, "--literal-pathspecs", "add", "-f", "kb[team]/memory/facts.jsonl")
+    assert resolve_project_roots(outside).memory_root == outside
+    result = cli(outside, "remember", "configured fact", "--scope", "project", "--format", "json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "configured fact" in facts.read_text()
+    assert not (root / ".umem").exists()
 
 
 def test_bare_root_and_linked_checkout(tmp_path: Path) -> None:
@@ -623,10 +755,15 @@ async def test_mcp_cli_parity(repository: tuple[Path, Path, Path], location: str
 
 
 @pytest.mark.parametrize("failure", ["missing", "timeout", "dubious"])
-def test_git_discovery_failure_is_closed(repository, monkeypatch, failure):
+@pytest.mark.parametrize("tracked", [False, True])
+def test_git_discovery_failure_is_closed(repository, monkeypatch, failure, tracked):
     from universal_memory.infrastructure.config import project_roots  # noqa: PLC0415
 
     _, _, outside = repository
+    if tracked:
+        initialize(outside)
+        (outside / ".umem/memory/facts.jsonl").write_text("")
+        git(outside, "add", "-f", ".umem/memory/facts.jsonl")
     original = project_roots.subprocess.run
 
     def broken(*args, **kwargs):
@@ -640,6 +777,26 @@ def test_git_discovery_failure_is_closed(repository, monkeypatch, failure):
     with pytest.raises(StorageError, match="Git"):
         resolve_project_roots(outside)
     monkeypatch.setattr(project_roots.subprocess, "run", original)
+    if not tracked:
+        assert not (outside / ".umem").exists()
+    else:
+        assert (outside / ".umem/memory/facts.jsonl").read_text() == ""
+
+
+def test_index_discovery_failure_does_not_fall_back_to_main(repository, monkeypatch):
+    from universal_memory.infrastructure.config import project_roots  # noqa: PLC0415
+
+    _, _, outside = repository
+    original = project_roots.subprocess.run
+
+    def broken(command, **kwargs):
+        if "ls-files" in command:
+            return subprocess.CompletedProcess(command, 128, "", "index inaccessible")
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(project_roots.subprocess, "run", broken)
+    with pytest.raises(StorageError, match="Git discovery failed"):
+        resolve_project_roots(outside)
     assert not (outside / ".umem").exists()
 
 

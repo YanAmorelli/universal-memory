@@ -136,9 +136,16 @@ deleting either tree.
 
 ## Quick Start Guide
 
-Git worktrees share project memory with the main checkout, including commands run
-from subdirectories. Host instructions such as `CLAUDE.md` remain in the current
-worktree, as do generated native skill files; canonical skills remain shared.
+Git worktrees share **unversioned** project memory with the main checkout,
+including commands run from subdirectories. When the active layout's
+`facts.jsonl` is tracked in the current worktree's Git index, memory belongs to
+that worktree/branch instead; the main checkout need not be initialized.
+This applies to `.umem/memory/facts.jsonl` in the legacy layout and
+`umem/memory/facts.jsonl` in the shared layout (including configured shared roots).
+Tracking only config, or tracking facts only in the main checkout's branch,
+does not select local memory. Git discovery/index errors fail closed.
+Host instructions such as `CLAUDE.md` and generated native skill files remain in
+the current worktree; canonical skills follow its selected memory owner.
 `connect` persists runtime configuration and its config snapshots at the memory
 owner (normally the main checkout); host instructions still target the active checkout.
 An initialized nested subproject owns its memory and host files only when its
@@ -183,13 +190,15 @@ lock is recovered only after its kernel lease ends and its token and inode match
 An unknown old lock is never evicted by age or a guessed PID; after an old crash,
 recovery may require stopping every writer and reviewing that lock manually.
 
-**To eliminate mixed-session risk, stop all old CLI commands and MCP servers,
-update every executable and integration pin, then restart those sessions.** An
+**Mandatory upgrade procedure: close all old CLI commands and MCP servers,
+update every executable and integration pin, then restart those sessions before
+writing memory with this change.** An
 executable upgrade alone does not replace code already loaded by an MCP server.
 Old rollback, initialization, config and direct SafeWrite paths do not acquire the
 repository locks; new code cannot force them to cooperate. The compatibility
 fence covers the tested two-writer contention cases, not every legacy interleaving.
 See [the compatibility analysis](docs/mixed-version-locks.md) for evidence and limits.
+Follow the [PR upgrade notes](docs/pr99-upgrade-notes.md) before upgrading.
 
 FAT32 and exFAT are unsupported. Storage requires reliable POSIX locks, hard
 links and preservation of nanosecond timestamps through the 2255 lock fence.
